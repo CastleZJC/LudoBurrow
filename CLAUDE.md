@@ -47,7 +47,7 @@ src/
 │   ├── level-manager.ts     #   50 关序列、顺序解锁
 │   ├── timer.ts             #   正计时 + 可选上限（竞赛/防沉迷）
 │   ├── save.ts              #   存档：localStorage + JSON 导入导出 + 版本迁移
-│   └── settings.ts          #   全局设置（音效、AI Provider 配置、限时策略）
+│   └── settings.ts          #   全局设置（AI Provider 配置、限时策略）
 ├── games/                   # 游戏模块（插件式）
 │   ├── keygame/
 │   ├── jigsaw/
@@ -104,7 +104,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 2. **测试全过**：vitest 全部通过，0 failed / 0 skipped。
 3. **覆盖率达标**：整体 ≥80%（硬门槛，`npm run release` 强制不达标即失败）；engines ≥90%、core ≥85%。覆盖率是下限不是免测额度，业务场景清单法逐节点核对（见测试规范 §1.4）。
 4. **翻译齐备（强制，开发口碑保障线）**：zh-CN/en-US 语言包键位 1:1 镜像、无空值、`SUPPORTED_LOCALES`/语言选项与语言包注册一致、无跨段同名同值重复键、UI 无硬编码文案——`npm run check:i18n` + i18n 守卫测试全过并纳入 release 流水线。与覆盖率同为发布双门禁，缺一不可。
-5. **构建成功 + 产物校验**：`dist/index.html` 为单文件（JS/CSS 内联、无外链 script/link）、`assets/` 相对路径引用齐全、双击 file:// 可玩。
+5. **构建成功 + 产物校验**：`dist/index.html` 为单文件（JS/CSS 内联、无外链 script/link）、`assets/` 相对路径引用齐全、产物含 LICENSE / THIRD-PARTY-NOTICES / assets CREDITS 许可文件（verify-dist 第 7 步自动校验）、双击 file:// 可玩。
 6. **无死代码**：未使用的 import / 变量 / 函数必须删除（noUnusedLocals / noUnusedParameters 不可禁用）。
 7. **类型不撒谎**：runtime 行为与 TS 类型签名一致；不一致时修正类型或实现。
 8. **浏览器矩阵冒烟**：Chrome / Edge / Firefox 三浏览器 file:// 双击 + 在线部署各冒烟一轮（主流程：进游戏→过关→存档→重开恢复 + 中英切换）。
@@ -139,7 +139,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 - 内置商业 IP 素材（汪汪队、奥特曼等仅用户自定义导入）
 - Web 服务端技术选型与实现（属二期；一期仅保留适配层框架）
 
-已排期能力（一期已全部落地）：i18n 中英 + 适配层框架（M1 ✅）、自定义素材本地持久化（M3 ✅）、PWA（M6.2 ✅）；二期排期：Web 端登录与素材隔离（适配层框架一期已预留）、迷宫后续主题包（内容扩充）。
+已排期能力（一期已全部落地）：i18n 中英 + 适配层框架（M1 ✅）、自定义素材本地持久化（M3 ✅）、PWA（M6.2 ✅）；二期排期：Web 端登录与素材隔离（适配层框架一期已预留）、音效系统（一期开关已随存档 schema v3 移除，开发计划 §四之二 W-5）、迷宫后续主题包（内容扩充）。
 
 ## Documentation
 

@@ -4,7 +4,7 @@ import { getSettings, updateSettings, defaultSettings } from '@/core/settings'
 describe('settings', () => {
   beforeEach(() => localStorage.clear())
 
-  it('无档时返回默认设置（中文、音效开、无限时）', () => {
+  it('无档时返回默认设置（中文、无限时）', () => {
     const s = getSettings()
     expect(s).toEqual(defaultSettings())
     expect(s.locale).toBe('zh-CN')
@@ -12,10 +12,10 @@ describe('settings', () => {
   })
 
   it('patch 更新立即生效并持久化', () => {
-    updateSettings({ soundEnabled: false })
-    expect(getSettings().soundEnabled).toBe(false)
+    updateSettings({ locale: 'en-US' })
+    expect(getSettings().locale).toBe('en-US')
     // 其余字段保持
-    expect(getSettings().locale).toBe('zh-CN')
+    expect(getSettings().timeLimit.mode).toBe('off')
   })
 
   it('timeLimit 整体替换更新', () => {

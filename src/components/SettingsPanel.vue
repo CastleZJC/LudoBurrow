@@ -15,7 +15,6 @@ const platform = usePlatformStore()
 const feedback = ref('')
 
 const locale = computed<SupportedLocale>(() => platform.settings.locale)
-const soundEnabled = computed(() => platform.settings.soundEnabled)
 const timeLimitMode = computed<TimeLimitMode>(() => platform.settings.timeLimit.mode)
 const limitMinutes = computed(() => Math.round(platform.settings.timeLimit.limitMs / 60_000))
 const lockMinutes = computed(() => Math.round(platform.settings.timeLimit.lockMs / 60_000))
@@ -23,10 +22,6 @@ const lockMinutes = computed(() => Math.round(platform.settings.timeLimit.lockMs
 function onLocaleChange(event: Event): void {
   const value = (event.target as HTMLSelectElement).value as SupportedLocale
   platform.changeLocale(value)
-}
-
-function onSoundToggle(event: Event): void {
-  platform.patchSettings({ soundEnabled: (event.target as HTMLInputElement).checked })
 }
 
 function onModeChange(mode: TimeLimitMode): void {
@@ -118,14 +113,6 @@ async function importSave(event: Event): Promise<void> {
           {{ t(opt.labelKey) }}
         </option>
       </select>
-    </section>
-
-    <section class="settings-section" data-section="sound">
-      <h3>{{ t('settings.sound') }}</h3>
-      <label class="switch-row">
-        <input type="checkbox" :checked="soundEnabled" data-role="sound-toggle" @change="onSoundToggle" />
-        <span>{{ soundEnabled ? t('settings.soundOn') : t('settings.soundOff') }}</span>
-      </label>
     </section>
 
     <section class="settings-section" data-section="timelimit">

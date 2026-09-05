@@ -92,16 +92,6 @@ describe('SettingsPanel', () => {
     wrapper.unmount()
   })
 
-  it('音效开关写设置', async () => {
-    const platform = usePlatformStore()
-    const wrapper = mountWithApp(SettingsPanel)
-
-    await wrapper.find('[data-role="sound-toggle"]').setValue(false)
-    expect(platform.settings.soundEnabled).toBe(false)
-
-    wrapper.unmount()
-  })
-
   it('AI 配置区：开启默认 GLM → 填 Key 持久化 → 关闭移除段（M5.2）', async () => {
     const platform = usePlatformStore()
     const wrapper = mountWithApp(SettingsPanel)

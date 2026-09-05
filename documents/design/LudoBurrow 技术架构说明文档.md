@@ -10,6 +10,7 @@
 > | V1.0 | 2026-09-05 19:10:00 | 初稿 | 设计定稿 v1.0 权威化：总体架构 / GameModule 插件体系 / 三游戏设计 / AI 能力 / 数据资产 / 构建发布 / 测试基线 | castle |
 > | V1.1 | 2026-09-05 21:05:00 | 设计修订 | ①分期边界定稿：一期本地优先全量落地 + Web 框架预留（新增 §7.4 运行环境适配层、§19.2 二期框架）②多语言一期化（新增 §13.5）③自定义素材经适配层持久化（本地 IndexedDB，§15 修订）④非目标/风险/结论同步更新 | castle |
 > | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿口径同步：§5.5 PWA 已落地（M6.2，实施细节见《部署规范》§5.3）；§13.5 增补 i18n 豁免边界（AI 提示词 / manifest 元数据 / 诊断日志非 UI 文案，M6.6）；§21 / R-02 图库扩充至 24 张（M6.1 实测约 870KB）与「专题包化」实施口径（目录专题化全量随包 + 在线 SW 按需缓存） | castle |
+> | V1.3 | 2026-09-06 22:45:00 | 设计修订 | ①音效开关移除：一期无音频引擎实现（设置项定义端→消费端闭环断裂），代码/UI/i18n/存档 schema v2→v3 全链移除；二期规划补音效系统（§19.2，开发计划 §四之二 W-5）②发布产物补许可文件：LICENSE（vite 构建拷贝）+ THIRD-PARTY-NOTICES.md（public/ 分发），verify-dist 第 7 步门禁 | castle |
 >
 > **适用范围**：LudoBurrow 全部开发实施（本文为技术架构唯一权威来源；《架构说明（正式版）》为评审精简口径，冲突时以本文为准）
 
@@ -234,7 +235,7 @@ localStorage 在 file:// 下 Chrome/Edge/Firefox 均可用（按 origin 隔离�
 | `core/level-manager.ts` | 每游戏 50 关序列、顺序解锁、星级与最佳成绩读写 | `getUnlockedCount(gameId)` / `recordResult(...)` |
 | `core/timer.ts` | 正计时 + 可选上限（竞赛/防沉迷两语义） | `createTimer(options)` |
 | `core/save.ts` | 存档：localStorage 单 key + schema version + 迁移链 + JSON 导入导出 | `loadSave()` / `persist(save)` / `exportJson()` / `importJson(text)` |
-| `core/settings.ts` | 全局设置（音效、限时策略、AI Provider 配置）读写与默认值 | `getSettings()` / `updateSettings(patch)` |
+| `core/settings.ts` | 全局设置（限时策略、AI Provider 配置）读写与默认值 | `getSettings()` / `updateSettings(patch)` |
 | `games/keygame/` | 键盘游戏 GameModule 实现 | `keygameModule: GameModule` |
 | `games/jigsaw/` | 拼图游戏 GameModule 实现 | `jigsawModule: GameModule` |
 | `games/maze/` | 迷宫游戏 GameModule 实现 | `mazeModule: GameModule` |
@@ -542,7 +543,7 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 ## 13.4 设置（core/settings.ts）
 
-全局设置项：**语言（locale，中/英，切换立即生效）**、音效开关、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）。设置并入存档单一 key，经 settings.ts 统一读写。
+全局设置项：**语言（locale，中/英，切换立即生效）**、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）。设置并入存档单一 key，经 settings.ts 统一读写。
 
 ## 13.5 多语言（i18n）
 
@@ -652,7 +653,7 @@ FileReader 读取 → 经 `services/` 素材仓库持久化（本地 IndexedDB�
 | 游戏容器 | 挂载 GameInstance、暂停/继续/退出、计时显示 |
 | 暂停 | 继续/重开/放弃/设置快捷入口 |
 | 结算 | 用时/星级/最佳对比/下一关/重玩 |
-| 设置 | 语言（中/英，立即生效）、音效、限时策略、AI Provider、存档导出导入 |
+| 设置 | 语言（中/英，立即生效）、限时策略、AI Provider、存档导出导入 |
 | 图片管理（拼图） | 导入图片、预切块工作流、方案列表与版本管理 |
 
 ## 16.2 状态管理（Pinia）
@@ -722,7 +723,7 @@ LudoBurrow-vX.Y.Z/
 - `services/` 适配层：`EnvAdapter`（auth + assetRepo 两接口）与 LocalAdapter 全量实现，业务代码全部经适配层访问（§7.4）
 - 存档/设置/AI 配置等其余能力两模式共享同一实现（localStorage），无分叉
 
-**二期任务草案（实施时另立开发计划）**：服务端技术选型与实现（登录/会话 + 素材 REST + 按用户隔离存储）→ WebAdapter 实现 → 登录页/登出/会话过期处理 → 构建产物 Web 模式装配 → 双端一致性回归（除登录与素材隔离外零差异）。
+**二期任务草案（实施时另立开发计划）**：服务端技术选型与实现（登录/会话 + 素材 REST + 按用户隔离存储）→ WebAdapter 实现 → 登录页/登出/会话过期处理 → 构建产物 Web 模式装配 → 双端一致性回归（除登录与素材隔离外零差异）→ 音效系统（音频引擎 + 设置开关 + 开源音效素材选型；一期开关已移除，见《开发计划文档》§四之二 W-5）。
 
 **明确不做（二期也不做）**：云存档/进度同步、在线排行、多人对战。
 

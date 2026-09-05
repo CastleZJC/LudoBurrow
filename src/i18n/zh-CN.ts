@@ -131,9 +131,6 @@ export default {
   },
   settings: {
     language: '语言（切换立即生效）',
-    sound: '音效',
-    soundOn: '开',
-    soundOff: '关',
     timeLimitSection: '限时策略',
     timeLimitOff: '不限时',
     timeLimitCompetition: '竞赛模式（到时立即结算）',

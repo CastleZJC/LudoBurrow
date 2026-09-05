@@ -10,6 +10,7 @@
 > | V1.0 | 2026-09-05 19:40:00 | 初稿 | 发布产物形态 / 发布流水线 / 本地分发 / 在线部署 / 版本回滚 | castle |
 > | V1.1 | 2026-09-05 21:20:00 | 设计修订 | 发布流水线新增第 4 步「翻译齐备门禁」，与覆盖率并列双门禁（开发口碑保障线） | castle |
 > | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿：新增 §5.3 PWA 实施细节（M6.2 落地）；§三 流水线第 8 步更新为发布收尾（Release 模板 + git tag 检查，M6.3）；§2.1 产物结构与 §2.3 校验清单补 PWA 产物；§七 冒烟口径统一为 9 场景（测试规范 §九） | castle |
+> | V1.3 | 2026-09-06 22:45:00 | 设计修订 | §2.1 产物结构与 §2.3 校验清单补许可文件（LICENSE 构建拷贝 / THIRD-PARTY-NOTICES.md 随 public/ 分发 / assets CREDITS.md；verify-dist 第 7 步自动校验） | castle |
 >
 > **适用范围**：LudoBurrow 全部版本发布（本地 Release zip 与在线部署；项目为纯前端静态应用，无服务器运维）
 
@@ -31,6 +32,8 @@ LudoBurrow 是纯前端静态应用，"部署" = **发布产物 + 分发渠道**
 ```
 LudoBurrow-vX.Y.Z/
 ├── index.html              # 单文件应用（JS/CSS 内联，IIFE；无外链 script/link）
+├── LICENSE                 # 项目许可（MIT；vite 构建时从仓库根拷贝）
+├── THIRD-PARTY-NOTICES.md  # 第三方开源组件声明（vue/pinia/vue-i18n，MIT；随 public/ 分发）
 ├── manifest.webmanifest    # PWA 安装清单（M6.2；file:// 下不被使用，随包不影响本地即玩）
 ├── sw.js                   # Service Worker（CACHE_VERSION 与 package.json version 一致）
 ├── icons/                  # PWA 图标（icon-192/512.png，程序化生成，含拼图块剪影）
@@ -51,6 +54,7 @@ LudoBurrow-vX.Y.Z/
 - [ ] `index.html` 单文件：无 `<script src>` / `<link rel="stylesheet">` 外链
 - [ ] `assets/` 引用全部相对路径（无 `/` 开头绝对路径、无 http 外链）
 - [ ] PWA 产物齐备：manifest / sw.js / icons 存在，index.html 引用 manifest，sw.js CACHE_VERSION 与 package.json version 一致（M6.2，verify-dist 第 5 步自动校验）
+- [ ] 许可文件齐备：LICENSE（构建时拷贝）/ THIRD-PARTY-NOTICES.md / assets/{images,tiles}/CREDITS.md 存在于产物（verify-dist 第 7 步自动校验）
 - [ ] 双击 `dist/index.html`（file://）可加载运行
 - [ ] 体积记录：zip 总大小登记入发布记录
 

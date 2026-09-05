@@ -4,7 +4,7 @@
 import type { LevelRecord } from './types'
 
 export const SAVE_KEY = 'ludoburrow/save'
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** AI Provider 配置（设置页录入，存本机；导出默认脱敏） */
 export interface AiConfig {
@@ -23,7 +23,6 @@ export interface TimeLimitData {
 /** 设置段（settings.ts 为唯一读写口） */
 export interface SettingsData {
   locale: 'zh-CN' | 'en-US'
-  soundEnabled: boolean
   timeLimit: TimeLimitData
   ai?: AiConfig
 }
@@ -93,6 +92,15 @@ const MIGRATIONS: Migration[] = [
       return { ...data, version: 2, jigsawSchemes: [], activeJigsawSchemeId: null }
     },
   },
+  {
+    // v2 → v3：移除音效开关（音效未实现，移入二期规划；字段从设置段删除）
+    from: 2,
+    migrate(data) {
+      const settings = { ...(data.settings as Record<string, unknown>) }
+      delete settings.soundEnabled
+      return { ...data, version: 3, settings }
+    },
+  },
 ]
 
 export function defaultSave(): SaveData {
@@ -109,7 +117,6 @@ export function defaultSave(): SaveData {
 export function defaultSettings(): SettingsData {
   return {
     locale: 'zh-CN',
-    soundEnabled: true,
     timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 },
   }
 }
@@ -164,7 +171,6 @@ function validateSettings(v: unknown): v is SettingsData {
   return (
     isRecord(v) &&
     (v.locale === 'zh-CN' || v.locale === 'en-US') &&
-    typeof v.soundEnabled === 'boolean' &&
     validateTimeLimit(v.timeLimit) &&
     (v.ai === undefined || validateAi(v.ai))
   )

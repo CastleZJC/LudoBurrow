@@ -130,9 +130,6 @@ export default {
   },
   settings: {
     language: 'Language (applies instantly)',
-    sound: 'Sound Effects',
-    soundOn: 'On',
-    soundOff: 'Off',
     timeLimitSection: 'Time Limit Policy',
     timeLimitOff: 'No limit',
     timeLimitCompetition: 'Competition (settle when time is up)',

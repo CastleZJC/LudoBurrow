@@ -72,6 +72,12 @@ if (existsSync(assetsDir)) {
   console.log('[verify-dist] assets/ 目录不存在（当前无分发资产，允许）')
 }
 
+// 7. 许可文件（发布原则：产物必须携带版权与许可声明；LICENSE 由 vite 构建拷贝、其余随 public/ 分发）
+const licenseFiles = ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'assets/images/CREDITS.md', 'assets/tiles/CREDITS.md']
+for (const f of licenseFiles) {
+  if (!existsSync(join(distDir, f))) errors.push(`许可文件缺失: ${f}`)
+}
+
 if (errors.length > 0) {
   console.error(`[verify-dist] 失败（${errors.length} 项）：`)
   for (const e of errors) console.error(`  - ${e}`)

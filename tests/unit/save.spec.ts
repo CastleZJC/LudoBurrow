@@ -23,7 +23,6 @@ function sampleSave(): SaveData {
     version: SCHEMA_VERSION,
     settings: {
       locale: 'zh-CN',
-      soundEnabled: true,
       timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 },
     },
     games: {
@@ -44,7 +43,6 @@ describe('save 基础读写', () => {
     const save = loadSave()
     expect(save.version).toBe(SCHEMA_VERSION)
     expect(save.settings.locale).toBe('zh-CN')
-    expect(save.settings.soundEnabled).toBe(true)
     expect(save.games).toEqual({})
   })
 
@@ -146,18 +144,35 @@ describe('save 校验与迁移框架', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('v1 旧档经迁移链升级 v2：进度保留、方案段初始化为空（M3.7）', () => {
+  it('v1 旧档经迁移链升级 v3：进度保留、方案段初始化为空（M3.7）', () => {
     const v1 = {
       version: 1,
-      settings: sampleSave().settings,
+      settings: { locale: 'zh-CN', soundEnabled: true, timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
       games: sampleSave().games,
     }
     const result = parseSaveText(JSON.stringify(v1))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.data.version).toBe(2)
+      expect(result.data.version).toBe(3)
       expect(result.data.jigsawSchemes).toEqual([])
       expect(result.data.activeJigsawSchemeId).toBeNull()
+      expect(result.data.games.keygame?.unlockedCount).toBe(3)
+    }
+  })
+
+  it('v2 旧档（含 soundEnabled）升级 v3：音效字段移除、进度保留', () => {
+    const v2 = {
+      version: 2,
+      settings: { locale: 'zh-CN', soundEnabled: true, timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
+      games: sampleSave().games,
+      jigsawSchemes: [],
+      activeJigsawSchemeId: null,
+    }
+    const result = parseSaveText(JSON.stringify(v2))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.version).toBe(3)
+      expect('soundEnabled' in result.data.settings).toBe(false)
       expect(result.data.games.keygame?.unlockedCount).toBe(3)
     }
   })
