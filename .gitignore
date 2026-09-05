@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 dist/
 build/
+release-stage/
 
 # Test coverage
 coverage/
@@ -19,6 +20,7 @@ coverage/
 # IDE
 .idea/
 .vscode/
+.codegraph/
 *.swp
 
 # OS

@@ -8,8 +8,9 @@
 - 🧩 **拼图** — 类线下拼图体验，智能切块（可选 AI 增强）
 - 🌀 **迷宫** — 像素小人主题迷宫
 - 🌐 **中/英双语** — 个人设置切换，语言框架可扩展
+- 📴 **PWA** — 在线版访问一次后离线可玩（本地 file:// 版不依赖）
 
-**当前状态（2026-09-05）**：设计定稿 **v1.1**（本地优先一期全量落地 + Web 端登录/素材隔离二期框架预留），代码未初始化——里程碑 M1（平台骨架）待启动，任务与验收见[开发计划文档](./documents/design/LudoBurrow%20%E5%BC%80%E5%8F%91%E8%AE%A1%E5%88%92%E6%96%87%E6%A1%A3.md)。
+**当前状态（2026-09-06）**：一期（M1-M6）**全部完成并发布 v1.0.0**——三游戏各 50 关 / 拼图切块引擎与方案管理 / AI 切块建议（Qwen/GLM + 全降级链）/ 中英双语 / 图库 24 张 / PWA；终版门禁：typecheck 0 错、481 tests、coverage 95.08%（branches 91.79%）、i18n 131 键、release 流水线 8/8（zip 717.26 kB）。二期（Web 登录与素材隔离）框架已预留，任务与验收见[开发计划文档](./documents/design/LudoBurrow%20E5%BC%80%E5%8F%91%E8%AE%A1%E5%88%92%E6%96%87%E6%A1%A3.md)。
 
 ## 技术栈
 
@@ -49,9 +50,10 @@ LudoBurrow/
 
 | 版本 | 日期 | 类型 | 摘要 | 修改人 |
 |------|------|------|------|--------|
+| v1.0.0 | 2026-09-06 | 正式发布 | 一期（M1-M6）全量落地：三游戏各 50 关 + 拼图切块引擎与方案管理 + AI 切块建议（Qwen/GLM + 全降级链）+ 中英双语（131 键）+ 图库 24 张 + PWA + release 8 步流水线；门禁：typecheck 0 错 / 481 tests / coverage 95.08%（branches 91.79%）/ build 362.87 kB 单文件 / zip 717.26 kB（SHA-256 7625345F…531E42） | castle |
 | v0.2.0 | 2026-09-05 | 设计修订 | 分期边界定稿：一期本地优先全量落地（多语言中英、图库每专题 ≥5 张、PWA、发布双门禁 = 覆盖率 + 翻译齐备）；二期 Web 登录与素材隔离（一期 services/ 适配层框架预留） | castle |
 | v0.1.0 | 2026-09-05 | 基线发布 | 设计定稿 v1.0 + 规范文档体系建立（CLAUDE.md / documents/design 七篇 / ui·bug 目录） | castle |
 
 ## License
 
-代码以 [MIT](./LICENSE) 发布；图片资产按各专题标注的 CC0/CC-BY 许可发布。
+代码以 [MIT](./LICENSE) 发布；内置图库由 `scripts/gen-gallery.mjs` 确定性程序化生成，随 MIT 一同发布（见 `public/assets/images/CREDITS.md`）；迷宫瓦片/sprite 由 `scripts/gen-maze-assets.mjs`、PWA 图标由 `scripts/gen-pwa-icons.mjs` 程序化生成（同 MIT 口径）；后续收录的开源素材将按专题标注 CC0/CC-BY 许可。

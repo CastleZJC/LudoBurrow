@@ -290,14 +290,14 @@ tests/           # 独立测试目录（与 src/ 分离）
 
 ### 10.1 图片资产
 
-- 内置图库：`assets/images/<专题>/<名称>.webp`，≥1K 分辨率，WebP 分发
-- 每专题目录必带 `LICENSE.md`：逐张标注来源 URL、作者、许可（CC0/CC-BY）
-- 命名：kebab-case，含义明确（`castle-hall-01.webp`）
+- 内置图库：`assets/images/<专题>/<名称>.png`（M3.9 实施口径：`scripts/gen-gallery.mjs` 确定性程序化生成，1024 源图仅绘制 + 192 分析缩略同配方内嵌 `src/games/jigsaw/thumbs.ts`；生成产物勿手改，重跑脚本即复现）
+- 许可标注：图库根目录 `CREDITS.md`（生成素材随项目 MIT 发布）；若后续收录开源素材，改为每专题 `LICENSE.md` 逐张标注来源 URL、作者、许可（CC0/CC-BY）
+- 命名：kebab-case，含义明确（`animals-01.png`）
 
 ### 10.2 瓦片与 sprite
 
-- `assets/tiles/<主题>/` 瓦片集 + `assets/sprites/<角色>/` 帧动画条带
-- 同主题瓦片尺寸统一；CC0 来源优先（Kenney/OpenGameArt）
+- `assets/tiles/<主题>/` 瓦片集 + `assets/sprites/` 帧动画条带（M4 实施为单文件 `hero.png` 96×128 条带）
+- 同主题瓦片尺寸统一；M4 实施口径：`scripts/gen-maze-assets.mjs` 确定性程序化生成（同 §10.1 图库口径，CREDITS.md 随 MIT 标注）；CC0 来源（Kenney/OpenGameArt）为后续收录位优先项
 
 ### 10.3 词库
 

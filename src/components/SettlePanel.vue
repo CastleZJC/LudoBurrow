@@ -1,0 +1,103 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { SettleInfo } from '@/stores/platform'
+import { getLevelRecord, TOTAL_LEVELS } from '@/core/level-manager'
+import { formatElapsed } from '@/core/timer'
+
+const props = defineProps<{ info: SettleInfo; gameId: string; levelN: number }>()
+defineEmits<{ next: []; retry: []; exit: [] }>()
+const { t } = useI18n()
+
+const bestRecord = computed(() => getLevelRecord(props.gameId, props.levelN))
+const isLastLevel = computed(() => props.levelN >= TOTAL_LEVELS)
+</script>
+
+<template>
+  <div class="settle-panel" data-role="settle">
+    <div class="settle-card">
+      <h3 :class="info.isFail ? 'is-fail' : 'is-success'">
+        {{ info.isFail ? t('settle.fail') : t('settle.success') }}
+      </h3>
+
+      <div class="stars" data-role="stars">{{ '★'.repeat(info.result.stars) }}{{ '☆'.repeat(3 - info.result.stars) }}</div>
+
+      <dl class="settle-stats">
+        <div class="stat-row"><dt>{{ t('common.time') }}</dt><dd data-stat="elapsed">{{ formatElapsed(info.result.elapsedMs) }}</dd></div>
+        <div class="stat-row"><dt>{{ t('common.mistakes') }}</dt><dd data-stat="mistakes">{{ info.result.mistakes }}</dd></div>
+        <div v-if="bestRecord" class="stat-row">
+          <dt>{{ t('settle.best') }}</dt>
+          <dd data-stat="best">{{ formatElapsed(bestRecord.bestMs) }}</dd>
+        </div>
+      </dl>
+
+      <p v-if="info.isNewBest" class="new-best">{{ t('settle.newBest') }}</p>
+
+      <div class="settle-actions">
+        <button class="secondary-btn" data-nav="retry" @click="$emit('retry')">{{ t('common.retry') }}</button>
+        <button v-if="!info.isFail && !isLastLevel" class="primary-btn" data-nav="next" @click="$emit('next')">
+          {{ t('common.next') }}
+        </button>
+        <button class="secondary-btn" data-nav="exit" @click="$emit('exit')">{{ t('pause.exit') }}</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.settle-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 50%);
+  z-index: 40;
+}
+.settle-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-lg);
+  min-width: 320px;
+}
+.settle-card h3 {
+  margin: 0;
+  font-size: 28px;
+}
+.is-success { color: var(--color-primary); }
+.is-fail { color: var(--color-danger, #c0392b); }
+.stars {
+  font-size: 40px;
+  color: var(--color-accent);
+  letter-spacing: 4px;
+}
+.settle-stats {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.stat-row dt { color: var(--color-text-secondary); }
+.stat-row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.new-best {
+  color: var(--color-accent);
+  font-weight: 700;
+  margin: 0;
+}
+.settle-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+</style>

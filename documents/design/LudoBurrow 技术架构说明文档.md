@@ -9,6 +9,7 @@
 > |------|----------|----------|----------|--------|
 > | V1.0 | 2026-09-05 19:10:00 | 初稿 | 设计定稿 v1.0 权威化：总体架构 / GameModule 插件体系 / 三游戏设计 / AI 能力 / 数据资产 / 构建发布 / 测试基线 | castle |
 > | V1.1 | 2026-09-05 21:05:00 | 设计修订 | ①分期边界定稿：一期本地优先全量落地 + Web 框架预留（新增 §7.4 运行环境适配层、§19.2 二期框架）②多语言一期化（新增 §13.5）③自定义素材经适配层持久化（本地 IndexedDB，§15 修订）④非目标/风险/结论同步更新 | castle |
+> | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿口径同步：§5.5 PWA 已落地（M6.2，实施细节见《部署规范》§5.3）；§13.5 增补 i18n 豁免边界（AI 提示词 / manifest 元数据 / 诊断日志非 UI 文案，M6.6）；§21 / R-02 图库扩充至 24 张（M6.1 实测约 870KB）与「专题包化」实施口径（目录专题化全量随包 + 在线 SW 按需缓存） | castle |
 >
 > **适用范围**：LudoBurrow 全部开发实施（本文为技术架构唯一权威来源；《架构说明（正式版）》为评审精简口径，冲突时以本文为准）
 
@@ -193,7 +194,7 @@ localStorage 在 file:// 下 Chrome/Edge/Firefox 均可用（按 origin 隔离�
 
 ## 5.5 在线部署
 
-同一构建产物直接发布 GitHub Pages / Vercel / 内网静态服务器，零改动（`base:'./'` 保证相对路径资产在子路径下可用）。后续可选开启 PWA（Service Worker 缓存），实现「在线访问一次、之后离线可玩」（M6）。
+同一构建产物直接发布 GitHub Pages / Vercel / 内网静态服务器，零改动（`base:'./'` 保证相对路径资产在子路径下可用）。PWA（Service Worker 缓存）已随 M6.2 落地：在线版访问一次、之后离线可玩；实施细节（预缓存清单 / 拦截边界 / CACHE_VERSION 与 package.json 双门禁校验）见《LudoBurrow 部署规范》§5.3。file:// 本地版不依赖 SW（注册条件不满足时静默跳过）。
 
 # 6. 版本兼容性与前置验证
 
@@ -504,9 +505,13 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 每主题一套 CC0 像素瓦片 + 调色。候选：**城堡、花园、雪原、火山、海底、丛林、太空站、矿洞**（首期实现**城堡 + 花园**，其余按主题包扩展，M6 后增量）。
 
+> **M4 实施口径**：离线环境无外网素材渠道（同 §15.3 图库口径）→ 瓦片由 `scripts/gen-maze-assets.mjs` 确定性程序化生成 PNG（每主题 wall/floor/goal/start 四瓦片，`assets/tiles/<主题>/`）；运行时**皮肤双轨**——paletteSkin 色板几何绘制先行渲染（零等待），PNG 皮肤异步加载成功后整体重画，任一资源失败保持色板兜底（可玩性优先）。`TileSkin` 同构接口（drawTile/drawHero）是渲染层唯一绘制入口，instance 不感知皮肤来源。
+
 ## 12.4 角色
 
 马里奥式像素卡通小人（CC0 sprite，如 Kenney 角色素材），四方向朝向 + 走路帧动画，**非小黑点/火柴人**。
+
+> **M4 实施口径**：hero sprite 由 `scripts/gen-maze-assets.mjs` 程序化生成——96×128 单条带（4 行方向 down/left/right/up × 3 帧站立/走 1/走 2，帧 32×32，`assets/sprites/hero.png`）；paletteSkin 兜底为帽（红）/脸（肤）/衣（蓝）/腿（深蓝）几何小人，朝向以脸部眼点区分（up 背影无点），同样满足「非小黑点/火柴人」。
 
 ## 12.5 操作与成绩
 
@@ -541,7 +546,7 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 ## 13.5 多语言（i18n）
 
-**范围边界**：i18n 覆盖**平台 UI 文案**（菜单/按钮/提示/结算/设置等）；游戏内容（英文词库、拼音词库、关卡字符）是玩法数据，**不随语言切换**。
+**范围边界**：i18n 覆盖**平台 UI 文案**（菜单/按钮/提示/结算/设置等）；游戏内容（英文词库、拼音词库、关卡字符）是玩法数据，**不随语言切换**。豁免口径（M6.6 复核定稿）：AI 提示词（发往 Provider 的指令文本，与 UI 语言解耦）、manifest 元数据（静态 JSON）、错误消息与 console 诊断日志不属于 UI 文案，不要求 key 化。
 
 **结构**：
 
@@ -601,6 +606,13 @@ AI 请求 → 失败/超时/未配置 → 降级本地算法（非阻断提示�
 
 AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每块权重结构）→ 合法化（数值钳制、网格对齐）→ 块唯一性校验。**任何不合法输出不得直接应用**。
 
+> **M5 实施口径**（2026-09-06 落地）：
+>
+> - **模块落点**：`src/ai/provider.ts`（Provider 层「HTTP 进文本出」：PROVIDER_PRESETS 预设 qwen = DashScope compatible-mode + qwen-vl-max、glm = bigmodel `api/paas/v4` + **glm-5.3**（开发计划模型口径）、custom 留空；`resolveProviderConfig` 显式填写优先于预设；`createSuggestionProvider` → POST `{baseURL}/chat/completions` + Bearer 鉴权 + AbortController 超时中断；ProviderError 四分类 timeout / network / http-error / no-content；**不解析 JSON，解析归引擎层**）+ `src/ai/suggest.ts`（降级编排 `suggestCutPlan`：本地算法先算恒为兜底与对比基准；三态九分支同 §14.4——applied / rejected(invalid-json、invalid-schema、low-quality，其中 low-quality = AI 方案 minScore 低于本地基准时对比择优拒绝) / fallback(not-configured、timeout、network、http-error、no-content)，rejected 与 fallback 均携带本地 plan；非 ProviderError 意外错误上抛不吞；DEFAULT_TIMEOUT_MS = 30s）+ `engines/jigsaw-cutter/suggest.ts`（§14.5 规范化器，见下）
+> - **规范化器四步**：parseSuggestionText（剥 markdown 围栏 + isPlainObject）→ normalizeSuggestion（rows/cols 整数 [2,12] **严格拒绝而非钳制**——钳制破坏权重与行列数的对应；权重长度严格匹配；0/负值/非数字拒，WEIGHT_FLOOR = 0.01 抬底后归一化和为 1）→ weightsToLines（cumsum 等分 + **Math.round 网格对齐 + 单调递增钳制**，问题汇总 P4-03 实证）→ createCutPlanFromSuggestion（建议线替换 buildAxisLines，复用 buildTabSpecs / assemblePieces / ensureUniqueness 闭环，与本地算法完全同源下游）
+> - **建议持久化**：JigsawSchemeParams.suggestion 只存归一化权重（rows/cols 在参数主体），save 端校验有限正数 + 长度匹配；方案网格阶梯进阶后长度不符自动回退本地算法（建议只影响方案起步切法）
+> - **UI 接线**：设置页 AI 配置区（M5.2：关闭开关 = 移除存档 ai 段；导出脱敏）+ 切块工作流 AI 建议按钮（M5.5：内置图 data URI / 自定义图 IndexedDB blob → data URL 双路径；建议生效回填网格并以非均匀线实时预览；手动改网格时建议自动失效）
+
 # 15. 数据与资产管理
 
 ## 15.1 数据形态总表
@@ -610,8 +622,8 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 | 关卡定义 | TS 模块（内嵌） | `createLevel(n)` 参数化生成，规避 file:// 下 fetch JSON 的 CORS 限制 |
 | 英文词库 | TS 模块 | 分级词表（3 字母 → 8+ 字母），来源开源词表整理 |
 | 拼音词库 | TS 模块 | `{word:'学校', pinyin:'xue xiao'}` 结构，常用字词分级 |
-| 内置图库 | `assets/images/<专题>/` | CC0/CC-BY，≥1K，含 LICENSE 标注文件 |
-| 瓦片/sprite | `assets/tiles/<主题>/` | CC0 像素素材 |
+| 内置图库 | `assets/images/<专题>/` | M3 实施为确定性程序化生成 PNG（1024 源图仅绘制 + 192 分析缩略内嵌 `thumbs.ts`，`CREDITS.md` 标注，见 §15.3）；预留 CC0/CC-BY 收录位（≥1K，逐张标注） |
+| 瓦片/sprite | `assets/tiles/<主题>/`、`assets/sprites/` | M4 实施为确定性程序化生成 PNG（gen-maze-assets.mjs：8 瓦片 + 96×128 hero 条带共 9 文件约 2.3KB，CREDITS.md 标注随 MIT）；运行时 paletteSkin 色板兜底（§12.3），CC0 收录位保留（M6 后增量） |
 | 自定义图片 | FileReader 导入 → services/ 素材仓库 | 本地 IndexedDB 持久化（跨会话保留）；Web 二期服务端按用户隔离；不落仓库 |
 
 ## 15.2 词库规范
@@ -621,13 +633,13 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 
 ## 15.3 内置图库合规
 
-- 仅收 CC0 / CC-BY 素材，≥1K 分辨率，WebP 格式分发（控制包体积）
-- 每专题目录携带 `LICENSE.md` 标注每张图的来源 URL 与许可类型
-- 收录流程：来源核验 → 许可留档 → 压缩转 WebP → 入库标注
+- **M3 实施口径**：内置图库由 `scripts/gen-gallery.mjs` 确定性程序化生成（离线环境无外网素材渠道与 WebP 编码依赖；1024 源图仅绘制 + 192 分析缩略内嵌 `thumbs.ts`（data URI 不触发 canvas taint），零第三方素材、输出恒定可复现，体积可控）；图库根目录 `CREDITS.md` 标注生成方式与许可（随项目 MIT 发布）
+- 开源素材收录位保留（M6 扩充可选）：仅收 CC0 / CC-BY，≥1K 分辨率，每专题目录携带 `LICENSE.md` 逐张标注来源 URL 与许可类型
+- 收录流程：开源素材 = 来源核验 → 许可与分辨率复核留痕 → 入库标注；程序化生成 = 种子化渲染 → 输出恒定（重跑可复现）
 
 ## 15.4 自定义导入
 
-FileReader 读取 → 经 `services/` 素材仓库持久化（本地 IndexedDB，跨会话保留；Web 二期服务端按用户隔离）→ 使用时加载为 ImageBitmap。**切块方案仍只存算法参数与图片引用**（不复制图体）。本地模式切换设备不迁移图片（导出存档仅含方案参数，图需用户自带）；Web 二期随账号走。
+FileReader 读取 → 经 `services/` 素材仓库持久化（本地 IndexedDB，跨会话保留；Web 二期服务端按用户隔离）→ 使用时 blob 经 objectURL 加载为 Image（blob URL 同源不污染 canvas，可读像素做切块分析）。**切块方案仍只存算法参数与图片引用**（不复制图体）。本地模式切换设备不迁移图片（导出存档仅含方案参数，图需用户自带）；Web 二期随账号走。
 
 # 16. 前端组件设计基线
 
@@ -735,7 +747,7 @@ LudoBurrow-vX.Y.Z/
 | 维度 | 要求 |
 |---|---|
 | 性能 | 拼图拖拽、迷宫移动交互流畅（目标 60fps）；50 关最高难度下切块计算 < 2s |
-| 包体积 | 核心 zip 合理可控（图片 WebP 化 + 按需分专题包，核心包只带每游戏前几关所需） |
+| 包体积 | 核心 zip 合理可控：内置图库程序化生成体积恒定（M6.1 扩至 24 张实测约 870KB，实施口径见 §15.3）+ 迷宫瓦片/sprite 程序化生成（M4 实测 9 文件约 2.3KB，见 §12.3/§12.4）+ PWA 产物轻量（manifest/sw.js/程序化图标，M6.2）。「按需分专题包」调整为：图库目录专题化**全量随包**（zip 下载即玩、50 关全可玩，体积恒定），在线版以 SW 按需缓存等价实现（部署规范 §5.3） |
 | 可靠性 | 存档损坏可提示恢复；AI 失败自动降级；图片加载失败占位提示不崩溃 |
 | 可维护性 | engines 纯逻辑可单测；新游戏零侵入接入；文档与代码同步 |
 | 隐私 | 用户图片与 AI Key 仅存本机；除用户主动触发的 AI 请求外无任何网络传输 |
@@ -745,7 +757,7 @@ LudoBurrow-vX.Y.Z/
 | # | 风险 | 对策 |
 |---|---|---|
 | R-01 | file:// 各浏览器行为差异 | M1 即建立浏览器矩阵冒烟（Chrome/Edge/Firefox），此后每里程碑回归 |
-| R-02 | 1K 图片本地包体积大 | 图片 WebP 化 + 按需分专题包，核心包只带每游戏前几关所需 |
+| R-02 | 1K 图片本地包体积大 | 内置图库程序化生成（体积恒定可控，M3.9/M6.1 实施口径见 §15.3，24 张约 870KB 全量随包）+ 在线版 SW 按需缓存（部署规范 §5.3） |
 | R-03 | 切块算法产生歧义块 | 块唯一性评分（颜色方差/边缘特征）低于阈值自动调整切割线；AI 建议同样过此校验 |
 | R-04 | 视觉 AI 返回不合法切割建议 | Provider 输出统一走本地规范化器（schema 校验 + 合法化），无效则降级 |
 | R-05 | localStorage 容量/清空 | 存档 < 1MB 设计；导出备份；损坏提示恢复不静默清空 |

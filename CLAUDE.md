@@ -21,7 +21,7 @@ LudoBurrow（ludo = 拉丁语「玩」+ burrow = 「洞穴、庇护所」）是�
 | 拼图 | 类线下拼图：切块、吸附、试错、校验（可选 AI 增强切块） | 50 |
 | 迷宫 | 方向键/WASD 控制像素小人走迷宫 | 50 |
 
-**当前状态（2026-09-05）**：设计定稿 v1.1（v1.0 + Web 二期框架 / i18n / 素材齐备修订），代码未初始化。里程碑 M1-M6 任务与验收见《LudoBurrow 开发计划文档》。
+**当前状态（2026-09-06）**：一期（M1-M6）全部完成并发布 v1.0.0——三游戏各 50 关 / 拼图切块引擎 + 方案管理 + AI 切块建议（全降级链）/ 中英双语 / 图库 24 张 / PWA / release 8 步流水线；终版门禁：481 tests、coverage 95.08%。二期（Web 登录与素材隔离）框架已预留。里程碑明细见《LudoBurrow 开发计划文档》。
 
 **核心约束（贯穿全部设计）**：
 
@@ -81,7 +81,7 @@ src/
 
 ## Development Commands
 
-> M1 脚手架落地后生效；当前为设计契约（命令集与《测试规范文档》§七、《部署规范》§三 一致，落地时以此为准实现 npm scripts）。
+> 命令集已全部落地（M1.11），与《测试规范文档》§七、《部署规范》§三 一致。
 
 ```bash
 npm install                # 安装依赖
@@ -91,7 +91,7 @@ npm run test               # vitest run（全量测试）
 npm run test:coverage      # vitest run --coverage（覆盖率报告）
 npm run check:i18n         # 翻译齐备校验（zh↔en 键位 1:1 / 空值 / 注册表一致性）
 npm run build              # 类型检查 + 单文件构建（dist/）
-npm run release            # 发布门禁全量：typecheck → test → 覆盖率 ≥80% → 翻译齐备 → build → 产物校验 → 打包 zip
+npm run release            # 发布门禁全量 8 步：typecheck → test → 覆盖率 ≥80% → 翻译齐备 → build → 产物校验（含 PWA）→ zip+SHA-256 → 发布收尾（Release 模板 + git tag 检查）
 ```
 
 ## 发布原则（Production Release Principle）
@@ -139,7 +139,7 @@ npm run release            # 发布门禁全量：typecheck → test → 覆盖�
 - 内置商业 IP 素材（汪汪队、奥特曼等仅用户自定义导入）
 - Web 服务端技术选型与实现（属二期；一期仅保留适配层框架）
 
-已排期能力（按里程碑推进，不提前实施）：i18n 中英 + 适配层框架（M1）、自定义素材本地持久化（M3）、PWA（M6）、Web 端登录与素材隔离（二期，框架一期预留）、迷宫后续主题包（二期内容扩充）。
+已排期能力（一期已全部落地）：i18n 中英 + 适配层框架（M1 ✅）、自定义素材本地持久化（M3 ✅）、PWA（M6.2 ✅）；二期排期：Web 端登录与素材隔离（适配层框架一期已预留）、迷宫后续主题包（内容扩充）。
 
 ## Documentation
 

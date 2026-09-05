@@ -9,6 +9,7 @@
 > |------|----------|----------|----------|--------|
 > | V1.0 | 2026-09-05 19:40:00 | 初稿 | 发布产物形态 / 发布流水线 / 本地分发 / 在线部署 / 版本回滚 | castle |
 > | V1.1 | 2026-09-05 21:20:00 | 设计修订 | 发布流水线新增第 4 步「翻译齐备门禁」，与覆盖率并列双门禁（开发口碑保障线） | castle |
+> | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿：新增 §5.3 PWA 实施细节（M6.2 落地）；§三 流水线第 8 步更新为发布收尾（Release 模板 + git tag 检查，M6.3）；§2.1 产物结构与 §2.3 校验清单补 PWA 产物；§七 冒烟口径统一为 9 场景（测试规范 §九） | castle |
 >
 > **适用范围**：LudoBurrow 全部版本发布（本地 Release zip 与在线部署；项目为纯前端静态应用，无服务器运维）
 
@@ -29,10 +30,14 @@ LudoBurrow 是纯前端静态应用，"部署" = **发布产物 + 分发渠道**
 
 ```
 LudoBurrow-vX.Y.Z/
-├── index.html          # 单文件应用（JS/CSS 内联，IIFE；无外链 script/link）
+├── index.html              # 单文件应用（JS/CSS 内联，IIFE；无外链 script/link）
+├── manifest.webmanifest    # PWA 安装清单（M6.2；file:// 下不被使用，随包不影响本地即玩）
+├── sw.js                   # Service Worker（CACHE_VERSION 与 package.json version 一致）
+├── icons/                  # PWA 图标（icon-192/512.png，程序化生成，含拼图块剪影）
 └── assets/
-    ├── images/         # 内置图库（按专题，WebP）
-    └── tiles/ sprites/ # 瓦片与角色素材
+    ├── images/             # 内置图库（4 专题 × 6 张 PNG；含 CREDITS.md 许可标注）
+    ├── tiles/              # 迷宫瓦片（castle|garden 两主题 × wall/floor/goal/start；含 CREDITS.md）
+    └── sprites/            # 角色帧动画条带（hero.png，4 方向 × 3 帧）
 ```
 
 ### 2.2 产物命名与校验
@@ -45,6 +50,7 @@ LudoBurrow-vX.Y.Z/
 
 - [ ] `index.html` 单文件：无 `<script src>` / `<link rel="stylesheet">` 外链
 - [ ] `assets/` 引用全部相对路径（无 `/` 开头绝对路径、无 http 外链）
+- [ ] PWA 产物齐备：manifest / sw.js / icons 存在，index.html 引用 manifest，sw.js CACHE_VERSION 与 package.json version 一致（M6.2，verify-dist 第 5 步自动校验）
 - [ ] 双击 `dist/index.html`（file://）可加载运行
 - [ ] 体积记录：zip 总大小登记入发布记录
 
@@ -59,7 +65,7 @@ npm run release
   ├─ 5. 构建            vite build（IIFE 单文件）
   ├─ 6. 产物校验        §2.3 清单（脚本自动检查外链/绝对路径）
   ├─ 7. 打包            dist/ → LudoBurrow-vX.Y.Z.zip + SHA-256
-  └─ 8. 发布记录        提示更新 README.md §版本迭代（人工完成）
+  └─ 8. 发布收尾        生成 RELEASE-TEMPLATE-vX.Y.Z.md（产物清单 / SHA-256 / 验证口径 / 变更摘要占位）+ git tag 存在检测（已存在→提示 bump 版本；不存在→提示人工 `git tag vX.Y.Z` 并推送）
 ```
 
 **不允许带错误发布**：任一步失败即终止并修复回归（CLAUDE.md §发布原则 同源）。
@@ -92,9 +98,20 @@ npm run release
 
 Vercel / Netlify / 内网 Nginx 静态目录：上传 dist/ 全部内容即可；无需任何构建参数（产物自包含）。
 
-### 5.3 PWA（M6 可选项）
+### 5.3 PWA（M6.2 已落地）
 
-在线版可开启 Service Worker 缓存，实现「在线访问一次、之后离线可玩」。注意 SW 仅在 https（或 localhost）生效，file:// 本地版不依赖 SW。实施时补充本节：SW 版本策略、缓存失效、离线清单。
+在线版经 Service Worker 缓存实现「在线访问一次、之后离线可玩」。**SW 仅在 https（或 localhost）生效，file:// 本地版不依赖 SW**（注册条件不满足时静默跳过，`src/pwa.ts` shouldRegisterSw：https 任意主机 / http 仅回环地址）。
+
+| 项 | 实施口径 |
+|---|---|
+| 产物 | `public/manifest.webmanifest`（安装清单）+ `public/sw.js`（Service Worker）+ `public/icons/icon-{192,512}.png`（程序化生成，`scripts/gen-pwa-icons.mjs`，零第三方依赖） |
+| 预缓存（install） | app shell：`./`、`./index.html`、manifest、两枚图标；skipWaiting 立即接管 |
+| 按需缓存（fetch 拦截） | 同源 GET 静态资产 cache-first：图库/瓦片/sprite 首次访问后进缓存（「按需分专题包」的在线版实现口径，M6.1） |
+| 拦截边界 | 跨域请求（含 AI Provider API）与非 GET 一律放行不拦截；导航请求 network-first（新版本及时生效）+ 离线回退缓存的 index.html |
+| 版本策略 | `sw.js` CACHE_VERSION 与 package.json version 一致，**双门禁校验**（tests/unit/pwa.spec.ts + verify-dist.mjs，bump 漏改即失败） |
+| 缓存失效 | activate 时删除所有非当前版本缓存 + clients.claim |
+| 注册时机 | `src/main.ts` 启动 → load 后注册 `./sw.js`（相对路径，任意子路径可用）；注册失败静默降级（不影响主功能） |
+| 更新发布 | bump package.json version 时同步 sw.js CACHE_VERSION → 构建 → 用户侧 activate 清旧缓存自动换新 |
 
 ## 六、版本管理与回滚
 
@@ -109,7 +126,7 @@ Vercel / Netlify / 内网 Nginx 静态目录：上传 dist/ 全部内容即可�
 ## 七、发布前检查清单
 
 - [ ] `npm run release` 全绿（类型/测试/覆盖率/翻译齐备/构建/产物校验）
-- [ ] 浏览器矩阵冒烟全过（测试规范 §九，8 场景 × 3 浏览器 × 双模式）
+- [ ] 浏览器矩阵冒烟全过（测试规范 §九，9 场景 × 3 浏览器 × 双模式；M6.4 自动化等价已过，真浏览器人工复核）
 - [ ] README.md §版本迭代 已新增一行（版本/日期/类型/摘要/修改人）
 - [ ] git tag 已打，Release 已附 zip + SHA-256
 - [ ] 涉及存档 schema 变更时：migration 用例全过 + 发布说明注明回退影响
