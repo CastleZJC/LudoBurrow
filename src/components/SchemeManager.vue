@@ -60,7 +60,7 @@ const cols = ref(4)
 const tabDepth = ref(0.16)
 const seed = ref(Math.floor(Math.random() * 0x1_0000_0000))
 // ---- 三分类模式（反馈 2）：custom 手动 / auto 自动最优 / ai AI 切块 ----
-const mode = ref<'custom' | 'auto' | 'ai'>('custom')
+const mode = ref<JigsawSchemeMode>('custom')
 const difficulty = ref<'easy' | 'medium' | 'hard'>('medium')
 /** 难度三档 → 复杂度档（块数窗口：简单 10-14 / 中等 21-26 / 困难 35-49） */
 const DIFFICULTY_COMPLEXITY = { easy: 2, medium: 4, hard: 6 } as const
@@ -70,6 +70,8 @@ const DIFFICULTY_FALLBACK = {
   medium: { rows: 5, cols: 5 },
   hard: { rows: 6, cols: 6 },
 } as const
+/** 唯一性阈值固定值（反馈 2：不再 UI 外露；保存/AI 请求/批量导入统一口径） */
+const DEFAULT_UNIQUENESS_THRESHOLD = 18
 const uploading = ref(false)
 const uploadError = ref('')
 const formError = ref('')
@@ -83,6 +85,10 @@ const appliedSuggestion = ref<NormalizedSuggestion | null>(null)
 // ---- 自动最优状态（模式 auto：难度档 → 复杂度窗口，按图内容选规格，仅回填表单不直接建方案）----
 const autoRunning = ref(false)
 const autoFeedback = ref('')
+/** 本次面板会话内自动最优是否真实推导过（savedMode 依据：未推导不误标 auto） */
+const autoDerived = ref(false)
+/** latest-wins 令牌：难度/图源在分析在途时切换，旧触发的结果整体丢弃 */
+let autoToken = 0
 
 const PREVIEW_SIZE = 240
 
@@ -105,6 +111,7 @@ function openPanel(): void {
   aiFeedback.value = ''
   autoFeedback.value = ''
   appliedSuggestion.value = null
+  autoDerived.value = false
 }
 
 function closePanel(): void {
@@ -351,7 +358,7 @@ function saveScheme(): void {
   // 空名兜底 key 化（M6.6：英文界面不再出现中文默认名；纯层 createScheme 内部兜底仅作防御）
   const finalName = name.value.trim() || t('schemes.defaultName', { n: listSchemes().length + 1 })
   const savedMode: JigsawSchemeMode =
-    mode.value === 'custom' ? 'custom' : suggestion && mode.value === 'ai' ? 'ai' : 'auto'
+    suggestion && mode.value === 'ai' ? 'ai' : autoDerived.value ? 'auto' : 'custom'
   createScheme(
     finalName,
     currentSource(),
@@ -359,7 +366,7 @@ function saveScheme(): void {
       rows: rows.value,
       cols: cols.value,
       tabDepth: tabDepth.value,
-      uniquenessThreshold: 18,
+      uniquenessThreshold: DEFAULT_UNIQUENESS_THRESHOLD,
       seed: seed.value,
       ...(suggestion ? { suggestion } : {}),
     },
@@ -405,12 +412,13 @@ async function onAiSuggest(): Promise<void> {
     const { dataUrl, image: analysis } = await currentAnalysis()
     const outcome = await suggestCutPlan(
       analysis,
-      { rows: rows.value, cols: cols.value, tabDepth: tabDepth.value, uniquenessThreshold: 18 },
+      { rows: rows.value, cols: cols.value, tabDepth: tabDepth.value, uniquenessThreshold: DEFAULT_UNIQUENESS_THRESHOLD },
       seed.value,
       dataUrl,
       getSettings().ai,
     )
     if (outcome.kind === 'applied') {
+      if (mode.value !== 'ai') return // 在途切换模式：丢弃过期建议（防 AI 权重写入其它模式表单）
       rows.value = outcome.suggestion.rows
       cols.value = outcome.suggestion.cols
       appliedSuggestion.value = outcome.suggestion
@@ -422,6 +430,7 @@ async function onAiSuggest(): Promise<void> {
   } finally {
     suggesting.value = false
   }
+  if (mode.value !== 'ai') return // 已离开 ai 模式：降级回填不再劫持其它模式表单
   // 未配置/超时/被拒 → 自动执行自动最优回填 + 降级提示（三分类降级链，反馈 2）
   await runAutoSpec()
   aiFeedback.value = t('schemes.aiDegradedAuto', { rows: rows.value, cols: cols.value })
@@ -429,25 +438,30 @@ async function onAiSuggest(): Promise<void> {
 
 // ---- 自动最优（模式 auto：难度档 → 复杂度窗口，按图内容选规格；失败回落难度占位网格）----
 // 无按钮：进 auto 模式 / 换难度 / 换图时由 watch 触发；仅回填表单，用户仍可保存。
+// latest-wins：在途时新触发不丢弃，旧触发的结果按令牌整体作废（难度快切不残留旧规格）。
 async function runAutoSpec(): Promise<void> {
-  if (autoRunning.value) return
+  const token = ++autoToken
   autoRunning.value = true
   autoFeedback.value = ''
   try {
     const { image } = await currentAnalysis()
+    if (token !== autoToken) return
     const best = pickBestSpec(image, DIFFICULTY_COMPLEXITY[difficulty.value])
     rows.value = best.spec.rows
     cols.value = best.spec.cols
     tabDepth.value = Math.round((0.1 + Math.random() * 0.1) * 100) / 100 // 0.10-0.20 推荐带（与滑杆步长对齐）
     saveConfirm.value = false
+    autoDerived.value = true
     autoFeedback.value = t('schemes.autoBestDone', { rows: best.spec.rows, cols: best.spec.cols })
   } catch {
+    if (token !== autoToken) return
     const fb = DIFFICULTY_FALLBACK[difficulty.value]
     rows.value = fb.rows
     cols.value = fb.cols
+    autoDerived.value = true // 占位网格也是自动推导产物（降级但仍属 auto 语义）
     autoFeedback.value = t('schemes.autoBestFail')
   } finally {
-    autoRunning.value = false
+    if (token === autoToken) autoRunning.value = false
   }
 }
 
@@ -500,7 +514,7 @@ async function onBatchImport(event: Event): Promise<void> {
           rows: best.spec.rows,
           cols: best.spec.cols,
           tabDepth: 0.16,
-          uniquenessThreshold: 18,
+          uniquenessThreshold: DEFAULT_UNIQUENESS_THRESHOLD,
           seed: levelSeed(`auto:${ref.id}`, 1),
         },
         'auto',

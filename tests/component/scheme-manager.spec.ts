@@ -380,6 +380,26 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     wrapper.unmount()
   })
 
+  it('难度切换在分析在途：latest-wins 旧结果丢弃，规格随最新难度', async () => {
+    let releaseFirst!: (img: { width: number; height: number }) => void
+    const first = new Promise<{ width: number; height: number }>((res) => (releaseFirst = res))
+    loadSourceImageMock.mockImplementationOnce(() => first) // run#1（medium）挂起
+    downscaleMock.mockImplementationOnce(() => flatImage(96, 192)) // run#2（easy）先完成 → 5×2
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await wrapper.find('[data-role="mode-auto"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0)) // run#1 启动并挂起
+    await wrapper.find('[data-role="difficulty-easy"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
+    releaseFirst({ width: 96, height: 96 }) // 迟到的 run#1（medium + 96×96 分析）应被作废
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
+    wrapper.unmount()
+  })
+
   it('seed/threshold/换花样 不再外露（反馈 2 去内部参数）', async () => {
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
@@ -520,6 +540,41 @@ describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 appli
     await new Promise((r) => setTimeout(r, 0))
 
     expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('已自动按最优')
+    wrapper.unmount()
+  })
+
+  it('AI 在途切回自定义：过期建议丢弃，保存不带 suggestion（mode=custom）', async () => {
+    let release!: () => void
+    const pending = new Promise<void>((res) => (release = res))
+    suggestMock.mockImplementationOnce(() =>
+      pending.then(() => ({
+        kind: 'applied',
+        plan: PLAN_STUB,
+        suggestion: { rows: 3, cols: 5, rowWeights: [0.2, 0.3, 0.5], colWeights: [0.4, 0.2, 0.2, 0.1, 0.1] },
+      })),
+    )
+    const wrapper = mountWithApp(SchemeManager)
+    await openAiMode(wrapper)
+    await wrapper.find('[data-role="ai-suggest"]').trigger('click')
+    await wrapper.find('[data-role="mode-custom"]').trigger('click') // 在途切换：迟到建议须作废
+    release()
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.find('[data-role="save-scheme"]').trigger('click')
+    const scheme = listSchemes()[0]!
+    expect(scheme.params.suggestion).toBeUndefined()
+    expect(scheme.params.rows).toBe(4) // 表单未被过期建议改写
+    expect(scheme.mode).toBe('custom')
+    wrapper.unmount()
+  })
+
+  it('进 AI 模式未点按钮直接保存：无自动/ai 推导不误标 auto，mode=custom', async () => {
+    const wrapper = mountWithApp(SchemeManager)
+    await openAiMode(wrapper)
+    await wrapper.find('[data-role="save-scheme"]').trigger('click')
+    const scheme = listSchemes()[0]!
+    expect(scheme.mode).toBe('custom')
+    expect(scheme.params.rows).toBe(4) // 表单参数原样入档
     wrapper.unmount()
   })
 
