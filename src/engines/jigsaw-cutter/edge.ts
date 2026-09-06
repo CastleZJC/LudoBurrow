@@ -8,8 +8,25 @@ import type { TabSpec } from './types'
 const SEGMENTS_PER_PIECE_EDGE = 3
 /** 平坦段概率（约 12% 的段不带凸凹，增加形态多样性） */
 const FLAT_CHANCE = 0.12
-/** 锯齿骨架每段样条插点数（验收四轮七圆润化：3 → 每段 16 点，折线转平滑曲线） */
-const SMOOTH_SUBDIV = 3
+/**
+ * 蘑菇颈归一化剖面（反馈 3 圆润化）：[x, 高度比]，x∈[-1,1]（肩到肩），1 = 全深。
+ * 形态：肩 0 → 根部收窄（x=±0.40 颈最细 0.52）→ 头部外扩至圆顶（|x|≤0.12 接近半圆）→ 对称回收 → 肩 0。
+ */
+const MUSHROOM_PROFILE: readonly (readonly [number, number])[] = [
+  [-1, 0],
+  [-0.62, 0.6],
+  [-0.4, 0.52],
+  [-0.26, 0.8],
+  [-0.12, 0.97],
+  [0, 1],
+  [0.12, 0.97],
+  [0.26, 0.8],
+  [0.4, 0.52],
+  [0.62, 0.6],
+  [1, 0],
+]
+/** 锯齿骨架每段样条插点数（蘑菇颈 11 控制点 + 每段 4 插点，头弧足够密） */
+const SMOOTH_SUBDIV = 4
 
 /**
  * 为一组同向内部切割线生成锯齿规格。
@@ -108,19 +125,14 @@ export function sampleEdgePoints(
       points.push({ along: end, offset: 0 })
       continue
     }
-    // 段内锯齿骨架：起 → 凸肩(25%) → 峰(50%) → 凸肩(75%) → 段尾；
-    // 骨架经 Catmull-Rom 细分（验收四轮七圆润化），肩部零点与段尾零点保持精确
+    // 段内锯齿骨架：蘑菇颈剖面沿段中 50% 宽度展开（肩 = 段 25%/75% 处，与旧骨架占宽一致）；
+    // 骨架经 Catmull-Rom 细分，肩部零点与段尾零点精确保留，两侧互补不变
     const mid = (start + end) / 2
-    const shoulder1 = start + segWidth * 0.25
-    const shoulder2 = start + segWidth * 0.75
-    const tabLen = segWidth * 0.5 // 凸起部分占半段（肩到肩）
-    const skeleton: EdgePoint[] = [
-      { along: shoulder1, offset: 0 },
-      { along: shoulder1 + tabLen * 0.2, offset: depth * shape },
-      { along: mid, offset: depth * shape },
-      { along: shoulder2 - tabLen * 0.2, offset: depth * shape },
-      { along: shoulder2, offset: 0 },
-    ]
+    const half = segWidth * 0.25
+    const skeleton: EdgePoint[] = MUSHROOM_PROFILE.map(([x, height]) => ({
+      along: mid + x * half,
+      offset: height * depth * shape,
+    }))
     points.push(...smoothPoints(skeleton, SMOOTH_SUBDIV), { along: end, offset: 0 })
   }
   return points

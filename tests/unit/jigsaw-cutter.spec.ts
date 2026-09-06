@@ -148,6 +148,26 @@ describe('sampleEdgePoints（边几何）', () => {
     const pts = sampleEdgePoints(bumped, 40, 'after', 0.2)
     for (let i = 1; i < pts.length; i++) expect(pts[i].along).toBeGreaterThanOrEqual(pts[i - 1].along)
   })
+
+  it('蘑菇颈剖面（反馈 3）：峰≈全深、平顶消失、颈缩存在、肩部/段尾精确保零', () => {
+    const pts = sampleEdgePoints(bumped, 40, 'after', 0.2) // 段宽 20、深度 0.2；凸起区 along∈[5,15]
+    expect(pts[0]).toEqual({ along: 0, offset: 0 })
+    expect(pts[pts.length - 1]).toEqual({ along: 40, offset: 0 })
+    const bump = pts.filter((p) => p.along >= 4 && p.along <= 16).map((p) => Math.abs(p.offset))
+    expect(bump.length).toBeGreaterThan(10)
+    const peak = Math.max(...bump)
+    expect(peak).toBeGreaterThan(0.19) // 峰 ≈ 全深 0.2
+    expect(peak).toBeLessThan(0.22) // 样条过冲有界
+    // 平顶消失：≥98% 全深的采样占比 < 40%（旧梯形平顶 ≈60%）
+    const atFull = bump.filter((v) => v >= 0.196).length
+    expect(atFull / bump.length).toBeLessThan(0.4)
+    // 颈缩存在：剖面内有「降-升」局部极小且落在颈带 (0.08, 0.15)（旧梯形单调升降无此形态）
+    let necked = false
+    for (let i = 1; i < bump.length - 1; i++) {
+      if (bump[i]! < bump[i - 1]! && bump[i]! < bump[i + 1]! && bump[i]! > 0.08 && bump[i]! < 0.15) necked = true
+    }
+    expect(necked).toBe(true)
+  })
 })
 
 describe('assemblePieces（网格组装）', () => {
