@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // 内置图库真实素材获取（替代程序生成图；F-27 开源合规）
-// 图源：Wikimedia Commons（许可 CC0 / CC-BY / PD，extmetadata 完整可追溯）
+// 图源：Wikimedia Commons（许可 CC0 / CC-BY / PD，extmetadata 完整可追溯）；
+//       cartoon 专题改走 Openclipart（全站 CC0，服务端 svg_to_png 栅格化，2026-09-06 用户决策）
 // 用法：
 //   node scripts/fetch-gallery.mjs --dry-run            仅搜索并打印候选（不下载）
 //   node scripts/fetch-gallery.mjs                       全量：搜索 + 下载 + 生成 thumbs.ts / CREDITS.md
@@ -10,6 +11,10 @@
 //   逐候选下载 192 缩略 → scripts/check-color.ps1（WIC）量化：饱和度均值 ≥ 0.12 且彩色像素占比 ≥ 0.15
 //   才定稿；灰度/黑白候选自动跳换取下一候选（词条本身也须选彩色倾向的源）。
 // 网络：优先经本地代理 CONNECT 隧道（注册表 ProxyServer，Clash 等），失败回退直连。
+// Openclipart 注记（2026-09-06）：站点服务端 PNG 渲染全站损坏——svg_to_png 端点对
+// 任意 id 均回落同一张 logo 占位图、192px 端点产物近全黑，故该源走「下载 SVG 本体 →
+// 本地 sharp 栅格化白底 2048 PNG → 彩色校验/缩略」（sharp 为 devDependency，仅本
+// 构建脚本使用，不进运行时）。
 // 产物（id 与 complexity 分布恒定，游戏侧仅 file 后缀 .png → .jpg）：
 //   public/assets/images/<topic>/<id>.jpg   2048 宽源图（仅绘制用）
 //   src/games/jigsaw/thumbs.ts              192 长边 JPEG data URI（切块分析，防 canvas taint）
@@ -21,6 +26,7 @@ import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, readdirSync
 import http from 'node:http'
 import https from 'node:https'
 import { join } from 'node:path'
+import sharp from 'sharp'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 /** 定向重取槽位集合（--only id1,id2；空 = 全量） */
@@ -77,15 +83,17 @@ const TOPIC_QUERIES = [
   },
   {
     topic: 'cartoon',
-    // 彩色插画源（验收四轮：古典童书插画多黑白/单色，改选彩色插画家分类）
-    // Dulac 彩色水彩 / Nielsen 金框彩绘 / Bilibin 俄国彩色民俗 / Goble 彩色童话
+    // 现代扁平卡通源（2026-09-06 用户决策）：改走 Openclipart——全站 CC0 公共领域，
+    // 扁平圆润造型 / 高饱和明亮配色 / 主体大而清晰；源为 SVG，本地 sharp 栅格化
+    // 白底 2048 PNG（服务端 PNG 渲染损坏，见文件头注记）
+    source: 'openclipart',
     queries: [
-      ['category:Illustrations by Edmund Dulac', 'edmund dulac color illustration'],
-      ['category:Illustrations by Kay Nielsen', 'kay nielsen illustration'],
-      ['category:Illustrations by Ivan Bilibin', 'ivan bilibin color illustration'],
-      ['category:Illustrations by Warwick Goble', 'warwick goble illustration'],
-      ['category:Fairy tale illustrations', "category:Children's book illustrations"],
-      ['category:Illustrations by Warwick Goble', 'warwick goble color fairy tale'],
+      ['cute animal cartoon', 'cute animal'],
+      ['cartoon dinosaur', 'cute dinosaur'],
+      ['cute monster', 'cartoon monster'],
+      ['cartoon fish', 'cute fish'],
+      ['cute bird', 'blue bird cartoon'],
+      ['cute rainbow', 'rainbow arch', 'rainbow'],
     ],
   },
 ]
@@ -181,8 +189,13 @@ async function fetchJson(url, attempt = 1) {
   return JSON.parse(text)
 }
 
-async function fetchBuffer(url, timeoutMs = 90000) {
+async function fetchBuffer(url, timeoutMs = 90000, depth = 0) {
   const res = await fetchUrl(url, { timeoutMs })
+  // Openclipart 图像端点 301/303 规范化重定向（canonical id / 完整 slug 文件名），须跟随
+  if (res.statusCode >= 300 && res.statusCode < 400 && res.headers?.location) {
+    if (depth >= 3) throw new Error(`too many redirects: ${url.slice(0, 100)}`)
+    return fetchBuffer(new URL(res.headers.location, url).toString(), timeoutMs, depth + 1)
+  }
   if (res.statusCode !== 200) throw new Error(`download ${res.statusCode}: ${url.slice(0, 100)}`)
   const chunks = []
   for await (const c of res) chunks.push(c)
@@ -243,6 +256,85 @@ async function searchCandidates(query, limit = 12) {
   return out
 }
 
+// ---- Openclipart 搜索（cartoon 专题图源；全站 CC0 公共领域，旧 search/json API 已 302 失效，改解析搜索页 HTML）----
+const OC_BASE = 'https://openclipart.org'
+
+function slugToTitle(slug) {
+  return slug
+    .split('-')
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ')
+}
+
+/** 搜索一个词条，返回候选（SVG 源 → 服务端 svg_to_png 栅格化 2048px；许可恒 CC0） */
+async function searchOpenclipart(query, limit = 12) {
+  const url = `${OC_BASE}/search/?query=${encodeURIComponent(query)}&amount=40`
+  const res = await fetchUrl(url, { timeoutMs: 30000 })
+  if (res.statusCode !== 200) throw new Error(`openclipart ${res.statusCode}: ${url.slice(0, 100)}`)
+  const chunks = []
+  for await (const c of res) chunks.push(c)
+  const html = Buffer.concat(chunks).toString('utf8')
+  const out = []
+  const seen = new Set()
+  for (const m of html.matchAll(/href="\/detail\/(\d+)\/([a-z0-9-]+)"/g)) {
+    const [, id, slug] = m
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push({
+      title: slugToTitle(slug),
+      license: 'CC0 1.0',
+      artist: '', // 定稿后从 detail 页补齐
+      pageUrl: `${OC_BASE}/detail/${id}/${slug}`,
+      ocId: id,
+      slug,
+      sourceUrl: `${OC_BASE}/download/${id}`, // SVG 本体（服务端 PNG 渲染损坏，本地栅格化）
+      thumbUrl: '',
+      ext: 'png',
+      origWidth: 0, // 栅格化后回填实际尺寸
+      origHeight: 0,
+    })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/** 从 detail 页取作者（"by <a href=/artist/...>"）；失败不阻断（记 unknown） */
+async function fetchOpenclipartArtist(ocId, slug) {
+  try {
+    const res = await fetchUrl(`${OC_BASE}/detail/${ocId}/${slug}`, { timeoutMs: 30000 })
+    const chunks = []
+    for await (const c of res) chunks.push(c)
+    const html = Buffer.concat(chunks).toString('utf8')
+    const m = /by <a href="\/artist\/[^"]+">\s*([^<]+?)\s*<\/a>/.exec(html)
+    return m ? m[1] : '(unknown)'
+  } catch {
+    return '(unknown)'
+  }
+}
+
+/** Openclipart SVG → 白底 PNG（长边 ≤2048；站点服务端 PNG 渲染全站损坏——svg_to_png 端点对所有 id 回落同一张 logo 占位图，必须本地栅格化） */
+async function rasterizeOcSvg(svgBuf) {
+  const head = svgBuf.subarray(0, 4000).toString('utf8')
+  const wm = /width="([\d.]+)"/.exec(head)
+  const hm = /height="([\d.]+)"/.exec(head)
+  const natW = wm ? parseFloat(wm[1]) : 512
+  const natH = hm ? parseFloat(hm[1]) : 512
+  const density = Math.max(72, Math.ceil((72 * SOURCE_W) / Math.max(natW, natH, 1)))
+  return sharp(svgBuf, { density })
+    .resize(SOURCE_W, SOURCE_W, { fit: 'inside', withoutEnlargement: true })
+    .flatten({ background: '#ffffff' })
+    .png()
+    .toBuffer()
+}
+
+/** Openclipart 192 分析缩略：本地 sharp 从栅格化 PNG 缩放为 JPEG */
+async function makeOcThumb(srcBuf) {
+  return sharp(srcBuf)
+    .resize(THUMB_W, THUMB_W, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer()
+}
+
 // ---- 彩色校验（内置选图规则：彩色、色彩鲜明；经 scripts/check-color.ps1 的 WIC 解码）----
 /** 单文件饱和度量化；非 Windows / 无 PowerShell / 校验异常时返回 skipped（不阻断取图，词条彩色倾向兜底） */
 function checkColorful(filePath) {
@@ -259,21 +351,65 @@ function checkColorful(filePath) {
   }
 }
 
-/** 为一个专题拉取指定槽位：逐候选「官方 192 缩略 → 彩色校验」，首个彩色合格且未用过的候选定稿（usedTitles 跨专题去重） */
-async function pickForTopic(topic, slots, usedTitles) {
+/** 为一个专题拉取指定槽位：逐候选「192 缩略 → 彩色校验」，首个彩色合格且未用过的候选定稿（usedTitles 跨专题去重；source=openclipart 走 Openclipart 搜索） */
+async function pickForTopic(source, topic, slots, usedTitles) {
+  const oc = source === 'openclipart'
   const picks = []
   for (const { id, alternatives } of slots) {
     let picked = null
     for (const q of alternatives) {
       if (picked) break
       try {
-        const hits = await searchCandidates(q)
-        await sleep(300) // Commons 礼貌间隔
+        const hits = oc ? await searchOpenclipart(q) : await searchCandidates(q)
+        await sleep(300) // 站点礼貌间隔
         for (const hit of hits) {
-          if (usedTitles.has(hit.title)) continue
-          // 官方缩略 URL（字符串替换 px 会被 thumb 服务拒 400）
+          const key = hit.ocId ?? hit.title
+          if (usedTitles.has(key)) continue
+          if (oc) {
+            // Openclipart：下载 SVG 本体 → 本地 sharp 栅格化白底 2048 PNG → 彩色校验
+            //（服务端 PNG 渲染全站损坏：svg_to_png 对所有 id 回落同一 logo 占位图，192px 端点产物近全黑）
+            let srcBuf
+            try {
+              const svgBuf = await fetchBuffer(hit.sourceUrl, 60000)
+              srcBuf = await rasterizeOcSvg(svgBuf)
+            } catch {
+              continue
+            }
+            const meta = await sharp(srcBuf).metadata()
+            const ratio = meta.width / meta.height
+            if (ratio < 0.5 || ratio > 2) {
+              console.log(`    ↷ 跳过长条候选 ${hit.title}（${meta.width}x${meta.height}）`)
+              continue
+            }
+            // 最小宽度底线（与 Commons 侧 ≥1024 一致；SVG 原生过小则放弃，不放大凑数）
+            if (Math.max(meta.width, meta.height) < 1024) {
+              console.log(`    ↷ 跳过小图候选 ${hit.title}（${meta.width}x${meta.height}）`)
+              continue
+            }
+            const color = checkColorfulThumb(srcBuf, 'png')
+            if (!color.colorful) {
+              console.log(`    ↷ 跳过灰度候选 ${hit.title}（sat=${color.satMean} ratio=${color.colorRatio}）`)
+              continue
+            }
+            picked = {
+              ...hit,
+              query: q,
+              origWidth: meta.width,
+              origHeight: meta.height,
+              srcBuf, // 定稿后主流程复用，不重复下载
+              thumbBuf: await makeOcThumb(srcBuf),
+              thumbMime: 'image/jpeg',
+            }
+            usedTitles.add(key)
+            console.log(
+              `  [${topic}] ${id} "${q}" -> ${hit.title} (${hit.license}, ${meta.width}x${meta.height}, sat=${color.satMean} ratio=${color.colorRatio})`,
+            )
+            break
+          }
+          let thumbUrl = hit.thumbUrl
+          // Commons：官方缩略 URL（字符串替换 px 会被 thumb 服务拒 400）
           const map = await resolveThumbUrls([hit.title], THUMB_W)
-          const thumbUrl = map[hit.title]
+          thumbUrl = map[hit.title]
           if (!thumbUrl) continue
           let thumbBuf
           try {
@@ -287,9 +423,9 @@ async function pickForTopic(topic, slots, usedTitles) {
             continue
           }
           picked = { ...hit, query: q, thumbUrl, thumbBuf, thumbMime: hit.ext === 'png' ? 'image/png' : 'image/jpeg' }
-          usedTitles.add(hit.title)
+          usedTitles.add(key)
           console.log(
-            `  [${topic}] ${id} "${q}" -> ${hit.title} (${hit.license}, sat=${color.satMean} ratio=${color.colorRatio})`,
+            `  [${topic}] ${id} "${q}" -> ${hit.title} (${hit.license}, ${hit.origWidth}x${hit.origHeight}, sat=${color.satMean} ratio=${color.colorRatio})`,
           )
           break
         }
@@ -340,8 +476,9 @@ console.log(
 )
 
 // 全量槽位计划（id 稳定派生）；--only 校验（防手滑写错 id）
-const PLAN = TOPIC_QUERIES.map(({ topic, queries }) => ({
+const PLAN = TOPIC_QUERIES.map(({ topic, queries, source }) => ({
   topic,
+  source,
   slots: queries.map((alternatives, i) => ({ id: `${topic}-${String(i + 1).padStart(2, '0')}`, alternatives })),
 }))
 if (ONLY.size > 0) {
@@ -354,12 +491,12 @@ if (ONLY.size > 0) {
 const all = [] // 重取项（含 title/许可/缩略图字节）
 const keepSlots = [] // 沿用项（--only 模式：仅从现状读取，不重取）
 const usedTitles = new Set()
-for (const { topic, slots } of PLAN) {
-  console.log(`\n=== 专题 ${topic} ===`)
+for (const { topic, slots, source } of PLAN) {
+  console.log(`\n=== 专题 ${topic}（图源 ${source ?? 'commons'}）===`)
   const refresh = ONLY.size === 0 ? slots : slots.filter((s) => ONLY.has(s.id))
   const keeping = ONLY.size === 0 ? [] : slots.filter((s) => !ONLY.has(s.id))
   if (refresh.length > 0) {
-    const picks = await pickForTopic(topic, refresh, usedTitles)
+    const picks = await pickForTopic(source, topic, refresh, usedTitles)
     for (const p of picks) all.push({ ...p, topic })
   } else {
     console.log('  （无重取槽位，沿用现状）')
@@ -434,7 +571,7 @@ for (const item of all) {
   let lastErr = new Error('not attempted')
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const buf = await fetchBuffer(item.sourceUrl)
+      const buf = item.srcBuf ?? (await fetchBuffer(item.sourceUrl))
       writeFileSync(join(dir, item.file), buf)
       // 缩略图用 pick 阶段已过彩色校验的官方 192 字节（不再二次下载）
       thumbs[item.id] = `data:${item.thumbMime};base64,${item.thumbBuf.toString('base64')}`
@@ -450,14 +587,20 @@ for (const item of all) {
   if (lastErr) throw new Error(`下载失败 ${item.id}: ${lastErr.message}`)
   await new Promise((r) => setTimeout(r, 400)) // Commons 礼貌间隔
 }
+// Openclipart 条目：补齐作者（detail 页 "by <a href=/artist/...>"；仅重取项各请求一次）
+for (const item of all) {
+  if (!item.ocId) continue
+  item.artist = await fetchOpenclipartArtist(item.ocId, item.slug)
+  await sleep(300)
+}
 for (const k of keepSlots) thumbs[k.id] = k.thumbData
 
 // thumbs.ts 生成（结构与游戏侧契约一致：Record<id, data URI>，切块引擎无感；顺序 = 槽位计划序）
 const ORDER = PLAN.flatMap((g) => g.slots.map((s) => s.id))
 const thumbsTs =
-  '// 自动生成：scripts/fetch-gallery.mjs（Wikimedia Commons 真实素材，勿手改）\n' +
+  '// 自动生成：scripts/fetch-gallery.mjs（Wikimedia Commons / Openclipart 真实素材，勿手改）\n' +
   '// 分析缩略图：192 长边 JPEG data URI（切块引擎输入；data URI 不触发 canvas taint，file:// 离线可用）\n' +
-  '// 源图：public/assets/images/<topic>/<id>.jpg（2048 宽，仅绘制用）；许可见 assets/images/CREDITS.md\n' +
+  '// 源图：public/assets/images/<topic>/<id>.jpg|.png（2048 宽，仅绘制用）；许可见 assets/images/CREDITS.md\n' +
   `export const THUMBS: Record<string, string> = {\n${ORDER.map((id) => `  '${id}': '${thumbs[id]}',`).join('\n')}\n}\n`
 writeFileSync(join(ROOT, 'src', 'games', 'jigsaw', 'thumbs.ts'), thumbsTs)
 
@@ -467,7 +610,7 @@ const keepById = new Map(keepSlots.map((k) => [k.id, k]))
 const credits = [
   '# 内置图库素材许可（LudoBurrow）',
   '',
-  '素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)，经 `scripts/fetch-gallery.mjs` 获取（2048 宽服务端缩略；彩色规则校验见 scripts/check-color.ps1）。',
+  '素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)（CC0 / CC-BY / PD）与 [Openclipart](https://openclipart.org/)（全站 CC0 公共领域，cartoon 专题，源为 SVG 经本地 sharp 栅格化白底 2048 PNG），经 `scripts/fetch-gallery.mjs` 获取（2048 宽；彩色规则校验见 scripts/check-color.ps1）。',
   '按各自许可证使用；CC-BY 条目已署名。若需移除某图，替换同专题同复杂度图片并更新本文件。',
   '',
   '| id | 标题 | 作者 | 许可 | 来源页 |',

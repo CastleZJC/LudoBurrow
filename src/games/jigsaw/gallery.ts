@@ -51,12 +51,12 @@ export const GALLERY: readonly GalleryEntry[] = [
   { id: 'scenery-04', topic: 'scenery', file: 'scenery-04.jpg', complexity: 4 },
   { id: 'scenery-05', topic: 'scenery', file: 'scenery-05.jpg', complexity: 5 },
   { id: 'scenery-06', topic: 'scenery', file: 'scenery-06.jpg', complexity: 6 },
-  { id: 'cartoon-01', topic: 'cartoon', file: 'cartoon-01.jpg', complexity: 1 },
-  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.jpg', complexity: 2 },
-  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.jpg', complexity: 3 },
-  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.jpg', complexity: 4 },
-  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.jpg', complexity: 5 },
-  { id: 'cartoon-06', topic: 'cartoon', file: 'cartoon-06.jpg', complexity: 6 },
+  { id: 'cartoon-01', topic: 'cartoon', file: 'cartoon-01.png', complexity: 1 },
+  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.png', complexity: 2 },
+  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.png', complexity: 3 },
+  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.png', complexity: 4 },
+  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.png', complexity: 5 },
+  { id: 'cartoon-06', topic: 'cartoon', file: 'cartoon-06.png', complexity: 6 },
 ]
 
 /** 源图分发路径（相对路径，file:// 直接可读，仅绘制用） */

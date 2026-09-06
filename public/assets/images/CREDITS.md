@@ -1,6 +1,6 @@
 # 内置图库素材许可（LudoBurrow）
 
-素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)，经 `scripts/fetch-gallery.mjs` 获取（2048 宽服务端缩略；彩色规则校验见 scripts/check-color.ps1）。
+素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)（CC0 / CC-BY / PD）与 [Openclipart](https://openclipart.org/)（全站 CC0 公共领域，cartoon 专题，源为 SVG 经本地 sharp 栅格化白底 2048 PNG），经 `scripts/fetch-gallery.mjs` 获取（2048 宽；彩色规则校验见 scripts/check-color.ps1）。
 按各自许可证使用；CC-BY 条目已署名。若需移除某图，替换同专题同复杂度图片并更新本文件。
 
 | id | 标题 | 作者 | 许可 | 来源页 |
@@ -23,9 +23,9 @@
 | scenery-04 | File:Lavender field on Hvar.JPG | F.G. comm | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Lavender_field_on_Hvar.JPG |
 | scenery-05 | File:Rice Terraces Banaue.jpg | Magalhães | Public domain | https://commons.wikimedia.org/wiki/File:Rice_Terraces_Banaue.jpg |
 | scenery-06 | File:New York City at night HDR.jpg | Paulo Barcellos Jr. | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:New_York_City_at_night_HDR.jpg |
-| cartoon-01 | File:Edmund Dulac-Urashima Taro-1916.jpg | Edmund Dulac | Public domain | https://commons.wikimedia.org/wiki/File:Edmund_Dulac-Urashima_Taro-1916.jpg |
-| cartoon-02 | File:Illustration by Kay Nielsen 3.jpg | Kay Rasmus Nielsen | Public domain | https://commons.wikimedia.org/wiki/File:Illustration_by_Kay_Nielsen_3.jpg |
-| cartoon-03 | File:3F2.jpg | c.9.i.atelier graphique | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:3F2.jpg |
-| cartoon-04 | File:Arjuna and river Nymph.jpg | Mackenzie, Donald Alexander, 1873-1936; Goble, Warwick | Public domain | https://commons.wikimedia.org/wiki/File:Arjuna_and_river_Nymph.jpg |
-| cartoon-05 | File:Kittelsen - Nøkken (Nasjonalmuseet)2.jpg | Theodor Kittelsen | Public domain | https://commons.wikimedia.org/wiki/File:Kittelsen_-_N%C3%B8kken_(Nasjonalmuseet)2.jpg |
-| cartoon-06 | File:Damayanthi and swan.jpg | Mackenzie, Donald Alexander, 1873-1936; Goble, Warwick | Public domain | https://commons.wikimedia.org/wiki/File:Damayanthi_and_swan.jpg |
+| cartoon-01 | Cute Turtle | Child_of_Light | CC0 1.0 | https://openclipart.org/detail/292574/cute-turtle |
+| cartoon-02 | Green Dinosaur Cartoon | j4p4n | CC0 1.0 | https://openclipart.org/detail/336380/green-dinosaur-cartoon |
+| cartoon-03 | Monster But Not So Much | Almeidah | CC0 1.0 | https://openclipart.org/detail/313586/monster-but-not-so-much |
+| cartoon-04 | Cartoon Fish Isolated | j4p4n | CC0 1.0 | https://openclipart.org/detail/336938/cartoon-fish-isolated |
+| cartoon-05 | Cute Toucan Surreal | GDJ | CC0 1.0 | https://openclipart.org/detail/306145/cute-toucan-surreal |
+| cartoon-06 | Lgbtq Rainbow Heart Doodle Drawing | nerdy | CC0 1.0 | https://openclipart.org/detail/355551/lgbtq-rainbow-heart-doodle-drawing |
