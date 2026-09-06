@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<!-- LudoBurrow 设置原型（平台级页面视觉基准）
+     与实现对齐：src/components/SettingsPanel.vue + src/style.css（2026-09-06）
+     展示态：设置页五段（语言 / 限时策略 / AI 增强 / 词汇表配置 / 存档备份） -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LudoBurrow 原型 · 设置</title>
+<style>
+  :root {
+    --color-primary: #4f7cff;
+    --color-primary-dark: #3a63d9;
+    --color-accent: #ffb020;
+    --color-danger: #d64545;
+    --color-surface: #ffffff;
+    --color-bg: #f5f7fb;
+    --color-border: #d8dee9;
+    --color-text: #24292f;
+    --color-text-secondary: #6b7280;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-md: 0 4px 12px rgb(36 41 47 / 12%);
+    --shadow-lg: 0 8px 28px rgb(36 41 47 / 18%);
+    --color-primary-soft: #eef2ff;
+    --color-accent-soft: #fff4dc;
+    --color-success: #3fb950;
+    --radius-sm: 4px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
+  .primary-btn, .secondary-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 20px; border-radius: var(--radius-md); font-size: 15px; font-weight: 600;
+    cursor: pointer; border: 2px solid transparent; transition: filter 0.15s;
+  }
+  .primary-btn { background: var(--color-primary); color: #fff; }
+  .secondary-btn { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+  .primary-btn:hover, .secondary-btn:hover { filter: brightness(1.05); }
+
+  /* ---- 设置页（SettingsPanel.vue 同源样式） ---- */
+  .settings-panel { padding: 24px 32px; display: flex; flex-direction: column; gap: 24px; max-width: 720px; }
+  .settings-header { display: flex; align-items: center; gap: 16px; }
+  .settings-header h2 { margin: 0; }
+  .settings-section { display: flex; flex-direction: column; gap: 10px; }
+  .settings-section h3 { margin: 0; font-size: 16px; color: var(--color-text-secondary); }
+  .radio-group { display: flex; flex-direction: column; gap: 6px; }
+  .radio-row, .switch-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .number-row { display: flex; gap: 24px; }
+  .number-row label { display: flex; align-items: center; gap: 8px; }
+  .number-row input { width: 72px; }
+  .save-actions { display: flex; gap: 12px; }
+  .wb-text {
+    width: 100%; max-width: 420px; box-sizing: border-box; padding: 8px 10px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-bg); font-size: 14px; font-family: inherit; resize: vertical;
+  }
+  .wb-actions { display: flex; gap: 12px; }
+  .select-row { display: flex; align-items: center; gap: 8px; }
+  .text-row { display: flex; flex-direction: column; gap: 4px; max-width: 420px; }
+  .text-row input { width: 100%; box-sizing: border-box; }
+  .hint { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
+  .feedback { color: var(--color-primary); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="settings-panel" data-view="settings">
+    <header class="settings-header">
+      <button class="secondary-btn" data-nav="back">返回</button>
+      <h2>设置</h2>
+    </header>
+
+    <!-- 语言（切换立即生效） -->
+    <section class="settings-section" data-section="language">
+      <h3>语言（切换立即生效）</h3>
+      <select data-role="locale-select">
+        <option value="zh-CN" selected>简体中文</option>
+        <option value="en-US">English</option>
+      </select>
+    </section>
+
+    <!-- 限时策略（不限时 / 竞赛 / 防沉迷 + 分钟数） -->
+    <section class="settings-section" data-section="timelimit">
+      <h3>限时策略</h3>
+      <div class="radio-group">
+        <label class="radio-row">
+          <input type="radio" name="tl-mode" value="off" data-role="tl-off">
+          <span>不限时</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="tl-mode" value="competition" data-role="tl-competition" checked>
+          <span>竞赛模式（到时立即结算）</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="tl-mode" value="antiAddiction" data-role="tl-anti">
+          <span>防沉迷模式（到时提醒休息）</span>
+        </label>
+      </div>
+      <div class="number-row">
+        <label>每关上限（分钟）
+          <input type="number" min="1" max="60" value="10" data-role="limit-minutes">
+        </label>
+        <!-- 防沉迷模式追加：休息锁定（分钟）输入框 -->
+      </div>
+    </section>
+
+    <!-- AI 增强（可选）：开关 + 服务商 / Base URL / 模型名 / API Key -->
+    <section class="settings-section" data-section="ai">
+      <h3>AI 增强（可选）</h3>
+      <label class="switch-row">
+        <input type="checkbox" checked data-role="ai-toggle">
+        <span>启用 AI 切块建议</span>
+      </label>
+      <label class="select-row">
+        <span>服务商</span>
+        <select data-role="ai-provider">
+          <option value="qwen">Qwen（DashScope）</option>
+          <option value="glm" selected>GLM（智谱）</option>
+          <option value="custom">自定义（OpenAI 兼容端点）</option>
+        </select>
+      </label>
+      <label class="text-row">
+        <span>接口地址（Base URL）</span>
+        <input type="text" placeholder="留空使用预设" data-role="ai-baseurl">
+      </label>
+      <label class="text-row">
+        <span>模型名</span>
+        <input type="text" placeholder="留空使用预设" data-role="ai-model">
+      </label>
+      <label class="text-row">
+        <span>API Key（仅存本机）</span>
+        <input type="password" autocomplete="off" data-role="ai-apikey">
+      </label>
+      <p class="hint">未配置或调用失败时自动使用本地算法，功能不受影响</p>
+    </section>
+
+    <!-- 词汇表配置：类别下拉 + 词表文本 + 恢复默认 -->
+    <section class="settings-section" data-section="wordbank">
+      <h3>词汇表配置</h3>
+      <p class="hint">自定义键盘游戏「英文单词 / 中文拼音」模式词表；本地单机共享一份配置（服务器版按用户隔离，二期）</p>
+      <label class="select-row">
+        <span>词表类别</span>
+        <select data-role="wb-category">
+          <option value="en-3" selected>英文词表（词长 3）</option>
+          <option value="en-4">英文词表（词长 4）</option>
+          <option value="py-1">拼音词表（等级 1）</option>
+          <option value="py-2">拼音词表（等级 2）</option>
+        </select>
+      </label>
+      <textarea class="wb-text" rows="8" data-role="wb-text">cat, dog, sun, hat, map, bed, cup, box, fox, pen</textarea>
+      <p class="hint">多个单词用逗号或换行分隔，仅限字母；留空 = 使用内置默认词表</p>
+      <div class="wb-actions">
+        <button class="secondary-btn" data-role="wb-reset-category">恢复本类默认</button>
+        <button class="secondary-btn" data-role="wb-reset-all">全部恢复默认</button>
+      </div>
+    </section>
+
+    <!-- 存档备份：导出 / 导入 JSON -->
+    <section class="settings-section" data-section="save">
+      <h3>存档备份</h3>
+      <div class="save-actions">
+        <button class="secondary-btn" data-role="save-export">导出存档</button>
+        <button class="secondary-btn">导入存档</button>
+      </div>
+    </section>
+
+    <p class="feedback" data-role="feedback">存档已导出</p>
+  </div>
+</body>
+</html>

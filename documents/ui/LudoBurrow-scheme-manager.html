@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<!-- LudoBurrow 拼图方案管理原型（平台级页面视觉基准）
+     与实现对齐：src/components/SchemeManager.vue + src/style.css（2026-09-06）
+     展示态：方案列表（批量导入 + 新建 / 方案卡调整与删除二次确认）+ 新建面板（切片方式三分类 / 图片来源 / 参数 / 切割预览） -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LudoBurrow 原型 · 拼图方案</title>
+<style>
+  :root {
+    --color-primary: #4f7cff;
+    --color-primary-dark: #3a63d9;
+    --color-accent: #ffb020;
+    --color-danger: #d64545;
+    --color-surface: #ffffff;
+    --color-bg: #f5f7fb;
+    --color-border: #d8dee9;
+    --color-text: #24292f;
+    --color-text-secondary: #6b7280;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-md: 0 4px 12px rgb(36 41 47 / 12%);
+    --shadow-lg: 0 8px 28px rgb(36 41 47 / 18%);
+    --color-primary-soft: #eef2ff;
+    --color-accent-soft: #fff4dc;
+    --color-success: #3fb950;
+    --radius-sm: 4px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
+  .primary-btn, .secondary-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 20px; border-radius: var(--radius-md); font-size: 15px; font-weight: 600;
+    cursor: pointer; border: 2px solid transparent; transition: filter 0.15s;
+  }
+  .primary-btn { background: var(--color-primary); color: #fff; }
+  .secondary-btn { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+  .primary-btn:hover, .secondary-btn:hover { filter: brightness(1.05); }
+
+  /* ---- 方案管理页（SchemeManager.vue 同源样式） ---- */
+  .scheme-manager { padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+  .sm-header { display: flex; align-items: center; gap: 16px; }
+  .sm-header-actions { display: flex; gap: 10px; }
+  .sm-title { margin: 0; font-size: 24px; flex: 1; }
+  .sm-list { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+  .sm-card {
+    padding: 12px 16px; border: 2px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface); display: flex; flex-direction: column; gap: 8px;
+  }
+  .sm-card-main { display: flex; align-items: center; gap: 10px; }
+  .sm-name { font-weight: 600; }
+  .sm-meta { margin: 0; color: var(--color-text-secondary); font-size: 14px; }
+  .sm-actions { display: flex; gap: 10px; }
+  .sm-danger.is-confirm { border-color: #c0392b; color: #c0392b; }
+  .sm-empty { color: var(--color-text-secondary); margin: 0; }
+  .sm-editor {
+    border: 2px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface); padding: 20px; display: flex; flex-direction: column;
+    gap: 14px; max-width: 560px;
+  }
+  .sm-editor h3 { margin: 0; }
+  .sm-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+  .sm-field > span { color: var(--color-text-secondary); }
+  .sm-field input[type='text'],
+  .sm-field input[type='number'],
+  .sm-field select {
+    padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-bg); font-size: 14px;
+  }
+  .sm-field input[type='range'] { width: 100%; }
+  .sm-seg { display: inline-flex; gap: 0; }
+  .sm-seg button {
+    padding: 8px 16px; border: 1px solid var(--color-border); background: var(--color-surface);
+    cursor: pointer; font-size: 14px;
+  }
+  .sm-seg button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+  .sm-seg button + button { border-left: none; }
+  .sm-seg button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+  .sm-seg button.is-on { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .sm-params { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .sm-params .sm-field { flex: 1; min-width: 120px; }
+  .sm-preview { display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--color-text-secondary); }
+  .sm-canvas {
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface); width: 240px; height: 240px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--color-text-secondary); font-size: 13px;
+  }
+  .sm-editor-actions { display: flex; gap: 12px; }
+  .proto-note { color: var(--color-text-secondary); font-size: 13px; max-width: 720px; }
+</style>
+</head>
+<body>
+  <div class="scheme-manager" data-view="schemes">
+    <header class="sm-header">
+      <button class="secondary-btn" data-nav="back">返回</button>
+      <h2 class="sm-title">拼图方案</h2>
+      <!-- 面板打开时 header 操作区隐藏（实现中 v-if），本原型同时展示列表态与编辑态 -->
+      <div class="sm-header-actions">
+        <button class="primary-btn" data-role="batch-import">批量导入并自动建档</button>
+        <button class="primary-btn" data-role="new-scheme">新建方案</button>
+      </div>
+    </header>
+
+    <!-- 方案卡列表（meta = 图片 · rows×cols · 切片方式分类；删除需二次确认） -->
+    <section class="sm-list">
+      <div class="sm-card" data-scheme="js-demo-1">
+        <div class="sm-card-main"><span class="sm-name">小狗 6×6</span></div>
+        <p class="sm-meta">animal-01 · 6×6 · 自定义</p>
+        <div class="sm-actions">
+          <button class="secondary-btn" data-role="edit-scheme">调整</button>
+          <button class="secondary-btn sm-danger" data-role="delete-scheme">删除</button>
+        </div>
+      </div>
+      <div class="sm-card" data-scheme="js-demo-2">
+        <div class="sm-card-main"><span class="sm-name">星空 8×8</span></div>
+        <p class="sm-meta">space-02 · 8×8 · 自动最优</p>
+        <div class="sm-actions">
+          <button class="secondary-btn" data-role="edit-scheme">调整</button>
+          <button class="secondary-btn sm-danger is-confirm" data-role="delete-confirm">确认删除？</button>
+        </div>
+      </div>
+      <!-- 空态：还没有自定义方案，新建一个试试 -->
+    </section>
+
+    <!-- 新建/调整面板（示意：自定义模式 + 内置图库来源） -->
+    <section class="sm-editor" data-role="scheme-editor">
+      <h3>新建方案</h3>
+
+      <label class="sm-field">
+        <span>方案名称</span>
+        <input type="text" placeholder="例如：小狗 6×6" data-field="name">
+      </label>
+
+      <!-- 切片方式三分类：自定义（手动行列）/ 自动最优（难度档按图优选）/ AI 切块（建议回填） -->
+      <div class="sm-field">
+        <span>切片方式</span>
+        <div class="sm-seg">
+          <button type="button" class="is-on" data-role="mode-custom">自定义</button>
+          <button type="button" data-role="mode-auto">自动最优</button>
+          <button type="button" data-role="mode-ai">AI 切块</button>
+        </div>
+      </div>
+
+      <!-- 图片来源两段：内置图库（专题分组下拉）/ 本地上传（FileReader 本地读取，不出本机） -->
+      <div class="sm-field">
+        <span>图片来源</span>
+        <div class="sm-seg">
+          <button type="button" class="is-on" data-role="source-builtin">内置图库</button>
+          <button type="button" data-role="source-custom">本地上传</button>
+        </div>
+      </div>
+
+      <div class="sm-field">
+        <span>选择图片</span>
+        <select data-field="imageId">
+          <optgroup label="动物">
+            <option selected>animal-01</option>
+            <option>animal-02</option>
+          </optgroup>
+          <optgroup label="太空">
+            <option>space-01</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- 自定义模式参数（rows/cols 2-12；锯齿深度 0.08-0.25；拼图花样为内部随机不外露） -->
+      <div class="sm-params">
+        <label class="sm-field">
+          <span>行数</span>
+          <input type="number" min="2" max="12" value="8" data-field="rows">
+        </label>
+        <label class="sm-field">
+          <span>列数</span>
+          <input type="number" min="2" max="12" value="8" data-field="cols">
+        </label>
+        <label class="sm-field">
+          <span>锯齿深度（0.16）</span>
+          <input type="range" min="0.08" max="0.25" step="0.01" value="0.16" data-field="tabDepth">
+        </label>
+      </div>
+
+      <!-- 切割预览：底图 + 引擎同源真实锯齿切割线（seed/深度/行列全联动所见即所得） -->
+      <div class="sm-preview">
+        <span>切割预览</span>
+        <div class="sm-canvas" data-role="scheme-preview">Canvas 240×240（真实锯齿切割线预览）</div>
+      </div>
+
+      <div class="sm-editor-actions">
+        <button class="primary-btn" data-role="save-scheme">保存方案</button>
+        <button class="secondary-btn" data-role="cancel-scheme">取消</button>
+      </div>
+    </section>
+
+    <p class="proto-note">模式联动：切片方式 = 自动最优时参数区替换为难度三段（简单/中等/困难，按图内容自动选行列，无按钮）；= AI 切块时参数区替换为「AI 切块」建议按钮 + 降级提示（未配置/失败自动回填最优切块）。同图已有方案在玩时保存需二次确认（按钮变「同图已有方案，确认新建？」）；编辑态标题为「调整方案」，保存原位更新（id 与进度不变）。 </p>
+  </div>
+</body>
+</html>

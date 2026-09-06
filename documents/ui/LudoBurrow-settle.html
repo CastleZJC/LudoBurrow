@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!-- LudoBurrow 结算原型（平台级页面视觉基准）
+     与实现对齐：src/components/SettlePanel.vue + GameContainer.vue + src/style.css（2026-09-06）
+     展示态：过关结算浮层（过关！/ 星级 / 用时·失误·历史最佳 / 新纪录！/ 重玩·下一关·退出关卡） -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LudoBurrow 原型 · 结算</title>
+<style>
+  :root {
+    --color-primary: #4f7cff;
+    --color-primary-dark: #3a63d9;
+    --color-accent: #ffb020;
+    --color-danger: #d64545;
+    --color-surface: #ffffff;
+    --color-bg: #f5f7fb;
+    --color-border: #d8dee9;
+    --color-text: #24292f;
+    --color-text-secondary: #6b7280;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-md: 0 4px 12px rgb(36 41 47 / 12%);
+    --shadow-lg: 0 8px 28px rgb(36 41 47 / 18%);
+    --color-primary-soft: #eef2ff;
+    --color-accent-soft: #fff4dc;
+    --color-success: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
+  .primary-btn, .secondary-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 20px; border-radius: var(--radius-md); font-size: 15px; font-weight: 600;
+    cursor: pointer; border: 2px solid transparent; transition: filter 0.15s;
+  }
+  .primary-btn { background: var(--color-primary); color: #fff; }
+  .secondary-btn { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+  .primary-btn:hover, .secondary-btn:hover { filter: brightness(1.05); }
+
+  /* ---- 游戏容器（GameContainer.vue 同源样式，遮罩底衬示意） ---- */
+  .game-container { display: flex; flex-direction: column; height: 100vh; }
+  .game-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--color-border);
+  }
+  .game-title { margin: 0; font-size: 20px; }
+  .hud { display: flex; align-items: center; gap: 16px; }
+  .hud-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .hud-progress { color: var(--color-text-secondary); }
+  .game-host { flex: 1; min-height: 0; position: relative; overflow: hidden; background: linear-gradient(180deg, #eef1f7, #e3e8f2); }
+
+  /* ---- 结算浮层（SettlePanel.vue 同源样式） ---- */
+  .settle-panel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgb(0 0 0 / 50%); z-index: 40;
+  }
+  .settle-card {
+    background: var(--color-surface); border-radius: var(--radius-lg); padding: 32px 48px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: var(--shadow-lg); min-width: 320px;
+  }
+  .settle-card h3 { margin: 0; font-size: 28px; }
+  .is-success { color: var(--color-primary); }
+  .is-fail { color: var(--color-danger); }
+  .stars { font-size: 40px; color: var(--color-accent); letter-spacing: 4px; }
+  .settle-stats { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+  .stat-row { display: flex; justify-content: space-between; gap: 24px; }
+  .stat-row dt { color: var(--color-text-secondary); }
+  .stat-row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .new-best { color: var(--color-accent); font-weight: 700; margin: 0; }
+  .settle-actions { display: flex; gap: 12px; margin-top: 8px; }
+  .proto-note { color: var(--color-text-secondary); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="game-container" data-view="game">
+    <header class="game-header">
+      <h2 class="game-title">拼图 · 第 1 关</h2>
+      <div class="hud">
+        <span class="hud-time" data-hud="time">用时 05:48</span>
+        <span class="hud-progress" data-hud="progress">进度 12/12</span>
+        <button class="secondary-btn" data-nav="pause" disabled>暂停</button>
+      </div>
+    </header>
+
+    <div class="game-host">
+      <!-- 游戏画布占位（实际为各游戏 Canvas / DOM 实例挂载区） -->
+
+      <div class="settle-panel" data-role="settle">
+        <div class="settle-card">
+          <h3 class="is-success">过关！</h3>
+          <div class="stars" data-stars="2">★★☆</div>
+          <dl class="settle-stats">
+            <div class="stat-row"><dt>用时</dt><dd data-stat="elapsed">05:48</dd></div>
+            <div class="stat-row"><dt>失误</dt><dd data-stat="mistakes">3</dd></div>
+            <div class="stat-row"><dt>历史最佳</dt><dd data-stat="best">04:51</dd></div>
+          </dl>
+          <p class="new-best" hidden>新纪录！</p>
+          <div class="settle-actions">
+            <button class="secondary-btn" data-nav="retry">重玩</button>
+            <button class="primary-btn" data-nav="next">下一关</button>
+            <button class="secondary-btn" data-nav="exit">退出关卡</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="proto-note">其它展示态：失败（h3.is-fail「挑战失败」，无「下一关」按钮）/ 新纪录（显示「新纪录！」accent 高亮行）/ 末关（无「下一关」按钮，仅重玩与退出）。星级 = ★×星数 + ☆×(3−星数)；成绩行按游戏呈现用时/失误（键盘）、用时/帮助次数（拼图）、用时/步数（迷宫）。 </p>
+</body>
+</html>

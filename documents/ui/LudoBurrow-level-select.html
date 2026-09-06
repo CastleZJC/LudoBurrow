@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- LudoBurrow 关卡选择原型（平台级页面视觉基准）
+     与实现对齐：src/components/LevelSelect.vue + src/style.css（设计 token 同源，2026-09-06）
+     示例态：拼图（多专题页签 + 动态关数 = 方案数，每格 = 一个切片方案） -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LudoBurrow 原型 · 关卡选择</title>
+<style>
+  :root {
+    --color-primary: #4f7cff;
+    --color-primary-dark: #3a63d9;
+    --color-accent: #ffb020;
+    --color-danger: #d64545;
+    --color-surface: #ffffff;
+    --color-bg: #f5f7fb;
+    --color-border: #d8dee9;
+    --color-text: #24292f;
+    --color-text-secondary: #6b7280;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-md: 0 4px 12px rgb(36 41 47 / 12%);
+    --shadow-lg: 0 8px 28px rgb(36 41 47 / 18%);
+    --color-primary-soft: #eef2ff;
+    --color-accent-soft: #fff4dc;
+    --color-success: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
+  .primary-btn, .secondary-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 20px; border-radius: var(--radius-md); font-size: 15px; font-weight: 600;
+    cursor: pointer; border: 2px solid transparent; transition: filter 0.15s;
+  }
+  .primary-btn { background: var(--color-primary); color: #fff; }
+  .secondary-btn { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+  .primary-btn:hover, .secondary-btn:hover { filter: brightness(1.05); }
+
+  /* ---- 关卡选择（LevelSelect.vue 同源样式） ---- */
+  .level-select { padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+  .select-header { display: flex; align-items: center; gap: 16px; }
+  .select-title { margin: 0; font-size: 24px; }
+  .progress-line { margin: 0; color: var(--color-text-secondary); }
+  .track-tabs { display: flex; flex-wrap: wrap; gap: 10px; }
+  .track-tab {
+    padding: 8px 18px; border-radius: var(--radius-md); border: 2px solid var(--color-border);
+    background: var(--color-surface); cursor: pointer; font-size: 15px; font-weight: 600;
+  }
+  .track-tab:hover { border-color: var(--color-primary); }
+  .track-tab.is-active { border-color: var(--color-primary); background: var(--color-primary); color: #fff; }
+  .level-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; max-width: 960px; }
+  .empty-import-btn { align-self: flex-start; margin-top: -8px; }
+  .level-cell {
+    position: relative; aspect-ratio: 1; border-radius: var(--radius-md); border: 2px solid var(--color-border);
+    background: var(--color-surface); display: flex; flex-direction: column; align-items: center;
+    justify-content: center; cursor: pointer; font-size: 18px; font-weight: 600;
+  }
+  .level-cell:hover:not(:disabled) { border-color: var(--color-primary); }
+  .level-cell.is-locked, .level-cell:disabled { opacity: 0.45; cursor: not-allowed; }
+  .level-stars { font-size: 12px; color: var(--color-accent); line-height: 1; }
+  .level-best { font-size: 10px; color: var(--color-text-secondary); line-height: 1.2; }
+  .level-lock { position: absolute; top: 4px; right: 6px; font-size: 12px; }
+  .proto-note { color: var(--color-text-secondary); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="level-select" data-view="select">
+    <header class="select-header">
+      <button class="secondary-btn" data-nav="back">返回</button>
+      <h2 class="select-title">拼图 · 动物</h2>
+      <button class="secondary-btn" data-nav="schemes">拼图方案</button>
+    </header>
+
+    <!-- 专题页签（拼图多轨；键盘游戏此处为四模式页签，迷宫无页签） -->
+    <div class="track-tabs" data-role="track-tabs">
+      <button class="track-tab is-active" data-track="animals">动物</button>
+      <button class="track-tab" data-track="space">太空</button>
+      <button class="track-tab" data-track="scenery">风景</button>
+      <button class="track-tab" data-track="cartoon">卡通</button>
+      <button class="track-tab" data-track="custom">我的拼图</button>
+    </div>
+
+    <p class="progress-line">已解锁 1/6 关</p>
+
+    <!-- 关数 = 专题方案数（示例：动物专题 6 关 = 6 张内置图各一个方案；新增方案自动追加关卡） -->
+    <div class="level-grid">
+      <button class="level-cell" data-level="1">
+        <span class="level-n">1</span>
+        <span class="level-stars" data-stars="3">★★★</span>
+        <span class="level-best" data-best-ms="31200">最佳 31.2s</span>
+      </button>
+      <button class="level-cell" data-level="2">
+        <span class="level-n">2</span>
+        <span class="level-stars" data-stars="2">★★</span>
+        <span class="level-best" data-best-ms="64800">最佳 64.8s</span>
+      </button>
+      <button class="level-cell" data-level="3" disabled>
+        <span class="level-n">3</span>
+        <span class="level-lock">🔒</span>
+      </button>
+      <button class="level-cell" data-level="4" disabled>
+        <span class="level-n">4</span>
+        <span class="level-lock">🔒</span>
+      </button>
+      <button class="level-cell" data-level="5" disabled>
+        <span class="level-n">5</span>
+        <span class="level-lock">🔒</span>
+      </button>
+      <button class="level-cell" data-level="6" disabled>
+        <span class="level-n">6</span>
+        <span class="level-lock">🔒</span>
+      </button>
+    </div>
+
+    <p class="proto-note">空专题态：进度行显示「该专题暂无切片方案，去『拼图方案』新建一个吧」+ 直达导入按钮「导入本地图片并自动最优切块」。</p>
+  </div>
+</body>
+</html>

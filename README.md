@@ -10,7 +10,7 @@
 - 🌐 **中/英双语** — 个人设置切换，语言框架可扩展
 - 📴 **PWA** — 在线版访问一次后离线可玩（本地 file:// 版不依赖）
 
-**当前状态（2026-09-06）**：一期（M1-M6）完成并发布 v1.0.0；**v1.0.0 验收反馈返工完成（v1.1.0）**——键盘四模式独立进度 / 拼图先选专题、方案即关卡（动态关数）、24 张 ≥1K 真实照片图库、每图切块规格自动优选、本地图片批量导入自动建档 / 迷宫 HUD 主题切换与轨迹随机、瓦片 1024² 高清 / **免安装成品随仓库（`play/`，双击即玩）**；终版门禁：typecheck 0 错、549 tests、coverage 95.13%（branches 91.43%）、i18n 145 键、release 流水线 8/8（zip 47.69 MB）。二期（Web 登录与素材隔离）框架已预留，任务与验收见[开发计划文档](./documents/design/LudoBurrow%20E5%BC%80%E5%8F%91%E8%AE%A1%E5%88%92%E6%96%87%E6%A1%A3.md)。
+**当前状态（2026-09-06）**：一期（M1-M6）完成并发布 v1.0.0，验收反馈三轮返工全部落地（v1.1.0 已发布一/二/三轮，三轮成果随下版发布）——键盘四模式独立进度、词序滚动与自适应布局 / 拼图先选专题、方案即关卡（动态关数）、24 张高清图库（彩色选图规则）、每图切块规格自动优选（六档互斥窗口）、块推出洗牌、半圆锯齿边缘、方案原位调整、本地图片批量导入自动建档 / 迷宫 8 主题、轨迹随机、瓦片 1024² 高清 / **免安装成品随仓库（`play/`，双击即玩）**；当前门禁：typecheck 0 错、551 tests、coverage 94.13%（branches 90.72%）、i18n 155 键。二期（Web 登录与素材隔离）框架已预留，任务与验收见[开发计划文档](./documents/design/LudoBurrow%20E5%BC%80%E5%8F%91%E8%AE%A1%E5%88%92%E6%96%87%E6%A1%A3.md)。
 
 ## 技术栈
 
@@ -23,7 +23,7 @@ LudoBurrow/
 ├── CLAUDE.md               # 跨工具项目规则（AI 编码工具通用）
 ├── documents/
 │   ├── design/             # 设计与规范文档（权威体系）
-│   ├── ui/                 # UI 原型（预留，暂无文件）
+│   ├── ui/                 # UI 原型（平台级页面六页，单文件 HTML）
 │   └── bug/                # BUG 修复文档（随开发累积）
 ├── play/                   # 免安装成品（双击 play/index.html 即玩；npm run play 重建）
 ├── src/                    # 源码（M1 建立：core/games/engines/ai/i18n/services/components/assets）
@@ -42,7 +42,7 @@ LudoBurrow/
 | [LudoBurrow 部署规范](./documents/design/LudoBurrow%20%E9%83%A8%E7%BD%B2%E8%A7%84%E8%8C%83.md) | 发布产物 / release 流水线 / 在线部署 / 版本回滚 |
 | [LudoBurrow 开发计划文档](./documents/design/LudoBurrow%20%E5%BC%80%E5%8F%91%E8%AE%A1%E5%88%92%E6%96%87%E6%A1%A3.md) | 里程碑 M1-M6 / AI 辅助开发工作流（superpowers + ecc × glm 5.3）/ 验收与门禁 |
 | [LudoBurrow 问题汇总明细](./documents/design/LudoBurrow%20%E9%97%AE%E9%A2%98%E6%B1%87%E6%80%BB%E6%98%8E%E7%BB%86.md) | 开发避坑指南（四段式，随开发累积） |
-| [documents/ui/README.md](./documents/ui/README.md) | UI 原型目录说明（暂无文件） |
+| [documents/ui/README.md](./documents/ui/README.md) | UI 原型目录说明 + 六页平台级页面原型（主菜单/选关/暂停/结算/设置/方案管理） |
 | [documents/bug/README.md](./documents/bug/README.md) | BUG 文档命名规范 |
 
 ## 版本迭代
@@ -58,4 +58,4 @@ LudoBurrow/
 
 ## License
 
-代码以 [MIT](./LICENSE) 发布；内置图库（24 张 ≥1K 高清照片）来源 Wikimedia Commons（CC0/CC-BY），由 `scripts/fetch-gallery.mjs` 获取、`public/assets/images/CREDITS.md` 逐张标注许可；迷宫瓦片/sprite 由 `scripts/gen-maze-assets.mjs`、PWA 图标由 `scripts/gen-pwa-icons.mjs` 程序化生成（随 MIT）。用户本地导入的版权图片（含 `documents/local/`，已被 .gitignore 忽略）永不入库不分发。
+代码以 [MIT](./LICENSE) 发布；内置图库（24 张 ≥1K 高清图）来源 Wikimedia Commons（CC0 / CC-BY / CC BY-SA / 公有领域）与 Openclipart（cartoon 专题，全站 CC0），由 `scripts/fetch-gallery.mjs` 获取、`public/assets/images/CREDITS.md` 逐张标注许可；迷宫瓦片/sprite 由 `scripts/gen-maze-assets.mjs`、PWA 图标由 `scripts/gen-pwa-icons.mjs` 程序化生成（随 MIT）。用户本地导入的版权图片（含 `documents/local/`，已被 .gitignore 忽略）永不入库不分发。
