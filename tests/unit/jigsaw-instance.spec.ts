@@ -339,6 +339,19 @@ describe('帮助按钮（§11.4）', () => {
     expect(h.progress.at(-1)).toMatchObject({ done: 4, total: 9 })
     inst.destroy()
   })
+
+  it('帮助落位后自动续推下一块到当前区（对齐拖拽落子路径，反馈 6）', async () => {
+    const { inst, h } = await mountReady()
+    click(h.container.querySelector('[data-jg="help"]')!) // 块 0 归位 + 应自动续推块 1
+    vi.advanceTimersByTime(1100) // 飞行播完（盘面状态即时生效，这里只等动画）
+    // 当前区此刻应为块 1（deck=[0..8] 顺序推出）：从当前区拖到块 1 正确槽 → done 2
+    const piece = h.plan.pieces[1]
+    const from = h.currentCenter()
+    pointer(h.canvas, 'pointerdown', from.x, from.y)
+    pointer(h.canvas, 'pointerup', h.slotCenter(piece.row, piece.col).x, h.slotCenter(piece.row, piece.col).y)
+    expect(h.progress.at(-1)).toMatchObject({ done: 2, total: 9 })
+    inst.destroy()
+  })
 })
 
 describe('放弃按钮（§11.3 四阶段演示）', () => {

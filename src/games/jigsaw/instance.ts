@@ -486,10 +486,18 @@ export function mountJigsaw(
 
     const result = board.help()
     if (!result) return
+    // A2：先快照下一块的剩余槽位（pushNext 会把它移出 remaining，之后位置计算错位）
+    const nextUp = board.remainingOrder[0]
+    const nextFrom = nextUp !== undefined ? remainingSlotRect(nextUp) : null
     if (result.displacedIndex !== undefined && occupantBefore) {
       pushFlight(result.displacedIndex, occupantBefore, pieceHomeRect(result.displacedIndex), DISPLACE_MS)
     }
     pushFlight(result.pieceIndex, fromRect, pieceHomeRect(result.pieceIndex), DEMO_STEP_MS)
+    // A2：帮助落位后自动续推下一块（对齐拖拽路径 onPointerUp 的 pushNext，反馈 6；一次帮助只计一次）
+    if (nextUp !== undefined && nextFrom) {
+      const pushed = board.pushNext()
+      if (pushed !== null) pushFlight(pushed, nextFrom, pieceHomeRect(pushed), DEMO_STEP_MS)
+    }
     refreshHud()
     reportProgress()
     if (board.isComplete()) finish()
