@@ -1,19 +1,17 @@
-// 拼图关卡生成（开发计划 3.8 / 技术架构 §11.5）
-// 难度曲线：网格规格阶梯递增（每约 5 关进阶一档：3×3 → 4×4 → … → 9×9，第 31 关起恒 9×9）
-// 图片复杂度配对：低关（1-20）用主体突出的图、中关（21-40）均衡、高关（41-50）细节丰富色彩相近。
-// 确定性：seed = levelSeed('jigsaw', n)，切块参数由 seed 派生，同关卡方案恒定。
+// 拼图关卡配置类型（验收返工「方案 = 关卡」模型）
+// 关卡 = 切片方案：专题轨（animals/space/scenery/cartoon/custom）内第 n 关 = 第 n 个方案，
+// 由 schemes.createTopicLevel 生成；关卡数按方案数动态（新增方案 = 自动新增关卡）。
+// 旧「1-50 固定曲线」（gridForLevel/createJigsawLevel）已随存档 v6 迁移退役。
 
 import type { BaseLevelConfig } from '@/core/types'
-import { levelSeed } from '@/engines/rng'
-import { pickImageForLevel } from './gallery'
 
 export interface JigsawLevelConfig extends BaseLevelConfig {
   gameId: 'jigsaw'
-  /** 网格规格（内置曲线：行 = 列；方案模式以 rows 为准，rows/cols 可不同） */
+  /** 网格规格（兼容字段 = rows；方案模式以 rows/cols 为准，可不同） */
   gridSize: number
   /** 内置图库条目 id（gallery.ts 单一出处；custom 来源方案为空串） */
   imageId: string
-  // ---- 方案模式可选字段（schemeLevel 填充；§11.8）----
+  // ---- 方案参数（createTopicLevel 填充）----
   /** 行数（缺省 = gridSize） */
   rows?: number
   /** 列数（缺省 = gridSize） */
@@ -22,29 +20,13 @@ export interface JigsawLevelConfig extends BaseLevelConfig {
   tabDepth?: number
   /** 唯一性阈值（缺省用引擎默认 18） */
   uniquenessThreshold?: number
-  /** 所属方案 id（无 = 内置关卡） */
+  /** 所属方案 id（内置方案 bs-<imageId> / 用户方案 js-*；进度记录键） */
   schemeId?: string
   /** 自定义素材仓库引用（kind=custom 方案；instance 经 services/assetRepo 加载） */
   assetId?: string
-  /** AI 建议切块权重（M5 §14.5；长度与当前关 rows/cols 匹配时生效，否则本地梯度算法） */
+  /** AI 建议切块权重（M5 §14.5；长度与 rows/cols 匹配时生效，否则本地梯度算法） */
   suggestion?: {
     rowWeights: number[]
     colWeights: number[]
-  }
-}
-
-/** 网格阶梯：n ∈ [1,50] → min(3 + floor((n-1)/5), 9) */
-export function gridForLevel(n: number): number {
-  return Math.min(3 + Math.floor((n - 1) / 5), 9)
-}
-
-export function createJigsawLevel(n: number): JigsawLevelConfig {
-  if (n < 1 || n > 50) throw new RangeError(`jigsaw: 非法关卡号 ${n}`)
-  return {
-    gameId: 'jigsaw',
-    n,
-    seed: levelSeed('jigsaw', n),
-    gridSize: gridForLevel(n),
-    imageId: pickImageForLevel(n).id,
   }
 }

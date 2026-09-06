@@ -1,13 +1,19 @@
 // 迷宫关卡生成（开发计划 4.5 / 技术架构 §12.2）
-// 难度曲线：尺寸阶梯递增（每 3 关进阶：5×5 → 21×21）+ 分支度线性上升（0.15 → 0.8，
-// 死胡同渐多）+ 主题每 10 关轮换（城堡/花园，F-20 主题切换可见）。
-// 确定性：seed = levelSeed('maze', n)，生成器同参同迷宫（§12.1 可复现）。
+// 难度曲线：尺寸阶梯递增（每 3 关进阶：5×5 → 21×21）+ 分支度线性上升（0.15 → 0.8，死胡同渐多）。
+// 确定性：seed = levelSeed('maze', n) 为关卡基准种子（生成器同参同迷宫，§12.1 可复现）；
+//         实例生产路径每局叠加随机扰动（instance.ts，验收返工：同关每局轨迹随机）。
+// 主题（验收返工 F-20）：跟随设置 mazeTheme（HUD 内切换并持久化 = 记住上次），
+//         所有关卡共享单一进度，主题只影响观感；旧「每 10 关轮换」退役。
 
 import type { BaseLevelConfig } from '@/core/types'
+import { getSettings } from '@/core/settings'
 import { levelSeed } from '@/engines/rng'
 
 /** 主题 id（§12.3 首期两主题；皮肤定义见 theme.ts 单一出处） */
 export type MazeTheme = 'castle' | 'garden'
+
+/** 默认主题（旧档无 mazeTheme 字段时的兜底，与存档校验口径一致） */
+export const DEFAULT_MAZE_THEME: MazeTheme = 'castle'
 
 export const TOTAL_MAZE_LEVELS = 50
 
@@ -31,11 +37,6 @@ export function branchingForLevel(n: number): number {
   return 0.15 + ((n - 1) / 49) * 0.65
 }
 
-/** 主题轮换：每 10 关切换（1-10 城堡 / 11-20 花园 / …） */
-export function themeForLevel(n: number): MazeTheme {
-  return Math.floor((n - 1) / 10) % 2 === 0 ? 'castle' : 'garden'
-}
-
 export function createMazeLevel(n: number): MazeLevelConfig {
   if (n < 1 || n > TOTAL_MAZE_LEVELS) throw new RangeError(`maze: 非法关卡号 ${n}`)
   return {
@@ -44,6 +45,6 @@ export function createMazeLevel(n: number): MazeLevelConfig {
     seed: levelSeed('maze', n),
     size: sizeForLevel(n),
     branching: branchingForLevel(n),
-    theme: themeForLevel(n),
+    theme: getSettings().mazeTheme ?? DEFAULT_MAZE_THEME,
   }
 }

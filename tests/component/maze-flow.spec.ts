@@ -1,6 +1,6 @@
 // 迷宫平台链路测试（开发计划 4.6：主菜单入口 / 选关 50 关与锁定 / 进关配置 / 容器内真实可玩到结算）
 // 生产路径端到端：平台注册 → 种子生成迷宫 → 键盘通关 → 结算面板 + 写档解锁。
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { registerGame, unregisterGame } from '@/core/game-registry'
 import { mazeModule } from '@/games/maze'
@@ -137,15 +137,18 @@ describe('GameContainer 迷宫真实实例（生产路径）', () => {
   it('挂载即可玩：沿最短路径按键 → 结算面板 3 星 + 写档解锁第 2 关', async () => {
     const platform = usePlatformStore()
     const level = createMazeLevel(1)
+    // 轨迹随机（验收返工）：扰动固定 0 → 本局种子 = 基准种子，与外部同源重建可复现通关
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
     platform.openLevel(level)
     const wrapper = mountWithApp(GameContainer, { props: { level }, attachTo: document.body })
+    randSpy.mockRestore()
 
     // 挂载宿主内渲染迷宫 HUD 与画布（平台注册路径不注入 deps → 种子生成 + 色板皮肤）
     const host = document.querySelector('[data-role="mount-host"]') as HTMLElement
     expect(host.querySelector('canvas.mz-canvas')).not.toBeNull()
-    expect(host.querySelector('[data-mz="theme"]')!.textContent).toBe(i18n.global.t('maze.themeCastle'))
+    expect(host.querySelector('[data-mz-theme="castle"]')!.getAttribute('aria-pressed')).toBe('true')
 
-    // 与实现同源重建（同 seed 同参确定性）求最短路径，逐键通关
+    // 与实现同源重建（基准 seed 同参确定性）求最短路径，逐键通关
     const maze = generateMaze(level.seed, level.size, { branching: level.branching })
     for (const dir of bfsPath(maze)) key(CODE_OF[dir])
     await new Promise((r) => setTimeout(r, 0))
@@ -155,6 +158,25 @@ describe('GameContainer 迷宫真实实例（生产路径）', () => {
     expect(platform.settleInfo?.result.stars).toBe(3) // 最短路 ≤ 1.2×solutionLength
     expect(getUnlockedCount('maze')).toBe(2)
     expect(wrapper.find('[data-role="settle"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('轨迹随机：扰动 ≠ 0 时基准种子路径不再通关（同关每局轨迹独立，验收返工 F-20）', async () => {
+    const platform = usePlatformStore()
+    const level = createMazeLevel(1)
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    platform.openLevel(level)
+    const wrapper = mountWithApp(GameContainer, { props: { level }, attachTo: document.body })
+    randSpy.mockRestore()
+
+    // 本局迷宫 = 基准种子叠加扰动生成，与基准迷宫不同构：
+    // 沿基准路径逐键会在中途撞墙中断，不产生结算、不解锁
+    const maze = generateMaze(level.seed, level.size, { branching: level.branching })
+    for (const dir of bfsPath(maze)) key(CODE_OF[dir])
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(platform.settleInfo).toBeNull()
+    expect(getUnlockedCount('maze')).toBe(1)
     wrapper.unmount()
   })
 })

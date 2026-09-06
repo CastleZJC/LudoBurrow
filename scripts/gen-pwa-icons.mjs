@@ -1,5 +1,5 @@
 // PWA 图标生成器（开发计划 M6.2）：确定性程序化生成 icon-192.png / icon-512.png
-// 零第三方依赖：Node 内置 zlib 手写 PNG 编码（同 gen-gallery.mjs 口径，许可见 CREDITS.md）。
+// 零第三方依赖：Node 内置 zlib 手写 PNG 编码（RGBA8 + filter 0 + deflate）。
 // 用法：node scripts/gen-pwa-icons.mjs
 // 产出：public/icons/icon-192.png、public/icons/icon-512.png（同配方不同分辨率）
 import { deflateSync } from 'node:zlib'
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// ---- 极简 PNG 编码（RGBA8 + filter 0 + zlib deflate，同 gen-gallery.mjs） ----
+// ---- 极简 PNG 编码（RGBA8 + filter 0 + zlib deflate） ----
 const CRC_TABLE = new Int32Array(256)
 for (let n = 0; n < 256; n++) {
   let c = n

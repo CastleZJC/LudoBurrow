@@ -2,13 +2,14 @@
 // Canvas 2D 走 setup.ts 全局 mock（记录调用可断言渲染路径）；迷宫经 deps 注入手搓
 // 已知结构（2×2 L 形），皮肤注入 stub → 完全绕开资源加载，断言聚焦行为而非像素。
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest'
 import type { GameHooks, GameInstance, LevelProgress, LevelResult } from '@/core/types'
 import type { MazeData } from '@/engines/maze-generator'
 import { levelSeed } from '@/engines/rng'
+import { getSettings } from '@/core/settings'
 import { mountMaze } from '@/games/maze/instance'
-import { createMazeLevel, type MazeLevelConfig } from '@/games/maze/level'
-import { paletteSkin, type TileSkin } from '@/games/maze/theme'
+import type { MazeLevelConfig } from '@/games/maze/level'
+import { THEME_PALETTES, paletteSkin, type TileSkin } from '@/games/maze/theme'
 import { i18n } from '@/i18n'
 
 /** 手搓 2×2 L 形迷宫：(0,0)→(1,0)→(1,1)，solutionLength=2；(0,0) 上/左为外墙可撞 */
@@ -64,6 +65,25 @@ interface Harness {
   results: LevelResult[]
 }
 
+/**
+ * 局部同步 RAF stub：setup.ts 的全局 mock 在 happy-dom 下未生效（裸调用解析到原生异步 RAF），
+ * 需驱动重画的用例用它把回调入队后手动同步执行（flush 后 rafId 归零，destroy 无需 cancel）。
+ */
+function stubSyncRaf(): { flush: () => void; restore: () => void } {
+  const queue: FrameRequestCallback[] = []
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    queue.push(cb)
+    return queue.length
+  })
+  vi.stubGlobal('cancelAnimationFrame', () => {})
+  return {
+    flush: () => {
+      for (const cb of queue.splice(0)) cb(0)
+    },
+    restore: () => vi.unstubAllGlobals(),
+  }
+}
+
 function mountReady(skin?: TileSkin): { inst: GameInstance; h: Harness } {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -89,19 +109,27 @@ describe('mountMaze（挂载与初始化）', () => {
     expect(h.container.querySelector('.mz-hint')).toBeTruthy()
     expect(h.container.querySelector('[data-mz="error"]')).toBeNull()
     expect(h.container.querySelector('[data-mz="size"]')!.textContent).toBe('2×2')
-    expect(h.container.querySelector('[data-mz="theme"]')!.textContent).toBe(t('maze.themeCastle'))
+    expect(h.container.querySelector('[data-mz-theme="castle"]')!.textContent).toBe(t('maze.themeCastle'))
+    expect(h.container.querySelector('[data-mz-theme="castle"]')!.getAttribute('aria-pressed')).toBe('true')
+    expect(h.container.querySelector('[data-mz-theme="garden"]')!.getAttribute('aria-pressed')).toBe('false')
     expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 0`)
     expect(h.container.querySelector('[data-mz="mistakes"]')!.textContent).toBe(`${t('common.mistakes')} 0`)
     expect(h.container.querySelector('.mz-hint')!.textContent).toBe(t('maze.hint'))
     inst.destroy()
   })
 
-  it('花园主题关卡：主题徽标随 level.theme 切换（真实生成路径，不注入迷宫）', () => {
-    const level = createMazeLevel(11) // 11-20 关 → 花园
+  it('花园主题关卡：初始按钮态随 cfg.theme（garden 按下）', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
-    const inst = mountMaze(container, level, { onProgress() {}, onComplete() {}, onAbandon() {} }, { skin: paletteSkin('garden') })
-    expect(container.querySelector('[data-mz="theme"]')!.textContent).toBe(t('maze.themeGarden'))
+    const gardenLevel: MazeLevelConfig = { ...TINY_LEVEL, theme: 'garden' }
+    const inst = mountMaze(
+      container,
+      gardenLevel,
+      { onProgress() {}, onComplete() {}, onAbandon() {} },
+      { maze: tinyMaze(), skin: paletteSkin('garden') },
+    )
+    expect(container.querySelector('[data-mz-theme="garden"]')!.getAttribute('aria-pressed')).toBe('true')
+    expect(container.querySelector('[data-mz-theme="castle"]')!.getAttribute('aria-pressed')).toBe('false')
     inst.destroy()
     container.remove()
   })
@@ -119,6 +147,55 @@ describe('mountMaze（挂载与初始化）', () => {
     const calls = (h.canvas.getContext('2d') as unknown as { __calls: { op: string }[] }).__calls
     expect(calls.some((c) => c.op === 'fillRect')).toBe(true)
     expect(calls.some((c) => c.op === 'drawImage')).toBe(true)
+    inst.destroy()
+  })
+})
+
+describe('HUD 主题切换（验收返工 F-20：单一进度 + 记住上次）', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  it('点击另一主题：按钮态翻转 + 背景重画 + 设置持久化（记住上次）', () => {
+    const raf = stubSyncRaf()
+    const { inst, h } = mountReady()
+    expect(getSettings().mazeTheme).toBeUndefined() // 初始未写入
+    ;(h.container.querySelector('[data-mz-theme="garden"]') as HTMLButtonElement).click()
+    raf.flush()
+    raf.restore()
+    expect(h.container.querySelector('[data-mz-theme="garden"]')!.getAttribute('aria-pressed')).toBe('true')
+    expect(h.container.querySelector('[data-mz-theme="castle"]')!.getAttribute('aria-pressed')).toBe('false')
+    const calls = (h.canvas.getContext('2d') as unknown as { __calls: { op: string; args: unknown[] }[] }).__calls
+    expect(calls.some((c) => c.op === 'set:fillStyle' && c.args[0] === THEME_PALETTES.garden.bg)).toBe(true)
+    expect(getSettings().mazeTheme).toBe('garden')
+    inst.destroy()
+  })
+
+  it('重复点击当前主题：幂等（不重复写档）', () => {
+    const { inst, h } = mountReady()
+    ;(h.container.querySelector('[data-mz-theme="castle"]') as HTMLButtonElement).click()
+    expect(getSettings().mazeTheme).toBeUndefined()
+    inst.destroy()
+  })
+
+  it('切换后通关：meta.theme 记录结算时主题', () => {
+    const { inst, h } = mountReady()
+    ;(h.container.querySelector('[data-mz-theme="garden"]') as HTMLButtonElement).click()
+    key('ArrowRight')
+    key('ArrowDown')
+    expect(h.results[0]!.meta).toMatchObject({ theme: 'garden' })
+    inst.destroy()
+  })
+
+  it('deps.skin 注入时切换不更换皮肤（测试注入语义保留，仅背景刷新）', () => {
+    const raf = stubSyncRaf()
+    const skin = countingSkin()
+    const { inst, h } = mountReady(skin)
+    const before = skin.tileCalls
+    ;(h.container.querySelector('[data-mz-theme="garden"]') as HTMLButtonElement).click()
+    raf.flush()
+    raf.restore()
+    expect(skin.tileCalls).toBe(before) // 不重建棋盘缓存
+    expect(getSettings().mazeTheme).toBe('garden')
     inst.destroy()
   })
 })

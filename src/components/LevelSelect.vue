@@ -1,59 +1,93 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getGame } from '@/core/game-registry'
-import { getLevelRecords, getUnlockedCount, isUnlocked, TOTAL_LEVELS } from '@/core/level-manager'
+import { getLevelRecords, getUnlockedCount, isUnlocked, progressSlotKey, TOTAL_LEVELS } from '@/core/level-manager'
 import type { LevelRecord } from '@/core/types'
 import { usePlatformStore } from '@/stores/platform'
-import {
-  activeScheme,
-  getSchemeLevelRecords,
-  getSchemeUnlockedCount,
-  isSchemeLevelUnlocked,
-  schemeLevel,
-} from '@/games/jigsaw/schemes'
+import { schemesForTopic } from '@/games/jigsaw/schemes'
+import type { JigsawTopicId } from '@/games/jigsaw/schemes'
+import { warmBuiltinOptima } from '@/games/jigsaw/optimize'
 
 const props = defineProps<{ gameId: string }>()
 const { t } = useI18n()
 const platform = usePlatformStore()
 
-/** 拼图方案模式（挂载时快照；切换方案经视图切换重挂载取新值，§11.8 切方案=切存档槽） */
-const scheme = props.gameId === 'jigsaw' ? activeScheme() : null
+const game = getGame(props.gameId)
+/** 多轨游戏（键盘四模式 / 拼图专题）的进度轨列表；单轨为 null */
+const tracks = game?.tracks && game.tracks.length > 0 ? game.tracks : null
 
-const unlockedCount = ref(
-  scheme ? getSchemeUnlockedCount(scheme.id) : getUnlockedCount(props.gameId),
-)
-const records = ref<Record<string, LevelRecord>>(
-  scheme ? getSchemeLevelRecords(scheme.id) : getLevelRecords(props.gameId),
-)
-const gameNameKey = computed(() => getGame(props.gameId)?.name ?? '')
+/** 当前选中进度轨（多轨游戏页签；默认首轨） */
+const selectedTrack = ref<string | null>(tracks ? tracks[0]!.id : null)
+
+/** 进度槽键：多轨走 gameId:track，单轨走 gameId */
+const slotKey = computed(() => progressSlotKey(props.gameId, selectedTrack.value ?? undefined))
+
+/** 轨内总关数：动态关卡游戏（拼图按方案数）经模块读取，缺省固定 50 */
+const total = computed(() => game?.levelCount?.(selectedTrack.value ?? undefined) ?? TOTAL_LEVELS)
+
+/** 拼图专题轨第 n 关的成绩键 = 方案 id（方案删除重排不错位）；其他 = 关卡号 */
+function recordKey(n: number): string {
+  if (props.gameId === 'jigsaw' && selectedTrack.value) {
+    return schemesForTopic(selectedTrack.value as JigsawTopicId)[n - 1]?.id ?? ''
+  }
+  return String(n)
+}
+
+function readUnlocked(): number {
+  return getUnlockedCount(slotKey.value, total.value)
+}
+function readRecords(): Record<string, LevelRecord> {
+  return getLevelRecords(slotKey.value)
+}
+
+const unlockedCount = ref(readUnlocked())
+const records = ref<Record<string, LevelRecord>>(readRecords())
+const gameNameKey = computed(() => game?.name ?? '')
+const selectedTrackLabel = computed(() => {
+  const tr = tracks?.find((x) => x.id === selectedTrack.value)
+  return tr ? t(tr.labelKey) : ''
+})
 
 function refresh(): void {
-  if (scheme) {
-    unlockedCount.value = getSchemeUnlockedCount(scheme.id)
-    records.value = getSchemeLevelRecords(scheme.id)
-  } else {
-    unlockedCount.value = getUnlockedCount(props.gameId)
-    records.value = getLevelRecords(props.gameId)
-  }
+  unlockedCount.value = readUnlocked()
+  records.value = readRecords()
+}
+
+// ---- 内置图库切块规格预热（验收返工「每图自动选最优切块」）----
+// 启动已后台预热（main.ts），此处幂等补一次：进关时 createTopicLevel 读到的是内容优选规格。
+// 分析中不锁关卡格（异常环境恒回落兜底网格，锁死反而进不了关）。
+const analyzing = ref(false)
+
+onMounted(() => {
+  if (props.gameId !== 'jigsaw') return
+  analyzing.value = true
+  void warmBuiltinOptima().finally(() => {
+    analyzing.value = false
+    refresh()
+  })
+})
+
+/** 切换进度轨（多轨游戏页签）：重读该轨独立解锁/星级与动态关数 */
+function selectTrack(id: string): void {
+  selectedTrack.value = id
+  refresh()
 }
 
 /** 从游戏返回时刷新进度（父组件可调用） */
 defineExpose({ refresh })
 
 const levelNumbers = computed(() =>
-  Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1),
+  Array.from({ length: total.value }, (_, i) => i + 1),
 )
 
 function unlocked(n: number): boolean {
-  return scheme ? isSchemeLevelUnlocked(scheme.id, n) : isUnlocked(props.gameId, n)
+  return isUnlocked(slotKey.value, n, total.value)
 }
 
 function enterLevel(n: number): void {
-  if (!unlocked(n)) return
-  const game = getGame(props.gameId)
-  if (!game) return
-  platform.openLevel(scheme ? schemeLevel(scheme, n) : game.createLevel(n))
+  if (!unlocked(n) || !game) return
+  platform.openLevel(game.createLevel(n, selectedTrack.value ?? undefined))
 }
 </script>
 
@@ -64,7 +98,7 @@ function enterLevel(n: number): void {
         {{ t('common.back') }}
       </button>
       <h2 class="select-title">
-        {{ t(gameNameKey) }} · {{ scheme ? scheme.name : t('level.title') }}
+        {{ t(gameNameKey) }} · {{ tracks ? selectedTrackLabel : t('level.title') }}
       </h2>
       <button
         v-if="gameId === 'jigsaw'"
@@ -76,9 +110,26 @@ function enterLevel(n: number): void {
       </button>
     </header>
 
-    <p class="progress-line">{{ t('level.progress', { unlocked: unlockedCount, total: TOTAL_LEVELS }) }}</p>
+    <div v-if="tracks" class="track-tabs" data-role="track-tabs">
+      <button
+        v-for="tr in tracks"
+        :key="tr.id"
+        class="track-tab"
+        :class="{ 'is-active': tr.id === selectedTrack }"
+        :data-track="tr.id"
+        @click="selectTrack(tr.id)"
+      >
+        {{ t(tr.labelKey) }}
+      </button>
+    </div>
 
-    <div class="level-grid">
+    <p class="progress-line">{{ t('level.progress', { unlocked: unlockedCount, total: total }) }}</p>
+
+    <p v-if="analyzing" class="progress-line" data-role="analyzing">{{ t('level.analyzing') }}</p>
+
+    <p v-if="total === 0" class="progress-line" data-role="empty-topic">{{ t('level.emptyTopic') }}</p>
+
+    <div v-if="total > 0" class="level-grid">
       <button
         v-for="n in levelNumbers"
         :key="n"
@@ -90,14 +141,14 @@ function enterLevel(n: number): void {
       >
         <span class="level-n">{{ n }}</span>
         <span
-          v-if="unlocked(n) && records[String(n)]"
+          v-if="unlocked(n) && records[recordKey(n)]"
           class="level-stars"
-          :data-stars="records[String(n)].stars"
+          :data-stars="records[recordKey(n)].stars"
         >
-          {{ '★'.repeat(records[String(n)].stars) }}
+          {{ '★'.repeat(records[recordKey(n)].stars) }}
         </span>
-        <span v-if="unlocked(n) && records[String(n)]" class="level-best" :data-best-ms="records[String(n)].bestMs">
-          {{ t('level.best') }} {{ (records[String(n)].bestMs / 1000).toFixed(1) }}s
+        <span v-if="unlocked(n) && records[recordKey(n)]" class="level-best" :data-best-ms="records[recordKey(n)].bestMs">
+          {{ t('level.best') }} {{ (records[recordKey(n)].bestMs / 1000).toFixed(1) }}s
         </span>
         <span v-if="!unlocked(n)" class="level-lock">🔒</span>
       </button>
@@ -124,6 +175,28 @@ function enterLevel(n: number): void {
 .progress-line {
   margin: 0;
   color: var(--color-text-secondary);
+}
+.track-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.track-tab {
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+.track-tab:hover {
+  border-color: var(--color-primary);
+}
+.track-tab.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
 }
 .level-grid {
   display: grid;

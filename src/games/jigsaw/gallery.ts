@@ -1,7 +1,7 @@
 // 内置图库清单与加载器（技术架构 §11.9 / §15.3）
-// 分发双轨（M3.9 落地，图片由 scripts/gen-gallery.mjs 程序化生成，许可见 assets/images/CREDITS.md）：
-//   源图（1024 PNG）走 public/assets/images/<topic>/ 相对路径 —— 只用于绘制（drawImage 不受 canvas taint 限制）
-//   分析缩略图（192 长边 PNG data URI）内嵌 thumbs.ts —— 切块梯度分析需要 getImageData，data URI 不污染 canvas，
+// 分发双轨（真实开源素材由 scripts/fetch-gallery.mjs 获取（Wikimedia Commons），许可见 assets/images/CREDITS.md）：
+//   源图（2048 宽 JPEG/PNG）走 public/assets/images/<topic>/ 相对路径 —— 只用于绘制（drawImage 不受 canvas taint 限制）
+//   分析缩略图（192 长边 data URI）内嵌 thumbs.ts —— 切块梯度分析需要 getImageData，data URI 不污染 canvas，
 //   保证 file:// 离线模式下切块引擎永远可用（§11.6 本地算法兜底）
 
 import type { ImageDataLike } from '@/engines/jigsaw-cutter'
@@ -14,7 +14,7 @@ export interface GalleryEntry {
   topic: GalleryTopicId
   /** public/assets/images/<topic>/ 下的文件名 */
   file: string
-  /** 图片复杂度：1=主体突出色块分明（低关）/ 3=细节丰富色彩相近（高关），§11.5 配对 */
+  /** 图片复杂度：1=主体突出色块分明 / 3=细节丰富色彩相近（内置方案占位网格与后续「最优切块」分析用） */
   complexity: 1 | 2 | 3
 }
 
@@ -28,45 +28,31 @@ export const GALLERY_TOPICS: readonly { id: GalleryTopicId; labelKey: string }[]
 
 /** 内置图库清单（24 张：每专题 6 张，复杂度 2/2/2 分布；M6.1 高难度段扩充） */
 export const GALLERY: readonly GalleryEntry[] = [
-  { id: 'animals-01', topic: 'animals', file: 'animals-01.png', complexity: 1 },
-  { id: 'animals-02', topic: 'animals', file: 'animals-02.png', complexity: 1 },
-  { id: 'animals-03', topic: 'animals', file: 'animals-03.png', complexity: 2 },
-  { id: 'animals-04', topic: 'animals', file: 'animals-04.png', complexity: 2 },
-  { id: 'animals-05', topic: 'animals', file: 'animals-05.png', complexity: 3 },
-  { id: 'animals-06', topic: 'animals', file: 'animals-06.png', complexity: 3 },
-  { id: 'space-01', topic: 'space', file: 'space-01.png', complexity: 1 },
-  { id: 'space-02', topic: 'space', file: 'space-02.png', complexity: 1 },
-  { id: 'space-03', topic: 'space', file: 'space-03.png', complexity: 2 },
-  { id: 'space-04', topic: 'space', file: 'space-04.png', complexity: 2 },
-  { id: 'space-05', topic: 'space', file: 'space-05.png', complexity: 3 },
-  { id: 'space-06', topic: 'space', file: 'space-06.png', complexity: 3 },
-  { id: 'scenery-01', topic: 'scenery', file: 'scenery-01.png', complexity: 1 },
-  { id: 'scenery-02', topic: 'scenery', file: 'scenery-02.png', complexity: 1 },
-  { id: 'scenery-03', topic: 'scenery', file: 'scenery-03.png', complexity: 2 },
-  { id: 'scenery-04', topic: 'scenery', file: 'scenery-04.png', complexity: 2 },
-  { id: 'scenery-05', topic: 'scenery', file: 'scenery-05.png', complexity: 3 },
-  { id: 'scenery-06', topic: 'scenery', file: 'scenery-06.png', complexity: 3 },
-  { id: 'cartoon-01', topic: 'cartoon', file: 'cartoon-01.png', complexity: 1 },
-  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.png', complexity: 1 },
-  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.png', complexity: 2 },
-  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.png', complexity: 2 },
-  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.png', complexity: 3 },
+  { id: 'animals-01', topic: 'animals', file: 'animals-01.jpg', complexity: 1 },
+  { id: 'animals-02', topic: 'animals', file: 'animals-02.jpg', complexity: 1 },
+  { id: 'animals-03', topic: 'animals', file: 'animals-03.jpg', complexity: 2 },
+  { id: 'animals-04', topic: 'animals', file: 'animals-04.jpg', complexity: 2 },
+  { id: 'animals-05', topic: 'animals', file: 'animals-05.jpg', complexity: 3 },
+  { id: 'animals-06', topic: 'animals', file: 'animals-06.jpg', complexity: 3 },
+  { id: 'space-01', topic: 'space', file: 'space-01.jpg', complexity: 1 },
+  { id: 'space-02', topic: 'space', file: 'space-02.jpg', complexity: 1 },
+  { id: 'space-03', topic: 'space', file: 'space-03.jpg', complexity: 2 },
+  { id: 'space-04', topic: 'space', file: 'space-04.jpg', complexity: 2 },
+  { id: 'space-05', topic: 'space', file: 'space-05.jpg', complexity: 3 },
+  { id: 'space-06', topic: 'space', file: 'space-06.jpg', complexity: 3 },
+  { id: 'scenery-01', topic: 'scenery', file: 'scenery-01.jpg', complexity: 1 },
+  { id: 'scenery-02', topic: 'scenery', file: 'scenery-02.jpg', complexity: 1 },
+  { id: 'scenery-03', topic: 'scenery', file: 'scenery-03.jpg', complexity: 2 },
+  { id: 'scenery-04', topic: 'scenery', file: 'scenery-04.jpg', complexity: 2 },
+  { id: 'scenery-05', topic: 'scenery', file: 'scenery-05.jpg', complexity: 3 },
+  { id: 'scenery-06', topic: 'scenery', file: 'scenery-06.jpg', complexity: 3 },
+  { id: 'cartoon-01', topic: 'cartoon', file: 'cartoon-01.jpg', complexity: 1 },
+  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.jpg', complexity: 1 },
+  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.jpg', complexity: 2 },
+  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.jpg', complexity: 2 },
+  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.jpg', complexity: 3 },
   { id: 'cartoon-06', topic: 'cartoon', file: 'cartoon-06.png', complexity: 3 },
 ]
-
-/** 关卡段 → 图片复杂度（§11.5 图片复杂度同步提升） */
-export function complexityForLevel(n: number): 1 | 2 | 3 {
-  if (n <= 20) return 1
-  if (n <= 40) return 2
-  return 3
-}
-
-/** 关卡选图：复杂度配对段内按关卡号取模轮换（确定性：同关卡恒定） */
-export function pickImageForLevel(n: number, gallery: readonly GalleryEntry[] = GALLERY): GalleryEntry {
-  const pool = gallery.filter((e) => e.complexity === complexityForLevel(n))
-  if (pool.length === 0) throw new Error('jigsaw: 图库复杂度段为空')
-  return pool[(n - 1) % pool.length]!
-}
 
 /** 源图分发路径（相对路径，file:// 直接可读，仅绘制用） */
 export function sourceSrc(entry: GalleryEntry): string {
@@ -106,10 +92,10 @@ export function decodeDataUrlToImageData(dataUrl: string): Promise<ImageDataLike
   })
 }
 
-/** 取某关卡图片的分析像素（切块引擎输入；缩略表由 gen-gallery.mjs 生成，正常恒有数据） */
+/** 取某关卡图片的分析像素（切块引擎输入；缩略表由 fetch-gallery.mjs 生成，正常恒有数据） */
 export async function loadAnalysisImage(entry: GalleryEntry): Promise<ImageDataLike> {
   const dataUrl = THUMBS[entry.id]
-  if (!dataUrl) throw new Error(`jigsaw: 图库条目 ${entry.id} 的分析缩略图缺失（请运行 scripts/gen-gallery.mjs 重新生成）`)
+  if (!dataUrl) throw new Error(`jigsaw: 图库条目 ${entry.id} 的分析缩略图缺失（请运行 scripts/fetch-gallery.mjs 重新生成）`)
   return decodeDataUrlToImageData(dataUrl)
 }
 

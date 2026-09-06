@@ -5,12 +5,24 @@ import type { SettleInfo } from '@/stores/platform'
 import { getLevelRecord, TOTAL_LEVELS } from '@/core/level-manager'
 import { formatElapsed } from '@/core/timer'
 
-const props = defineProps<{ info: SettleInfo; gameId: string; levelN: number }>()
+const props = defineProps<{
+  info: SettleInfo
+  gameId: string
+  levelN: number
+  /** 轨内总关数（动态关卡游戏传实际值；缺省固定 50） */
+  total?: number
+  /** 进度槽键（多轨游戏传 gameId:track；缺省 gameId） */
+  slotKey?: string
+  /** 成绩记录键（拼图方案关传方案 id；缺省关卡号） */
+  recordKey?: string
+}>()
 defineEmits<{ next: []; retry: []; exit: [] }>()
 const { t } = useI18n()
 
-const bestRecord = computed(() => getLevelRecord(props.gameId, props.levelN))
-const isLastLevel = computed(() => props.levelN >= TOTAL_LEVELS)
+const bestRecord = computed(() =>
+  getLevelRecord(props.slotKey ?? props.gameId, props.recordKey ?? String(props.levelN)),
+)
+const isLastLevel = computed(() => props.levelN >= (props.total ?? TOTAL_LEVELS))
 </script>
 
 <template>

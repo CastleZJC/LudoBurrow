@@ -1,0 +1,16 @@
+{
+  "name": "LudoBurrow",
+  "short_name": "LudoBurrow",
+  "description": "免安装 PC 益智游戏平台：键盘按键 / 拼图 / 迷宫",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "background_color": "#f5f7fa",
+  "theme_color": "#3a6ea5",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

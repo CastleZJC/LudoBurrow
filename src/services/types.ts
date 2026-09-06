@@ -1,5 +1,7 @@
 // 运行环境适配层接口（技术架构 §7.4，Web 二期框架预留）
-// 全部分叉点（登录态 / 自定义素材仓库）收拢于此；业务代码禁止绕过适配层直连 IndexedDB / 远端 API。
+// 全部分叉点（登录态 / 自定义素材仓库 / 词表配置）收拢于此；业务代码禁止绕过适配层直连 IndexedDB / 远端 API。
+
+import type { WordbankConfig } from '@/core/save'
 
 /** 应用用户（本地模式恒为匿名本地用户） */
 export interface AppUser {
@@ -52,8 +54,20 @@ export interface AssetRepo {
   deleteImage(ref: AssetRef): Promise<void>
 }
 
-/** 运行环境适配器：登录态 + 素材仓库 */
+/**
+ * 词表配置分叉点：本地=单一配置无权限分割（存于存档 wordbank 段）；
+ * Web=服务端按用户权限隔离（二期）。业务代码经此读写词表，勿直连存档。
+ */
+export interface WordbankRepo {
+  /** 读取当前词表配置（无自定义时返回空配置 = 全用引擎默认词表） */
+  getConfig(): WordbankConfig
+  /** 写入词表配置（空配置归一为移除自定义段） */
+  saveConfig(config: WordbankConfig): void
+}
+
+/** 运行环境适配器：登录态 + 素材仓库 + 词表配置 */
 export interface EnvAdapter {
   auth: AuthService
   assetRepo: AssetRepo
+  wordbankRepo: WordbankRepo
 }

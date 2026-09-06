@@ -9,6 +9,11 @@ export interface BaseLevelConfig {
   n: number
   /** 确定性种子：hash(gameId + ':' + n) 派生，同关卡内容恒定 */
   seed: number
+  /**
+   * 进度轨标识（多轨游戏用；如键盘四模式、拼图专题/方案）。
+   * 缺省 = 单轨游戏，进度按 gameId 存；有值时进度按 `${gameId}:${track}` 独立存（level-manager.progressSlotKey）。
+   */
+  track?: string
 }
 
 /** 关卡进度上报（onProgress 载荷） */
@@ -65,8 +70,19 @@ export interface GameModule {
   name: string
   /** 图标资源路径（相对路径 assets/...） */
   icon: string
-  createLevel(n: number): BaseLevelConfig
+  /** 生成第 n 关配置；track 为多轨游戏的进度轨标识（缺省 = 单轨） */
+  createLevel(n: number, track?: string): BaseLevelConfig
   mount(container: HTMLElement, level: BaseLevelConfig, hooks: GameHooks): GameInstance
+  /**
+   * 多轨游戏的进度轨列表（如键盘四模式、拼图专题）：选关页先选轨再展示该轨关卡，各轨独立解锁/星级。
+   * 缺省 = 单轨游戏，选关页直接展示固定关卡。id 传入 createLevel(n, track) 并作为进度槽键后缀。
+   */
+  tracks?: readonly { id: string; labelKey: string }[]
+  /**
+   * 轨内关卡总数（动态关卡游戏用，如拼图按切片方案数；缺省 = 固定 TOTAL_LEVELS）。
+   * 选关页与结算「下一关」以此为准，替代硬编码 50。
+   */
+  levelCount?: (track?: string) => number
 }
 
 /** 关卡成绩记录（level-manager 读写单元） */

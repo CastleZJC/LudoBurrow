@@ -52,7 +52,9 @@ export function gradientProfile(
  * 单轴切割线计算（含首尾边界）。
  * 步骤：①梯度累计等分（每段内容量≈相等 → 细节区段短、平坦区段长）
  *      ②每条内部线在 ±tolerance 内吸附到梯度局部最小（沿平坦处切）
- *      ③最小段长钳制（≥ 平均段长的 40%，防极端细条）
+ *      ③均匀微差吸附：距理想均匀位偏差 ≤ 平均段长 10% 的线吸附到均匀位
+ *        （微差肉眼难辨，与其留不齐的缝不如切齐；显著偏差是内容驱动的有意设计，保留）
+ *      ④最小段长钳制（≥ 平均段长的 40%，防极端细条）
  * 纯色图（总梯度为 0）回退像素等分。
  */
 export function buildAxisLines(
@@ -102,7 +104,17 @@ export function buildAxisLines(
     bounds[k] = best
   }
 
-  // ③ 单调性修复（吸附后保证严格递增）
+  // ③ 均匀微差吸附（验收返工：切块均匀观感）：偏差在带内的线吸附后仍需满足
+  // 与两侧线的最小段长（40% 平均段），否则放弃本次吸附（避免挤出新细条）。
+  const snapBand = (size / count) * 0.1
+  for (let k = 1; k < bounds.length - 1; k++) {
+    const ideal = Math.round((size * k) / count)
+    if (Math.abs(bounds[k] - ideal) > snapBand) continue
+    if (ideal - bounds[k - 1] < minSeg || bounds[k + 1] - ideal < minSeg) continue
+    bounds[k] = ideal
+  }
+
+  // ④ 单调性修复（吸附后保证严格递增）
   for (let k = 1; k < bounds.length; k++) {
     if (bounds[k] <= bounds[k - 1]) bounds[k] = bounds[k - 1] + 1
   }

@@ -4,7 +4,7 @@
 import type { EnvAdapter } from './types'
 import { createLocalAdapter } from './local-adapter'
 
-export type { AppUser, LoginCredentials, ImageMeta, AssetMeta, AssetRef, AuthService, AssetRepo, EnvAdapter } from './types'
+export type { AppUser, LoginCredentials, ImageMeta, AssetMeta, AssetRef, AuthService, AssetRepo, WordbankRepo, EnvAdapter } from './types'
 export { LOCAL_USER, createLocalAdapter } from './local-adapter'
 export { createWebAdapter } from './web-adapter'
 export { createMemoryAssetStore, createIdbAssetStore, type AssetStore } from './asset-store'

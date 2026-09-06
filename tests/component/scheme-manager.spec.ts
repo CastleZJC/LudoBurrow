@@ -1,25 +1,26 @@
-// SchemeManager 组件测试（开发计划 3.6 预切块工作流 / 3.7 确认与隔离 / 3.11 上传闭环）
+// SchemeManager 组件测试（验收返工「方案 = 关卡」：新建即入轨 / F-18 确认 / 3.11 上传闭环）
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import type { VueWrapper } from '@vue/test-utils'
 import SchemeManager from '@/components/SchemeManager.vue'
 import { mountWithApp } from './helpers'
 import { usePlatformStore } from '@/stores/platform'
-import {
-  listSchemes, createScheme, recordSchemeResult, activeScheme, deactivateSchemes,
-} from '@/games/jigsaw/schemes'
+import { listSchemes, createScheme } from '@/games/jigsaw/schemes'
+import { recordResult, getLevelRecord } from '@/core/level-manager'
 import type { LevelResult } from '@/core/types'
 
 // services 适配层 mock：素材仓库走内存假实现（真实 IndexedDB 仓库由 services.spec 覆盖）
-const { saveImageMock } = vi.hoisted(() => ({ saveImageMock: vi.fn() }))
+const { saveImageMock, loadImageMock } = vi.hoisted(() => ({
+  saveImageMock: vi.fn(),
+  loadImageMock: vi.fn(),
+}))
 vi.mock('@/services', () => ({
   getEnvAdapter: () => ({
     auth: { getCurrentUser: () => ({ id: 'local', name: 'local', anonymous: true }) },
     assetRepo: {
       saveImage: saveImageMock,
       listImages: async () => [],
-      loadImage: async () => {
-        throw new Error('unused in this spec')
-      },
+      loadImage: loadImageMock,
       deleteImage: async () => {},
     },
   }),
@@ -36,6 +37,15 @@ vi.mock('@/games/jigsaw/gallery', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/games/jigsaw/gallery')>()
   return { ...actual, loadSourceImage: loadSourceImageMock, downscaleToAnalysis: downscaleMock }
 })
+
+const PARAMS = { rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42 }
+
+/** 纯色假图（自动最优链路：downscaleToAnalysis 已 mock，这里只喂像素） */
+function flatImage(w: number, h: number, v = 128) {
+  const data = new Uint8ClampedArray(w * h * 4).fill(v)
+  for (let i = 3; i < data.length; i += 4) data[i] = 255
+  return { width: w, height: h, data }
+}
 
 function result(n: number): LevelResult {
   return { gameId: 'jigsaw', n, elapsedMs: 60_000, mistakes: 0, stars: 3, meta: {} }
@@ -54,15 +64,14 @@ describe('SchemeManager 渲染与新建', () => {
     saveImageMock.mockReset()
   })
 
-  it('默认态：内置行激活、空列表提示、新建按钮', () => {
+  it('默认态：空列表提示、新建按钮（无激活位概念）', () => {
     const wrapper = mountWithApp(SchemeManager)
-    expect(wrapper.find('[data-role="builtin-track"].is-active').exists()).toBe(true)
     expect(wrapper.text()).toContain('还没有自定义方案')
     expect(wrapper.find('[data-role="new-scheme"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('新建内置方案全流程：填名保存 → 卡片出现并激活、内置行让位', async () => {
+  it('新建内置方案全流程：填名保存 → 卡片出现，方案追加为 animals 专题第 7 关', async () => {
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
     await wrapper.find('[data-field="name"]').setValue('小狗 6×6')
@@ -72,12 +81,8 @@ describe('SchemeManager 渲染与新建', () => {
     expect(schemes).toHaveLength(1)
     expect(schemes[0]!.name).toBe('小狗 6×6')
     expect(schemes[0]!.source).toEqual({ kind: 'builtin', imageId: 'animals-01' })
-    expect(activeScheme()?.id).toBe(schemes[0]!.id)
-
     // 面板关闭 + 列表镜像刷新
     expect(wrapper.find('[data-role="scheme-editor"]').exists()).toBe(false)
-    expect(wrapper.find('[data-role="builtin-track"].is-active').exists()).toBe(false)
-    expect(wrapper.find('[data-role="use-builtin"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('小狗 6×6')
     wrapper.unmount()
   })
@@ -151,18 +156,16 @@ describe('SchemeManager 上传闭环（M3.11）', () => {
   })
 })
 
-describe('SchemeManager 确认与隔离（F-17 / F-18）', () => {
+describe('SchemeManager 确认与隔离（F-18 / 方案 = 关卡）', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
     saveImageMock.mockReset()
   })
 
-  it('F-18：同图已有方案在玩 → 首次保存进确认态，二次点击才新建（历史方案保留）', async () => {
-    const existing = createScheme('原图方案', { kind: 'builtin', imageId: 'animals-01' }, {
-      rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42,
-    })
-    recordSchemeResult(existing.id, result(1)) // unlocked=2 > 1 → 在玩
+  it('F-18：同图方案在玩（专题轨有成绩）→ 首次保存进确认态，二次点击才新建（历史成绩保留）', async () => {
+    const existing = createScheme('原图方案', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    recordResult('jigsaw:animals', result(7), { total: 7, recordKey: existing.id }) // 专题轨有成绩 = 在玩
 
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
@@ -173,19 +176,16 @@ describe('SchemeManager 确认与隔离（F-17 / F-18）', () => {
     expect(wrapper.find('[data-role="save-confirm"]').exists()).toBe(true)
     expect(listSchemes()).toHaveLength(1)
 
-    // 二次：确认新建平行方案
+    // 二次：确认新建平行关卡
     await wrapper.find('[data-role="save-confirm"]').trigger('click')
     expect(listSchemes()).toHaveLength(2)
-    expect(activeScheme()?.name).toBe('重新切块')
-    // 历史方案进度不受影响
-    expect(listSchemes().find((s) => s.id === existing.id)?.progress.unlockedCount).toBe(2)
+    // 历史方案成绩不受影响
+    expect(getLevelRecord('jigsaw:animals', existing.id)?.stars).toBe(3)
     wrapper.unmount()
   })
 
-  it('同图方案未在玩（仅解锁第 1 关）：无需确认直接创建', async () => {
-    createScheme('刚建的', { kind: 'builtin', imageId: 'animals-01' }, {
-      rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42,
-    })
+  it('同图方案未在玩（无成绩）：无需确认直接创建', async () => {
+    createScheme('刚建的', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
@@ -193,14 +193,10 @@ describe('SchemeManager 确认与隔离（F-17 / F-18）', () => {
     wrapper.unmount()
   })
 
-  it('删除二次确认：首次弹确认文案，二次执行且其他进度隔离', async () => {
-    const a = createScheme('A', { kind: 'builtin', imageId: 'animals-01' }, {
-      rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42,
-    })
-    const b = createScheme('B', { kind: 'builtin', imageId: 'space-01' }, {
-      rows: 5, cols: 5, tabDepth: 0.16, uniquenessThreshold: 18, seed: 43,
-    })
-    recordSchemeResult(b.id, result(1))
+  it('删除二次确认：首次弹确认文案，二次执行且其他方案成绩隔离', async () => {
+    const a = createScheme('A', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    const b = createScheme('B', { kind: 'builtin', imageId: 'space-01' }, { ...PARAMS, seed: 43 })
+    recordResult('jigsaw:space', result(1), { total: 6, recordKey: b.id })
 
     const wrapper = mountWithApp(SchemeManager)
     const delBtn = wrapper.find(`[data-scheme="${a.id}"] [data-role="delete-scheme"]`)
@@ -211,8 +207,8 @@ describe('SchemeManager 确认与隔离（F-17 / F-18）', () => {
 
     await wrapper.find(`[data-scheme="${a.id}"] [data-role="delete-confirm"]`).trigger('click')
     expect(listSchemes().map((s) => s.id)).toEqual([b.id])
-    // B 进度隔离保留
-    expect(listSchemes()[0]!.progress.unlockedCount).toBe(2)
+    // B 成绩隔离保留
+    expect(getLevelRecord('jigsaw:space', b.id)?.stars).toBe(3)
     wrapper.unmount()
   })
 })
@@ -224,22 +220,6 @@ describe('SchemeManager 导航', () => {
     saveImageMock.mockReset()
   })
 
-  it('开玩：激活方案并跳转拼图选关', async () => {
-    const scheme = createScheme('A', { kind: 'builtin', imageId: 'animals-01' }, {
-      rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42,
-    })
-    deactivateSchemes()
-    const platform = usePlatformStore()
-
-    const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find(`[data-scheme="${scheme.id}"] [data-role="play-scheme"]`).trigger('click')
-
-    expect(activeScheme()?.id).toBe(scheme.id)
-    expect(platform.view).toBe('select')
-    expect(platform.currentGameId).toBe('jigsaw')
-    wrapper.unmount()
-  })
-
   it('返回按钮：回选关视图', async () => {
     const platform = usePlatformStore()
     platform.openGameSelect('jigsaw')
@@ -249,17 +229,148 @@ describe('SchemeManager 导航', () => {
     expect(platform.view).toBe('select')
     wrapper.unmount()
   })
+})
 
-  it('回到内置：激活位归零、方案保留', async () => {
-    createScheme('A', { kind: 'builtin', imageId: 'animals-01' }, {
-      rows: 4, cols: 4, tabDepth: 0.16, uniquenessThreshold: 18, seed: 42,
-    })
+describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优切块直接建档）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    saveImageMock.mockReset()
+    loadImageMock.mockReset()
+    suggestMock.mockReset()
+    loadSourceImageMock.mockReset().mockResolvedValue({ width: 96, height: 96 })
+    downscaleMock.mockReset().mockReturnValue(flatImage(96, 96))
+  })
+
+  function pickBatchInput(wrapper: VueWrapper): HTMLInputElement {
+    return wrapper.find('[data-role="batch-input"]').element as HTMLInputElement
+  }
+
+  /** 批量导入是逐张 await 链（含 FileReader 异步），轮询等待直至完成条件 */
+  async function flushUntil(done: () => boolean, tries = 50): Promise<void> {
+    for (let i = 0; i < tries && !done(); i += 1) await new Promise((r) => setTimeout(r, 0))
+  }
+
+  it('多图一次导入：每张按图选最优规格建档（竖图 → 6×3），文件名去扩展名为方案名', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192)) // 竖长图 → c2 档唯一正方形块候选 6×3
+    let seq = 0
+    saveImageMock.mockImplementation(async () => ({ id: `asset-${(seq += 1)}` }))
+    loadImageMock.mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }))
     const wrapper = mountWithApp(SchemeManager)
-    expect(wrapper.find('[data-role="use-builtin"]').exists()).toBe(true)
-    await wrapper.find('[data-role="use-builtin"]').trigger('click')
-    expect(activeScheme()?.id ?? null).toBeNull()
+    const input = pickBatchInput(wrapper)
+    Object.defineProperty(input, 'files', {
+      value: [
+        new File([new Uint8Array([1, 2, 3])], '汪汪队1.jpeg', { type: 'image/jpeg' }),
+        new File([new Uint8Array([4, 5, 6])], '奥特曼1.jpeg', { type: 'image/jpeg' }),
+      ],
+      configurable: true,
+    })
+    await wrapper.find('[data-role="batch-input"]').trigger('change')
+    await flushUntil(() => listSchemes().length === 2)
+
+    const all = listSchemes()
+    expect(all).toHaveLength(2)
+    for (const s of all) {
+      expect(s.source.kind).toBe('custom')
+      expect(s.params.rows).toBe(6)
+      expect(s.params.cols).toBe(3)
+    }
+    expect(all.map((s) => s.name).sort()).toEqual(['汪汪队1', '奥特曼1'].sort())
+    expect(wrapper.find('[data-role="batch-feedback"]').text()).toContain('2')
+    wrapper.unmount()
+  })
+
+  it('单张解析失败：跳过不阻断整批，反馈部分成功', async () => {
+    let seq = 0
+    saveImageMock.mockImplementation(async () => ({ id: `asset-${(seq += 1)}` }))
+    loadImageMock.mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }))
+    loadSourceImageMock
+      .mockRejectedValueOnce(new Error('bad image'))
+      .mockResolvedValue({ width: 96, height: 96 })
+    const wrapper = mountWithApp(SchemeManager)
+    const input = pickBatchInput(wrapper)
+    Object.defineProperty(input, 'files', {
+      value: [
+        new File([new Uint8Array([1])], 'a.jpg', { type: 'image/jpeg' }),
+        new File([new Uint8Array([2])], 'b.jpg', { type: 'image/jpeg' }),
+      ],
+      configurable: true,
+    })
+    await wrapper.find('[data-role="batch-input"]').trigger('change')
+    await flushUntil(() => listSchemes().length === 1)
+
     expect(listSchemes()).toHaveLength(1)
-    expect(wrapper.find('[data-role="builtin-track"].is-active').exists()).toBe(true)
+    expect(wrapper.find('[data-role="batch-feedback"]').text()).toContain('失败')
+    wrapper.unmount()
+  })
+
+  it('空选择（取消）：不进入导入态、无反馈', async () => {
+    const wrapper = mountWithApp(SchemeManager)
+    const input = pickBatchInput(wrapper)
+    Object.defineProperty(input, 'files', { value: [], configurable: true })
+    await wrapper.find('[data-role="batch-input"]').trigger('change')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(listSchemes()).toHaveLength(0)
+    expect(wrapper.find('[data-role="batch-feedback"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('SchemeManager 自动最优（验收返工「每图自动选最优切块」人工入口）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    saveImageMock.mockReset()
+    suggestMock.mockReset()
+    loadSourceImageMock.mockReset().mockResolvedValue({ width: 96, height: 96 })
+    downscaleMock.mockReset().mockReturnValue(flatImage(96, 96))
+  })
+
+  it('竖长图：按当前块数档选 rows=2×cols 的最优规格并回填表单', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192))
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    // 表单默认 4×4 = 16 块 → c2 档；96×192 竖图最优 = 6×3（窗口内唯一正方形块候选）
+    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    const val = (sel: string) => (wrapper.find(sel).element as HTMLInputElement).value
+    expect(val('[data-field="rows"]')).toBe('6')
+    expect(val('[data-field="cols"]')).toBe('3')
+    expect(wrapper.find('[data-role="auto-best-feedback"]').text()).toContain('6×3')
+    wrapper.unmount()
+  })
+
+  it('回填后保存：方案按最优规格入档（同图多切片的人工入口）', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192))
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.find('[data-role="save-scheme"]').trigger('click')
+    const scheme = listSchemes()[0]!
+    expect(scheme.params.rows).toBe(6)
+    expect(scheme.params.cols).toBe(3)
+    wrapper.unmount()
+  })
+
+  it('取图失败：提示失败且表单参数保留', async () => {
+    loadSourceImageMock.mockRejectedValue(new Error('boom'))
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wrapper.find('[data-role="auto-best-feedback"]').text()).toContain('无法分析')
+    expect((wrapper.find('[data-field="rows"]').element as HTMLInputElement).value).toBe('4')
+    wrapper.unmount()
+  })
+
+  it('custom 来源未上传：按钮禁用（与 AI 建议同条件）', async () => {
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    const btn = () => wrapper.find('[data-role="auto-best"]').element as HTMLButtonElement
+    expect(btn().disabled).toBe(false)
+    await wrapper.find('[data-role="source-custom"]').trigger('click')
+    expect(btn().disabled).toBe(true)
     wrapper.unmount()
   })
 })
@@ -313,7 +424,9 @@ describe('SchemeManager AI 建议链路（M5.5 / §14.4 非阻断降级）', () 
     // 请求参数：base 来自表单、图 = 内置缩略 data URI、ai 未配置（未开启）
     const call = suggestMock.mock.calls[0] as unknown[]
     expect(call[1]).toMatchObject({ rows: 4, cols: 4 })
-    expect(String(call[3]).startsWith('data:image/png;base64,')).toBe(true)
+    // 内置图库分析缩略为真实开源素材（JPEG/PNG data URI，见 fetch-gallery.mjs）
+    const img = String(call[3])
+    expect(img.startsWith('data:image/jpeg;base64,') || img.startsWith('data:image/png;base64,')).toBe(true)
     expect(call[4]).toBeUndefined()
 
     // 表单回填 + 非阻断提示

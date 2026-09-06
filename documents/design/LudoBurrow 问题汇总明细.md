@@ -12,6 +12,8 @@
 > | V1.2 | 2026-09-06 02:50:00 | 开发累积 | M4 迷宫开发期新增 1 条：P4-02 canvas mock 断言应数「绘制调用」而非「状态设置次数」 | castle |
 > | V1.3 | 2026-09-06 04:10:00 | 开发累积 | M5 AI 增强开发期新增 1 条：P4-03 AI 建议浮点切割线与下游整数像素采样契约冲突（规范化器网格对齐步骤的实证） | castle |
 > | V1.4 | 2026-09-06 05:30:00 | 开发累积 | M6 打磨期新增 2 条（新章「6. 开发环境与工具链」）：P6-01 跨工具 PowerShell 命令引号剥离与一元 -not 优先级陷阱 / P6-02 Read 工具对近期修改文件返回陈旧缓存 | castle |
+> | V1.5 | 2026-09-06 10:05:00 | 开发累积 | v1.0 验收返工期新增 1 条：P4-04 setup.ts 全局 RAF mock 在 happy-dom 下未生效（__flushRaf 空转，用例内局部 stub 规避） | castle |
+> | V1.6 | 2026-09-06 11:15:00 | 开发累积 | v1.0 验收返工期（拼图优选与本地素材实测）新增 5 条：P4-05 happy-dom 大 Blob/IDB 模拟层性能 / P4-06 模块级缓存跨 describe 泄漏 / P6-03 PowerShell 整数除法静默取整 / P6-04 PS5.1 UTF8 写入带 BOM / P6-05 SearchReplace「兑底」伪影 | castle |
 >
 > **适用范围**：LudoBurrow 开发全周期踩坑记录（AI 会话与人工开发通用）
 
@@ -127,6 +129,38 @@
 
 ---
 
+### P4-04 setup.ts 全局 RAF mock 在 happy-dom 下未生效，__flushRaf 空转
+
+**现象**：迷宫 HUD 主题切换用例断言「点击后背景重画为花园色」失败——mock ctx 记录里只有挂载时一次 paint；探针测试实证 `requestAnimationFrame` 入队后 `__flushRaf(0)` 不执行回调（ran=false），且裸调用返回 `[object Object]`（happy-dom 原生 RAF 句柄）而非 mock 的数字 id。
+
+**根因**：setup.ts 的安装条件 `!('requestAnimationFrame' in globalThis) || import.meta.env?.VITEST` 在 vitest 3.2.7 + happy-dom 组合下求值为假——happy-dom 环境自带 RAF（首项取反为假），且 setupFile 的 `import.meta.env.VITEST` 未按预期为真，整个 mock 分支被跳过；裸调用解析到 happy-dom 原生 RAF（内部定时器异步调度），`__flushRaf` flush 的是永远为空的 mock 队列。既有 resize 用例恰不依赖 RAF 回调执行（断言在事件同步路径），长期掩盖此失效。
+
+**解决**：不动全局 setup（jigsaw 动画 tick 依赖原生 RAF 异步性，无脑替换有回归风险）；需驱动重画的用例改用局部同步 stub——`vi.stubGlobal('requestAnimationFrame', 入队函数)` + 手动 flush + `vi.unstubAllGlobals`（flush 后实例 rafId 归零，destroy 无需 cancel）。后续若统一修 setup 安装条件，须先全量回归 jigsaw 动画用例。
+
+**参考**：`tests/unit/maze-instance.spec.ts`（stubSyncRaf）、`tests/setup.ts` L59-82；v1.0 验收返工 fb-maze-theme 实证。
+
+### P4-05 happy-dom 大 Blob/File 与 IndexedDB 模拟层性能不代表浏览器
+
+**现象**：真实版权素材（10 张 200-500KB JPEG）导入链路实测：内存后端全量往返与缺省 IndexedDB 后端均超 vitest 默认 5s 超时；同一 IDB 后端 64KB 小样本正常通过。
+
+**根因**：happy-dom 的 Blob/File/arrayBuffer 与 IndexedDB 均为 JS 模拟实现（非原生结构化克隆），对数百 KB 二进制的拷贝/克隆开销线性放大；生产浏览器 IndexedDB 原生 Blob 存取无此问题。
+
+**解决**：测试口径分层——字节等价全量验证走内存后端（adapter 转发层与 IDB 后端同构，services 层唯一分叉点）；IDB 通道存在性/往返语义用小样本（64KB 切片）验证；需要全量真实字节时给用例显式加 `timeout`（实测 10 张约 5s 出头）。
+
+**参考**：`tests/unit/services.spec.ts`（内存后端先例）、v1.0 验收返工本地素材实测（临时 spec 验后删）。
+
+### P4-06 模块级缓存（Map 状态）跨 describe 泄漏，隔离纪律要覆盖非存档状态
+
+**现象**：jigsaw-schemes.spec 新增「预热联动」describe 后，原有「createTopicLevel 内置关 3×3」用例失败（实际读到 rows=6）——前一 describe 里 `rememberSpec('animals-01', {6,3})` 的残留。
+
+**根因**：optimize.ts 的规格缓存是**模块级 Map**（与 localStorage 同为跨用例共享状态），但文件内既有 beforeEach 只清了 localStorage；vitest 同文件 describe 顺序执行，缓存自然泄漏到后续断言。
+
+**解决**：文件内所有 beforeEach 统一 `localStorage.clear(); resetSpecCache()` 双清（与存档同口径隔离）；模块内导出 resetSpecCache 供测试使用。纪律：新增任何模块级可变状态，必须同步提供 reset 并接入测试隔离。
+
+**参考**：`src/games/jigsaw/optimize.ts`、`tests/unit/jigsaw-schemes.spec.ts`、`tests/unit/jigsaw-optimize.spec.ts`。
+
+---
+
 ## 5. 资产与图片
 
 ### P5-01 离线环境内置图库获取渠道受限，改程序化生成
@@ -162,6 +196,36 @@
 **解决**：对刚修改过的文件先以 PowerShell `Get-Content` 或 node `readFileSync` 交叉验证真实内容与总行数；SearchReplace 的 original_text 一律以 node 系真实输出为依据。
 
 **参考**：M5.5 / M6.3 / M6.5 会话多次实证（m5-wire 接线、M6.3 release.mjs 语法修复、M6.5 文档定稿前定位）。
+
+### P6-03 PowerShell 整数除法静默取整，缩略尺寸算成 1×1
+
+**现象**：像素提取脚本（System.Drawing）输出全部 `2000x2576 -> 1x1`；`$scale = [Math]::Min(1, 192 / $maxEdge)` 中 192/2576 得 0 而非 0.0745。
+
+**根因**：PowerShell `/` 对两个整数操作数做整数除法（截断取整），不像 JS 一样自动浮点；`[int]` 上下文无告警静默出错。
+
+**解决**：除数或被除数显式带小数点（`192.0 / $maxEdge`）；涉及除法的脚本对结果做范围断言（本例 $w/$h ≥ 2 即可拦截）。
+
+**参考**：`scripts/extract-local-pixels.ps1`（v1.0 验收返工本地素材提取）。
+
+### P6-04 PS 5.1 `-Encoding UTF8` 写入实际带 BOM，下游 JSON.parse 报错
+
+**现象**：Node 侧读 PS 产出的 meta.json 后 `JSON.parse` 报 `Unexpected token '﻿'`（锘 = BOM 字节 EF BB BF 被解码）。
+
+**根因**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 恒写 UTF-8 BOM（PowerShell 7 的 utf8 才无 BOM），与直觉相反。
+
+**解决**：消费方读入后剥离 `replace(/^\uFEFF/, '')`（已在脚本注释中标注）；或产出方改用 `[System.IO.File]::WriteAllText($path, $json)`（默认无 BOM）。
+
+**参考**：`scripts/extract-local-pixels.ps1` 尾部注释。
+
+### P6-05 SearchReplace 输出「兑底」伪影：替换含「兜底」文本后需 grep 验证
+
+**现象**：多次对含「兜底」的原文执行 SearchReplace 后，new_text 中「兜底」偶发变成「兑底」（如 gen-maze-assets.mjs 注释、SchemeManager onAutoBest 注释）；本会话修错时 new_text 又连带写错一次（「兑底。→ 兜底」补箭头未换字）。
+
+**根因**：工具链编辑含高频术语的长文本时的偶发字符替换伪影，无规律可预测；人肉复查 new_text 也难一眼识别。
+
+**解决**：纪律——任何替换后若文本含「兜底/退路/回落」类术语，立即 `grep_code '兑底'` 全仓验证（本会话已两次拦截）；提交前全仓扫描一次作为门禁步骤。
+
+**参考**：v1.0 验收返工多次实证（fb-jig-scheme / fb-maze-assets / gen-maze-assets 修复）。
 
 ---
 

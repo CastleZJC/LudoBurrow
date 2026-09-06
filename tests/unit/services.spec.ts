@@ -57,6 +57,39 @@ describe('LocalAdapter', () => {
   })
 })
 
+describe('LocalAdapter wordbankRepo（词表配置分叉点：本地单一配置无权限分割）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    resetEnvAdapter()
+  })
+
+  it('无自定义时 getConfig 返回空配置（= 引擎默认词表）', () => {
+    const adapter = createLocalAdapter({ store: createMemoryAssetStore() })
+    expect(adapter.wordbankRepo.getConfig()).toEqual({})
+  })
+
+  it('saveConfig → getConfig 往返，写入存档 wordbank 段', () => {
+    const adapter = createLocalAdapter({ store: createMemoryAssetStore() })
+    const config = {
+      english: { '3': ['cat', 'dog'] },
+      pinyin: { '1': [{ word: '山', pinyin: 'shan' }] },
+    }
+    adapter.wordbankRepo.saveConfig(config)
+    expect(adapter.wordbankRepo.getConfig()).toEqual(config)
+    const saved = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved.wordbank).toEqual(config)
+  })
+
+  it('空配置归一：saveConfig({}) 移除自定义段（存档不再含 wordbank）', () => {
+    const adapter = createLocalAdapter({ store: createMemoryAssetStore() })
+    adapter.wordbankRepo.saveConfig({ english: { '3': ['cat'] } })
+    adapter.wordbankRepo.saveConfig({})
+    expect(adapter.wordbankRepo.getConfig()).toEqual({})
+    const saved = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved.wordbank).toBeUndefined()
+  })
+})
+
 describe('WebAdapter 占位护栏', () => {
   it('构造即报二期能力（防止误装配）', () => {
     expect(() => createWebAdapter()).toThrow(/二期/)

@@ -3,12 +3,11 @@
 // 图片走 deps 注入（合成纯色图 → 切割线像素等分可预测，槽位坐标与实现同源重建）。
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
-import { levelSeed } from '@/engines/rng'
 import { createCutPlan } from '@/engines/jigsaw-cutter'
 import type { ImageDataLike } from '@/engines/jigsaw-cutter'
 import type { GameHooks, LevelProgress, LevelResult } from '@/core/types'
 import { mountJigsaw } from '@/games/jigsaw/instance'
-import { createJigsawLevel } from '@/games/jigsaw/level'
+import { createTopicLevel } from '@/games/jigsaw/schemes'
 import { boardContentRect, computeLayout, slotRect } from '@/games/jigsaw/layout'
 
 // services 素材仓库 mock：仅 assetId 分支消费（内置/deps 注入路径不触碰）
@@ -89,7 +88,7 @@ interface Harness {
   stagingCenter(): { x: number; y: number }
 }
 
-const LEVEL = createJigsawLevel(1) // 3×3
+const LEVEL = createTopicLevel(1, 'animals') // 内置首关 3×3
 
 async function mountReady(): Promise<{ inst: ReturnType<typeof mountJigsaw>; h: Harness }> {
   const container = document.createElement('div')
@@ -107,7 +106,7 @@ async function mountReady(): Promise<{ inst: ReturnType<typeof mountJigsaw>; h: 
   await Promise.resolve() // async init 微任务冲刷（deps 注入路径无真 await）
   const canvas = container.querySelector('canvas.jg-canvas') as HTMLCanvasElement
   // 与实现同源重建方案（确定性：同图同参同种子）+ 同源布局，推算槽位屏幕坐标
-  const plan = createCutPlan(flatImage(), { rows: LEVEL.gridSize, cols: LEVEL.gridSize }, levelSeed('jigsaw', 1))
+  const plan = createCutPlan(flatImage(), { rows: LEVEL.gridSize, cols: LEVEL.gridSize }, LEVEL.seed)
   const rects = computeLayout(960, 600)
   const content = boardContentRect(rects.board, plan)
   const h: Harness = {
@@ -178,7 +177,7 @@ describe('方案模式分支（§11.8 / M3.11）', () => {
   afterEach(() => vi.useRealTimers())
 
   it('rows≠cols 方案网格 → HUD 显示 4×6（语言无关直拼）', async () => {
-    const config = { ...createJigsawLevel(6), rows: 4, cols: 6 }
+    const config = { ...createTopicLevel(1, 'animals'), rows: 4, cols: 6 }
     const container = document.createElement('div')
     document.body.appendChild(container)
     const inst = mountJigsaw(container, config, { onProgress() {}, onComplete() {}, onAbandon() {} }, makeDeps())
@@ -192,7 +191,7 @@ describe('方案模式分支（§11.8 / M3.11）', () => {
 
   it('assetId 自定义素材：分支真实进入素材仓库，加载失败 → 错误条承接', async () => {
     loadImageMock.mockRejectedValue(new Error('asset missing'))
-    const config = { ...createJigsawLevel(1), imageId: '', schemeId: 'js-x', assetId: 'asset-x' }
+    const config = { ...createTopicLevel(1, 'animals'), imageId: '', schemeId: 'js-x', assetId: 'asset-x' }
     const container = document.createElement('div')
     document.body.appendChild(container)
     const inst = mountJigsaw(container, config, { onProgress() {}, onComplete() {}, onAbandon() {} })
@@ -355,8 +354,8 @@ describe('放弃按钮（§11.3 四阶段演示）', () => {
     const helpBtn = h.container.querySelector('[data-jg="help"]') as HTMLButtonElement
     const abandonBtn = h.container.querySelector('[data-jg="abandon"]') as HTMLButtonElement
     expect(helpBtn.disabled).toBe(true)
-    // 9 步演示：每步 DEMO_STEP_MS+40 = 280ms
-    vi.advanceTimersByTime(280 * 9 + 100)
+    // 9 步演示：每步 DEMO_STEP_MS+40 = 1040ms（v1.0 验收返工 240→1000）
+    vi.advanceTimersByTime(1040 * 9 + 100)
     expect(h.abandoned).toHaveLength(1)
     expect(abandonBtn.disabled).toBe(true)
     // 放弃后交互锁定：指针事件无效

@@ -4,14 +4,7 @@
 import type { BaseLevelConfig, GameHooks, GameInstance } from '@/core/types'
 import { i18n } from '@/i18n'
 import { COMPACT_LAYOUT, FULL_LAYOUT, normalizeKeyEvent, type KeyDef } from './layout'
-import { calcKeygameStars, type KeygameLevelConfig, type KeygameMode } from './level'
-
-const MODE_LABEL_KEY: Record<KeygameMode, string> = {
-  'full-random': 'keygame.modeFull',
-  'compact-random': 'keygame.modeCompact',
-  english: 'keygame.modeEnglish',
-  pinyin: 'keygame.modePinyin',
-}
+import { calcKeygameStars, KEYGAME_MODE_LABEL_KEY, type KeygameLevelConfig } from './level'
 
 function el(tag: string, cls?: string): HTMLElement {
   const node = document.createElement(tag)
@@ -40,7 +33,7 @@ export function mountKeygame(
   const hud = el('div', 'kg-hud')
   const modeEl = el('span', 'kg-mode')
   modeEl.dataset.kg = 'mode'
-  modeEl.textContent = i18n.global.t(MODE_LABEL_KEY[cfg.mode])
+  modeEl.textContent = i18n.global.t(KEYGAME_MODE_LABEL_KEY[cfg.mode])
   const mistakesEl = el('span', 'kg-mistakes')
   mistakesEl.dataset.kg = 'mistakes'
   const progressEl = el('span', 'kg-progress')

@@ -214,24 +214,27 @@ describe('生命周期', () => {
   })
 })
 
-describe('真实关卡集成（难度曲线产物可直接游玩）', () => {
-  it.each([1, 14, 26, 39])('第 %i 关：全序列输入完成，0 失误 3 星', (n) => {
-    const level = createKeygameLevel(n)
-    const hooks = makeHooks()
-    const inst = mountKeygame(container, level, hooks)
-    inst.start()
-    for (const ch of level.sequence) {
-      pressKey(ch.toLowerCase())
+describe('真实关卡集成（四模式难度曲线产物可直接游玩）', () => {
+  const MODES = ['full-random', 'compact-random', 'english', 'pinyin'] as const
+  it.each([...MODES])('%s 模式第 1/25/50 关：全序列输入完成，0 失误 3 星', (mode) => {
+    for (const n of [1, 25, 50]) {
+      const level = createKeygameLevel(n, mode)
+      const hooks = makeHooks()
+      const inst = mountKeygame(container, level, hooks)
+      inst.start()
+      for (const ch of level.sequence) {
+        pressKey(ch.toLowerCase())
+      }
+      const total = level.sequence.length
+      expect(hooks.onProgress).toHaveBeenCalledTimes(total)
+      expect(hooks.onComplete).toHaveBeenCalledWith({
+        gameId: 'keygame',
+        n,
+        elapsedMs: 0,
+        mistakes: 0,
+        stars: 3,
+      })
+      inst.destroy()
     }
-    const total = level.sequence.length
-    expect(hooks.onProgress).toHaveBeenCalledTimes(total)
-    expect(hooks.onComplete).toHaveBeenCalledWith({
-      gameId: 'keygame',
-      n,
-      elapsedMs: 0,
-      mistakes: 0,
-      stars: 3,
-    })
-    inst.destroy()
   })
 })

@@ -26,7 +26,7 @@ function makePlan(w: number, h: number, rowLines: number[], colLines: number[]):
 }
 
 describe('computeLayout（五区）', () => {
-  it('960×600：五区互不重叠且都在容器内', () => {
+  it('960×600：五区互不重叠且都在容器内（三列式）', () => {
     const rects = computeLayout(960, 600)
     const all = [rects.preview, rects.board, rects.staging, rects.current, rects.remaining]
     for (const r of all) {
@@ -35,11 +35,14 @@ describe('computeLayout（五区）', () => {
       expect(r.x + r.w).toBeLessThanOrEqual(960)
       expect(r.y + r.h).toBeLessThanOrEqual(600)
     }
-    // 左列（preview/staging）在 board 左侧；底条（current/remaining）在 board 下方
+    // 左列（preview/staging）在 board 左侧；右列（current/remaining）在 board 右侧（三列式，v1.0 验收返工）
     expect(rects.preview.x + rects.preview.w).toBeLessThanOrEqual(rects.board.x)
     expect(rects.staging.x + rects.staging.w).toBeLessThanOrEqual(rects.board.x)
-    expect(rects.current.y).toBeGreaterThanOrEqual(rects.board.y + rects.board.h)
-    expect(rects.remaining.y).toBeGreaterThanOrEqual(rects.board.y + rects.board.h)
+    expect(rects.current.x).toBeGreaterThanOrEqual(rects.board.x + rects.board.w)
+    expect(rects.remaining.x).toBeGreaterThanOrEqual(rects.board.x + rects.board.w)
+    // 中列拼图区全高（与左右列同顶同底）
+    expect(rects.board.y).toBe(rects.preview.y)
+    expect(rects.board.y + rects.board.h).toBe(rects.staging.y + rects.staging.h)
   })
 
   it('容器过小抛 RangeError', () => {

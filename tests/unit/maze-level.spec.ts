@@ -1,10 +1,11 @@
 // 迷宫关卡曲线单测（开发计划 4.5 / 技术架构 §12.2）
-// 覆盖：尺寸阶梯（5×5 → 21×21）/ 分支度递增 / 主题段轮换（城堡/花园）/
-//       确定性（seed 派生）/ 参数与生成器联动（可解性落地）。
-import { describe, it, expect } from 'vitest'
+// 覆盖：尺寸阶梯（5×5 → 21×21）/ 分支度递增 / 主题跟随设置（验收返工 F-20，旧轮换退役）/
+//       确定性（基准 seed 派生，实例每局扰动在 instance 层）/ 参数与生成器联动（可解性落地）。
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { levelSeed } from '@/engines/rng'
 import { generateMaze } from '@/engines/maze-generator'
-import { createMazeLevel, sizeForLevel, branchingForLevel, themeForLevel, TOTAL_MAZE_LEVELS } from '@/games/maze/level'
+import { updateSettings } from '@/core/settings'
+import { createMazeLevel, sizeForLevel, branchingForLevel, TOTAL_MAZE_LEVELS } from '@/games/maze/level'
 
 describe('sizeForLevel 尺寸阶梯（每 3 关进阶：5 → 21）', () => {
   it.each([
@@ -24,17 +25,22 @@ describe('branchingForLevel 分支度递增（死胡同渐多）', () => {
   })
 })
 
-describe('themeForLevel 主题段轮换（每 10 关切换城堡/花园，F-20）', () => {
-  it.each([
-    [1, 'castle'], [10, 'castle'], [11, 'garden'], [20, 'garden'],
-    [21, 'castle'], [31, 'garden'], [41, 'castle'], [50, 'castle'],
-  ])('第 %i 关 → %s', (n, expected) => {
-    expect(themeForLevel(n)).toBe(expected)
+describe('createMazeLevel 主题（跟随设置，验收返工 F-20）', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  it('缺省 = 城堡；updateSettings 后新关卡沿用上次主题（记住上次，与关卡号无关）', () => {
+    expect(createMazeLevel(7).theme).toBe('castle')
+    updateSettings({ mazeTheme: 'garden' })
+    expect(createMazeLevel(7).theme).toBe('garden')
+    expect(createMazeLevel(41).theme).toBe('garden') // 旧「每 10 关轮换」退役：任意关同主题
   })
 })
 
 describe('createMazeLevel', () => {
-  it('结构完整且确定性（同关卡两次生成全等）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('结构完整且确定性（同关卡两次生成全等；seed 为基准种子，可复现性见 §12.1）', () => {
     const a = createMazeLevel(7)
     const b = createMazeLevel(7)
     expect(a).toEqual(b)
@@ -43,7 +49,7 @@ describe('createMazeLevel', () => {
     expect(a.seed).toBe(levelSeed('maze', 7))
     expect(a.size).toBe(sizeForLevel(7))
     expect(a.branching).toBe(branchingForLevel(7))
-    expect(a.theme).toBe(themeForLevel(7))
+    expect(a.theme).toBe('castle') // 缺省主题（localStorage 已清）
   })
 
   it('非法关卡号抛 RangeError', () => {

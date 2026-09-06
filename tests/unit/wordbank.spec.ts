@@ -63,6 +63,24 @@ describe('getWordsByLength', () => {
   })
 })
 
+describe('词表覆盖（设置页自定义词表，空/缺省回退默认）', () => {
+  it.each([3, 5, 8, 12])('getWordsByLength：override 非空优先返回（词长 %i 不再查默认表）', (len) => {
+    const override = ['xx', 'yy', 'zz']
+    expect(getWordsByLength(len, override)).toBe(override)
+  })
+
+  it('getWordsByLength：override 空数组回退默认表', () => {
+    expect(getWordsByLength(3, [])).toBe(WORDS_L3)
+  })
+
+  it('getPinyinByGrade：override 非空优先返回；空/缺省回退默认表', () => {
+    const override = [{ word: '雪', pinyin: 'xue' }]
+    expect(getPinyinByGrade(1, override)).toBe(override)
+    expect(getPinyinByGrade(2, [])).toBe(PINYIN_COMMON)
+    expect(getPinyinByGrade(3)).toBe(PINYIN_EXT)
+  })
+})
+
 describe('拼音词表', () => {
   it('三级词表规模：24 / 24 / 20', () => {
     expect(PINYIN_BASIC).toHaveLength(24)

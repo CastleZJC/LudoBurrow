@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { usePlatformStore } from '@/stores/platform'
 import { recordResult } from '@/core/level-manager'
 import { exportJson } from '@/core/save'
+import { resetEnvAdapter } from '@/services'
 import LevelSelect from '@/components/LevelSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import { mountWithApp } from './helpers'
@@ -133,6 +134,87 @@ describe('SettingsPanel', () => {
     const text = exportJson()
     expect(text).not.toContain('sk-secret')
     expect(text).toContain('"apiKey": ""')
+    wrapper.unmount()
+  })
+})
+
+describe('SettingsPanel 词汇表配置', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    resetEnvAdapter()
+  })
+  afterEach(() => applyLocale('zh-CN'))
+
+  it('默认显示引擎默认词表（英文桶 3 含 cat）；切类别显示对应默认（拼音一级含 大|da）', async () => {
+    const wrapper = mountWithApp(SettingsPanel)
+
+    const text = wrapper.find('[data-role="wb-text"]')
+    expect((text.element as HTMLTextAreaElement).value).toContain('cat')
+
+    await wrapper.find('[data-role="wb-category"]').setValue('py-1')
+    expect((wrapper.find('[data-role="wb-text"]').element as HTMLTextAreaElement).value).toContain('大|da')
+
+    wrapper.unmount()
+  })
+
+  it('编辑英文词表入档：wordbank.english 桶 3 写入存档；切类别再切回显示覆盖', async () => {
+    const wrapper = mountWithApp(SettingsPanel)
+
+    await wrapper.find('[data-role="wb-text"]').setValue('dog, fox, owl, bee, ant, hen, yak, elk, ibis, emu')
+    const saved = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved.wordbank).toEqual({
+      english: { '3': ['dog', 'fox', 'owl', 'bee', 'ant', 'hen', 'yak', 'elk', 'ibis', 'emu'] },
+    })
+
+    // 切走再切回：文本 = 覆盖词表（规范化后逗号分隔）
+    await wrapper.find('[data-role="wb-category"]').setValue('en-4')
+    await wrapper.find('[data-role="wb-category"]').setValue('en-3')
+    expect((wrapper.find('[data-role="wb-text"]').element as HTMLTextAreaElement).value).toBe(
+      'dog, fox, owl, bee, ant, hen, yak, elk, ibis, emu',
+    )
+
+    wrapper.unmount()
+  })
+
+  it('拼音「汉字|拼音」行解析入档：非法行丢弃；恢复本类默认移除覆盖（空配置归一后段整体移除）', async () => {
+    const wrapper = mountWithApp(SettingsPanel)
+
+    await wrapper.find('[data-role="wb-category"]').setValue('py-2')
+    await wrapper.find('[data-role="wb-text"]').setValue('星星|xing xing\n月亮|YUE Liang\n坏行没有分隔符')
+    const saved = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved.wordbank.pinyin).toEqual({
+      '2': [
+        { word: '星星', pinyin: 'xing xing' },
+        { word: '月亮', pinyin: 'yue liang' }, // 小写归一
+      ],
+    })
+
+    // 恢复本类默认 → 覆盖移除；仅此一类覆盖时 wordbank 段整体移除，文本回默认
+    await wrapper.find('[data-role="wb-reset-category"]').trigger('click')
+    const saved2 = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved2.wordbank).toBeUndefined()
+    expect((wrapper.find('[data-role="wb-text"]').element as HTMLTextAreaElement).value).toContain('学校|xue xiao')
+
+    wrapper.unmount()
+  })
+
+  it('全部恢复默认：多类别覆盖一次性清空', async () => {
+    const wrapper = mountWithApp(SettingsPanel)
+
+    await wrapper.find('[data-role="wb-text"]').setValue('dog, fox')
+    await wrapper.find('[data-role="wb-category"]').setValue('py-1')
+    await wrapper.find('[data-role="wb-text"]').setValue('雪|xue')
+    const saved = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved.wordbank.english).toBeDefined()
+    expect(saved.wordbank.pinyin).toBeDefined()
+
+    await wrapper.find('[data-role="wb-reset-all"]').trigger('click')
+    const saved2 = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
+    expect(saved2.wordbank).toBeUndefined()
+    // 当前类别（py-1）文本回默认
+    expect((wrapper.find('[data-role="wb-text"]').element as HTMLTextAreaElement).value).toContain('大|da')
+
     wrapper.unmount()
   })
 })

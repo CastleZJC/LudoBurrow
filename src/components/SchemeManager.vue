@@ -1,26 +1,26 @@
 <script setup lang="ts">
-// 拼图方案管理页（开发计划 3.6 预切块工作流 / 3.7 版本与进度隔离 / 3.11 素材上传闭环）
-// 方案 = 一套切块规格 + 独立存档槽：新建即隔离、删除互不影响、切换即回滚续玩（F-17）。
-// 重新切块确认（F-18）：同图已有方案在玩时保存需二次确认（新建平行方案，历史进度保留）。
+// 拼图方案管理页（验收返工「方案 = 关卡」模型）
+// 方案 = 专题轨内一个关卡：新建即在该专题末尾追加关卡（无需激活）；删除即收敛关卡数。
+// 重新切块确认（F-18）：同图已有方案在玩时保存需二次确认（新建平行关卡，历史成绩保留）。
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnvAdapter } from '@/services'
 import type { JigsawSchemeData, JigsawSchemeSource } from '@/core/save'
 import { getSettings } from '@/core/settings'
+import { getLevelRecord, progressSlotKey } from '@/core/level-manager'
 import { usePlatformStore } from '@/stores/platform'
 import { suggestCutPlan } from '@/ai/suggest'
+import type { ImageDataLike } from '@/engines/jigsaw-cutter'
 import { weightsToLines, type NormalizedSuggestion } from '@/engines/jigsaw-cutter/suggest'
 import {
-  activateScheme,
-  activeScheme,
   createScheme,
-  deactivateSchemes,
   deleteScheme,
-  getSchemeUnlockedCount,
   listSchemes,
-  SCHEME_TOTAL_LEVELS,
+  topicOfSource,
 } from '@/games/jigsaw/schemes'
+import { complexityForPieces, pickBestSpec } from '@/games/jigsaw/optimize'
+import { levelSeed } from '@/engines/rng'
 import { GALLERY, GALLERY_TOPICS, downscaleToAnalysis, loadSourceImage } from '@/games/jigsaw/gallery'
 import { THUMBS } from '@/games/jigsaw/thumbs'
 
@@ -29,11 +29,9 @@ const platform = usePlatformStore()
 
 // ---- 方案列表（操作后刷新的响应式镜像） ----
 const schemes = ref<JigsawSchemeData[]>([])
-const activeId = ref<string | null>(null)
 
 function refresh(): void {
   schemes.value = listSchemes()
-  activeId.value = activeScheme()?.id ?? null
 }
 
 refresh()
@@ -61,6 +59,9 @@ let saveConfirmTimer: ReturnType<typeof setTimeout> | null = null
 const suggesting = ref(false)
 const aiFeedback = ref('')
 const appliedSuggestion = ref<NormalizedSuggestion | null>(null)
+// ---- 自动最优状态（验收返工「同图多切片」增强：按图内容选规格，仅回填表单不直接建方案）----
+const autoBesting = ref(false)
+const autoBestFeedback = ref('')
 
 const PREVIEW_SIZE = 240
 
@@ -78,6 +79,7 @@ function openPanel(): void {
   formError.value = ''
   saveConfirm.value = false
   aiFeedback.value = ''
+  autoBestFeedback.value = ''
   appliedSuggestion.value = null
 }
 
@@ -86,6 +88,7 @@ function closePanel(): void {
   formError.value = ''
   saveConfirm.value = false
   aiFeedback.value = ''
+  autoBestFeedback.value = ''
   appliedSuggestion.value = null
   if (saveConfirmTimer) {
     clearTimeout(saveConfirmTimer)
@@ -252,22 +255,12 @@ function sourceLabel(scheme: JigsawSchemeData): string {
   return scheme.source.kind === 'builtin' ? scheme.source.imageId : t('schemes.customImage')
 }
 
-function unlockedOf(scheme: JigsawSchemeData): number {
-  return getSchemeUnlockedCount(scheme.id)
+/** 种子短标识（36 进制末 4 位）：同图多方案（同规格不同切法）在列表里可区分 */
+function seedTag(seed: number): string {
+  return seed.toString(36).slice(-4)
 }
 
-function playScheme(scheme: JigsawSchemeData): void {
-  activateScheme(scheme.id)
-  refresh()
-  platform.openGameSelect('jigsaw')
-}
-
-function backToBuiltin(): void {
-  deactivateSchemes()
-  refresh()
-}
-
-// 删除二次确认（首次点按弹确认态，3 秒未确认自动复原；有进度的方案同样保留该确认门槛）
+// 删除二次确认（首次点按弹确认态，3 秒未确认自动复原；有成绩的方案同样保留该确认门槛）
 const confirmDeleteId = ref<string | null>(null)
 let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -307,9 +300,12 @@ function saveScheme(): void {
     return
   }
   formError.value = ''
-  // F-18：同图已有方案在玩 → 二次确认后才新建（历史方案与进度不受影响）
+  // F-18：同图已有方案在玩（专题轨有该方案成绩）→ 二次确认后才新建（历史方案与成绩不受影响）
   const existing = sameSourceScheme()
-  if (existing && existing.progress.unlockedCount > 1 && !saveConfirm.value) {
+  const inPlay =
+    existing !== undefined &&
+    getLevelRecord(progressSlotKey('jigsaw', topicOfSource(existing.source)), existing.id) !== undefined
+  if (inPlay && !saveConfirm.value) {
     saveConfirm.value = true
     if (saveConfirmTimer) clearTimeout(saveConfirmTimer)
     saveConfirmTimer = setTimeout(() => (saveConfirm.value = false), 3000)
@@ -344,7 +340,7 @@ function saveScheme(): void {
   refresh()
 }
 
-// ---- AI 切块建议（M5.5 / §14：降级链非阻断，表单参数不受损）----
+// ---- 图源取图（AI 建议与自动最优共用同一口径：内置缩略 data URI 直用；自定义素材经仓库取 blob 转 dataUrl） ----
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -354,22 +350,30 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
+async function currentDataUrl(): Promise<string> {
+  if (sourceKind.value === 'builtin') {
+    const dataUrl = THUMBS[imageId.value] ?? ''
+    if (!dataUrl) throw new Error('jigsaw: 无可用图源')
+    return dataUrl
+  }
+  const blob = await getEnvAdapter().assetRepo.loadImage({ id: customAssetId.value })
+  const dataUrl = await blobToDataUrl(blob)
+  if (!dataUrl) throw new Error('jigsaw: 无可用图源')
+  return dataUrl
+}
+
+async function currentAnalysis(): Promise<{ dataUrl: string; image: ImageDataLike }> {
+  const dataUrl = await currentDataUrl()
+  const img = await loadSourceImage(dataUrl)
+  return { dataUrl, image: downscaleToAnalysis(img) }
+}
+
 async function onAiSuggest(): Promise<void> {
   if (suggesting.value) return
   suggesting.value = true
   aiFeedback.value = ''
   try {
-    // 图源：内置缩略 data URI 直用；自定义素材经仓库取 blob 转 dataUrl
-    let dataUrl: string
-    if (sourceKind.value === 'builtin') {
-      dataUrl = THUMBS[imageId.value] ?? ''
-    } else {
-      const blob = await getEnvAdapter().assetRepo.loadImage({ id: customAssetId.value })
-      dataUrl = await blobToDataUrl(blob)
-    }
-    if (!dataUrl) throw new Error('AI 建议：无可用图源')
-    const img = await loadSourceImage(dataUrl)
-    const analysis = downscaleToAnalysis(img)
+    const { dataUrl, image: analysis } = await currentAnalysis()
     const outcome = await suggestCutPlan(
       analysis,
       { rows: rows.value, cols: cols.value, tabDepth: tabDepth.value, uniquenessThreshold: threshold.value },
@@ -397,11 +401,84 @@ async function onAiSuggest(): Promise<void> {
   }
 }
 
+// ---- 自动最优（验收返工「每图自动选最优切块」的人工入口）----
+// 保持当前块数档位（难度不变），按图内容选最优行列分配；仅回填表单，用户仍可继续手调/保存。
+async function onAutoBest(): Promise<void> {
+  if (autoBesting.value) return
+  autoBesting.value = true
+  autoBestFeedback.value = ''
+  try {
+    const { image } = await currentAnalysis()
+    const best = pickBestSpec(image, complexityForPieces(rows.value * cols.value))
+    rows.value = best.spec.rows
+    cols.value = best.spec.cols
+    // 规格变了：AI 建议权重长度不再匹配，显式失效（watch 亦会兜底）
+    appliedSuggestion.value = null
+    saveConfirm.value = false
+    autoBestFeedback.value = t('schemes.autoBestDone', { rows: best.spec.rows, cols: best.spec.cols })
+  } catch {
+    autoBestFeedback.value = t('schemes.autoBestFail')
+  } finally {
+    autoBesting.value = false
+  }
+}
+
 onBeforeUnmount(() => {
   if (customPreviewUrl.value) URL.revokeObjectURL(customPreviewUrl.value)
   if (saveConfirmTimer) clearTimeout(saveConfirmTimer)
   if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer)
 })
+
+// ---- 批量导入（本地图片 → 解析像素 → 按最优切块直接建档为可玩方案）----
+// 每张：入素材仓库 → 真实像素分析 → pickBestSpec（c2 档 12-20 块）→ 建方案（确定性 seed）；
+// 单张失败跳过不阻断整批；建完即出现在 custom 专题可开玩。
+const batchImporting = ref(false)
+const batchFeedback = ref('')
+const batchInput = ref<HTMLInputElement | null>(null)
+
+function triggerBatchImport(): void {
+  if (batchImporting.value) return
+  batchInput.value?.click()
+}
+
+async function onBatchImport(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // 清空选择，允许重复导入同一批文件
+  if (files.length === 0) return
+  batchImporting.value = true
+  batchFeedback.value = t('schemes.batchBusy')
+  const adapter = getEnvAdapter()
+  let ok = 0
+  let failed = 0
+  for (const file of files) {
+    try {
+      const ref = await adapter.assetRepo.saveImage(file, {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        addedAt: Date.now(),
+      })
+      const blob = await adapter.assetRepo.loadImage({ id: ref.id })
+      const img = await loadSourceImage(await blobToDataUrl(blob))
+      const best = pickBestSpec(downscaleToAnalysis(img), 2)
+      createScheme(file.name.replace(/\.[^.]+$/, '') || file.name, { kind: 'custom', assetId: ref.id }, {
+        rows: best.spec.rows,
+        cols: best.spec.cols,
+        tabDepth: 0.16,
+        uniquenessThreshold: 18,
+        seed: levelSeed(`auto:${ref.id}`, 1),
+      })
+      ok += 1
+    } catch {
+      failed += 1
+    }
+  }
+  batchImporting.value = false
+  batchFeedback.value =
+    failed === 0 ? t('schemes.batchDone', { n: ok }) : t('schemes.batchPartial', { ok, failed })
+  refresh()
+}
 </script>
 
 <template>
@@ -411,41 +488,43 @@ onBeforeUnmount(() => {
         {{ t('common.back') }}
       </button>
       <h2 class="sm-title">{{ t('schemes.title') }}</h2>
-      <button v-if="!panelOpen" class="primary-btn" data-role="new-scheme" @click="openPanel">
-        {{ t('schemes.newScheme') }}
-      </button>
+      <div v-if="!panelOpen" class="sm-header-actions">
+        <button class="primary-btn" data-role="batch-import" :disabled="batchImporting" @click="triggerBatchImport">
+          {{ batchImporting ? t('schemes.batchBusy') : t('schemes.batchImport') }}
+        </button>
+        <button class="primary-btn" data-role="new-scheme" @click="openPanel">
+          {{ t('schemes.newScheme') }}
+        </button>
+        <input
+          ref="batchInput"
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          data-role="batch-input"
+          @change="onBatchImport"
+        />
+      </div>
     </header>
 
-    <section class="sm-list">
-      <div class="builtin-row" :class="{ 'is-active': activeId === null }" data-role="builtin-track">
-        <span class="builtin-name">{{ t('schemes.builtinTrack') }}</span>
-        <span v-if="activeId === null" class="sm-badge">{{ t('schemes.activeBadge') }}</span>
-        <button v-else class="secondary-btn" data-role="use-builtin" @click="backToBuiltin">
-          {{ t('schemes.useBuiltin') }}
-        </button>
-      </div>
+    <p v-if="batchFeedback" class="sm-batch-feedback" data-role="batch-feedback">{{ batchFeedback }}</p>
 
+    <section class="sm-list">
       <p v-if="schemes.length === 0" class="sm-empty">{{ t('schemes.empty') }}</p>
 
       <div
         v-for="s in schemes"
         :key="s.id"
         class="sm-card"
-        :class="{ 'is-active': activeId === s.id }"
         :data-scheme="s.id"
       >
         <div class="sm-card-main">
           <span class="sm-name">{{ s.name }}</span>
-          <span v-if="activeId === s.id" class="sm-badge">{{ t('schemes.activeBadge') }}</span>
         </div>
         <p class="sm-meta">
-          {{ sourceLabel(s) }} · {{ s.params.rows }}×{{ s.params.cols }} ·
-          {{ t('schemes.progress', { done: unlockedOf(s), total: SCHEME_TOTAL_LEVELS }) }}
+          {{ sourceLabel(s) }} · {{ s.params.rows }}×{{ s.params.cols }} · #{{ seedTag(s.params.seed) }}
         </p>
         <div class="sm-actions">
-          <button class="secondary-btn" data-role="play-scheme" @click="playScheme(s)">
-            {{ t('schemes.play') }}
-          </button>
           <button
             class="secondary-btn sm-danger"
             :data-role="confirmDeleteId === s.id ? 'delete-confirm' : 'delete-scheme'"
@@ -536,7 +615,17 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="sm-ai-row">
+      <div class="sm-suggest-row">
+        <button
+          type="button"
+          class="secondary-btn"
+          :disabled="autoBesting || (sourceKind === 'custom' && !customAssetId)"
+          data-role="auto-best"
+          @click="onAutoBest"
+        >
+          {{ autoBesting ? t('schemes.autoBestBusy') : t('schemes.autoBest') }}
+        </button>
+        <span v-if="autoBestFeedback" class="sm-ai-feedback" data-role="auto-best-feedback">{{ autoBestFeedback }}</span>
         <button
           type="button"
           class="secondary-btn"
@@ -591,6 +680,15 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
 }
+.sm-header-actions {
+  display: flex;
+  gap: 10px;
+}
+.sm-batch-feedback {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
 .sm-title {
   margin: 0;
   font-size: 24px;
@@ -602,21 +700,6 @@ onBeforeUnmount(() => {
   gap: 10px;
   max-width: 720px;
 }
-.builtin-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-.builtin-row.is-active {
-  border-color: var(--color-primary);
-}
-.builtin-name {
-  font-weight: 600;
-}
 .sm-card {
   padding: 12px 16px;
   border: 2px solid var(--color-border);
@@ -626,9 +709,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
 }
-.sm-card.is-active {
-  border-color: var(--color-primary);
-}
 .sm-card-main {
   display: flex;
   align-items: center;
@@ -636,13 +716,6 @@ onBeforeUnmount(() => {
 }
 .sm-name {
   font-weight: 600;
-}
-.sm-badge {
-  font-size: 12px;
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm, 4px);
-  padding: 1px 8px;
 }
 .sm-meta {
   margin: 0;
@@ -760,9 +833,10 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: var(--color-text-secondary);
 }
-.sm-ai-row {
+.sm-suggest-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 .sm-ai-feedback {

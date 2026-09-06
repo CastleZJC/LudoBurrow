@@ -12,7 +12,6 @@ function sampleScheme(id = 'js-test-1'): JigsawSchemeData {
     name: '测试方案',
     source: { kind: 'builtin', imageId: 'animals-01' },
     params: { rows: 4, cols: 5, tabDepth: 0.16, uniquenessThreshold: 18, seed: 12345 },
-    progress: { unlockedCount: 2, levels: { '1': { stars: 3, bestMs: 90_000, bestMistakes: 0 } } },
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
   }
@@ -26,13 +25,13 @@ function sampleSave(): SaveData {
       timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 },
     },
     games: {
-      keygame: {
+      // 键盘多轨模型（方案 B）：进度槽键 = `keygame:<mode>`
+      'keygame:full-random': {
         unlockedCount: 3,
         levels: { '1': { stars: 3, bestMs: 12_000, bestMistakes: 0 } },
       },
     },
     jigsawSchemes: [],
-    activeJigsawSchemeId: null,
   }
 }
 
@@ -144,36 +143,136 @@ describe('save 校验与迁移框架', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('v1 旧档经迁移链升级 v3：进度保留、方案段初始化为空（M3.7）', () => {
+  it('v1 旧档经迁移链升级至当前版本：非键盘进度保留、方案段初始化为空（M3.7）', () => {
     const v1 = {
       version: 1,
       settings: { locale: 'zh-CN', soundEnabled: true, timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
-      games: sampleSave().games,
+      games: { maze: { unlockedCount: 3, levels: { '1': { stars: 3, bestMs: 12_000, bestMistakes: 0 } } } },
     }
     const result = parseSaveText(JSON.stringify(v1))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.data.version).toBe(3)
+      expect(result.data.version).toBe(SCHEMA_VERSION)
       expect(result.data.jigsawSchemes).toEqual([])
-      expect(result.data.activeJigsawSchemeId).toBeNull()
-      expect(result.data.games.keygame?.unlockedCount).toBe(3)
+      // v6 起激活位字段退役（方案 = 关卡，无需激活）
+      expect('activeJigsawSchemeId' in result.data).toBe(false)
+      expect(result.data.games.maze?.unlockedCount).toBe(3)
     }
   })
 
-  it('v2 旧档（含 soundEnabled）升级 v3：音效字段移除、进度保留', () => {
+  it('v2 旧档（含 soundEnabled）升级至当前版本：音效字段移除、非键盘进度保留', () => {
     const v2 = {
       version: 2,
       settings: { locale: 'zh-CN', soundEnabled: true, timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
-      games: sampleSave().games,
+      games: { maze: { unlockedCount: 3, levels: {} } },
       jigsawSchemes: [],
       activeJigsawSchemeId: null,
     }
     const result = parseSaveText(JSON.stringify(v2))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.data.version).toBe(3)
+      expect(result.data.version).toBe(SCHEMA_VERSION)
       expect('soundEnabled' in result.data.settings).toBe(false)
-      expect(result.data.games.keygame?.unlockedCount).toBe(3)
+      expect(result.data.games.maze?.unlockedCount).toBe(3)
+    }
+  })
+
+  it('v3 旧档升级至当前版本：键盘单轨槽 games.keygame 删除（改多轨模型），其他游戏进度保留', () => {
+    const v3 = {
+      version: 3,
+      settings: { locale: 'zh-CN', timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
+      games: {
+        keygame: { unlockedCount: 3, levels: { '1': { stars: 3, bestMs: 12_000, bestMistakes: 0 } } },
+        maze: { unlockedCount: 5, levels: {} },
+      },
+      jigsawSchemes: [],
+      activeJigsawSchemeId: null,
+    }
+    const result = parseSaveText(JSON.stringify(v3))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.version).toBe(SCHEMA_VERSION)
+      expect(result.data.games.keygame).toBeUndefined()
+      expect(result.data.games.maze?.unlockedCount).toBe(5)
+    }
+  })
+
+  it('v4 旧档升级 v5：仅升版本号，wordbank 缺省（= 全用默认词表），其余数据原样保留', () => {
+    const v4 = {
+      version: 4,
+      settings: { locale: 'zh-CN', timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
+      games: { 'keygame:full-random': { unlockedCount: 3, levels: {} } },
+      jigsawSchemes: [],
+      activeJigsawSchemeId: null,
+    }
+    const result = parseSaveText(JSON.stringify(v4))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.version).toBe(SCHEMA_VERSION)
+      expect(result.data.wordbank).toBeUndefined()
+      expect(result.data.games['keygame:full-random']?.unlockedCount).toBe(3)
+    }
+  })
+
+  it('v5 旧档升级 v6：方案第 1 关成绩搬到专题轨（键=方案id），旧 1-50 曲线槽/方案 progress/激活位退役', () => {
+    const record = { stars: 3, bestMs: 90_000, bestMistakes: 0 }
+    const v5 = {
+      version: 5,
+      settings: { locale: 'zh-CN', timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
+      games: { jigsaw: { unlockedCount: 7, levels: { '1': record } } },
+      jigsawSchemes: [
+        {
+          id: 'js-a',
+          name: 'A',
+          source: { kind: 'builtin', imageId: 'animals-01' },
+          params: { rows: 4, cols: 5, tabDepth: 0.16, uniquenessThreshold: 18, seed: 12345 },
+          progress: { unlockedCount: 2, levels: { '1': record, '2': { stars: 2, bestMs: 80_000, bestMistakes: 1 } } },
+          createdAt: 1_700_000_000_000,
+          updatedAt: 1_700_000_000_000,
+        },
+        {
+          id: 'js-b',
+          name: 'B',
+          source: { kind: 'custom', assetId: 'asset-9' },
+          params: { rows: 4, cols: 5, tabDepth: 0.16, uniquenessThreshold: 18, seed: 6 },
+          progress: { unlockedCount: 1, levels: {} },
+          createdAt: 1_700_000_000_001,
+          updatedAt: 1_700_000_000_001,
+        },
+      ],
+      activeJigsawSchemeId: 'js-a',
+    }
+    const result = parseSaveText(JSON.stringify(v5))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.version).toBe(SCHEMA_VERSION)
+      // 旧 1-50 曲线槽退役（新模型无对应关系，诚实丢弃）
+      expect(result.data.games.jigsaw).toBeUndefined()
+      // A 第 1 关成绩搬到 animals 专题轨（键 = 方案 id，解锁 = 1 + 1）；
+      // 第 2 关属旧阶梯模型，丢弃
+      expect(result.data.games['jigsaw:animals']).toEqual({ unlockedCount: 2, levels: { 'js-a': record } })
+      // B 无成绩：不建 custom 槽
+      expect(result.data.games['jigsaw:custom']).toBeUndefined()
+      // 方案 progress 字段退役；激活位字段退役
+      expect(result.data.jigsawSchemes.map((s) => 'progress' in s)).toEqual([false, false])
+      expect('activeJigsawSchemeId' in result.data).toBe(false)
+    }
+  })
+
+  it('v6 旧档升级 v7：仅升版本号，mazeTheme 缺省（= 城堡兜底），其余数据原样保留', () => {
+    const v6 = {
+      version: 6,
+      settings: { locale: 'zh-CN', timeLimit: { mode: 'off', limitMs: 120_000, lockMs: 300_000 } },
+      games: { maze: { unlockedCount: 3, levels: {} } },
+      jigsawSchemes: [],
+    }
+    const result = parseSaveText(JSON.stringify(v6))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.version).toBe(SCHEMA_VERSION)
+      expect(result.data.settings.mazeTheme).toBeUndefined()
+      expect(result.data.games.maze?.unlockedCount).toBe(3)
+      expect(result.data.jigsawSchemes).toEqual([])
     }
   })
 
@@ -184,11 +283,11 @@ describe('save 校验与迁移框架', () => {
   })
 })
 
-describe('save v2 拼图方案段（M3.7 版本与进度隔离）', () => {
+describe('save v2 拼图方案段（方案 = 关卡模型，进度统一在专题轨）', () => {
   beforeEach(() => localStorage.clear())
 
   it('带方案档持久化往返一致', () => {
-    const save: SaveData = { ...sampleSave(), jigsawSchemes: [sampleScheme()], activeJigsawSchemeId: 'js-test-1' }
+    const save: SaveData = { ...sampleSave(), jigsawSchemes: [sampleScheme()] }
     persistSave(save)
     expect(loadSave()).toEqual(save)
   })
@@ -212,11 +311,6 @@ describe('save v2 拼图方案段（M3.7 版本与进度隔离）', () => {
 
   it('方案 id 重复被拒', () => {
     const save = { ...sampleSave(), jigsawSchemes: [sampleScheme('js-a'), sampleScheme('js-a')] }
-    expect(validateSaveData(save)).toBe(false)
-  })
-
-  it('activeJigsawSchemeId 悬空引用被拒', () => {
-    const save = { ...sampleSave(), jigsawSchemes: [sampleScheme('js-a')], activeJigsawSchemeId: 'js-missing' }
     expect(validateSaveData(save)).toBe(false)
   })
 
@@ -261,13 +355,93 @@ describe('save v2 拼图方案段（M3.7 版本与进度隔离）', () => {
     expect(parseSaveText(JSON.stringify(save)).ok).toBe(false)
   })
 
-  it('导出含方案档 → 导入完整恢复（迁移链与校验对 v2 直通）', () => {
-    const save: SaveData = { ...sampleSave(), jigsawSchemes: [sampleScheme()], activeJigsawSchemeId: 'js-test-1' }
+  it('导出含方案档 → 导入完整恢复（迁移链与校验对当前版本直通）', () => {
+    const save: SaveData = { ...sampleSave(), jigsawSchemes: [sampleScheme()] }
     persistSave(save)
     const text = exportJson()
     localStorage.clear()
     const result = importJson(text)
     expect(result.ok).toBe(true)
     expect(loadSave()).toEqual(save)
+  })
+})
+
+describe('save v5 词表配置段（键盘英文/拼音词表自定义）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('合法词表配置（英文按词长桶 + 拼音按等级）持久化往返一致', () => {
+    const wordbank = {
+      english: { '3': ['cat', 'dog'], '8': ['sunflower'] },
+      pinyin: { '1': [{ word: '山', pinyin: 'shan' }], '2': [{ word: '学校', pinyin: 'xue xiao' }] },
+    }
+    const save = { ...sampleSave(), wordbank }
+    persistSave(save)
+    expect(loadSave().wordbank).toEqual(wordbank)
+  })
+
+  it('空配置对象合法（= 全用引擎默认词表）', () => {
+    expect(validateSaveData({ ...sampleSave(), wordbank: {} })).toBe(true)
+  })
+
+  it('wordbank 缺省合法（v4 及更早旧档迁移后的常态）', () => {
+    expect(validateSaveData(sampleSave())).toBe(true)
+  })
+
+  it.each([
+    ['english 键越界（词长 2）', { english: { '2': ['hi'] } }],
+    ['english 含非字母词', { english: { '3': ['ca1t'] } }],
+    ['english 非对象', { english: ['cat'] }],
+    ['pinyin 键越界（等级 4）', { pinyin: { '4': [{ word: '词', pinyin: 'ci' }] } }],
+    ['拼音串含数字', { pinyin: { '1': [{ word: '山', pinyin: 'sha1n' }] } }],
+    ['拼音串大写', { pinyin: { '1': [{ word: '山', pinyin: 'Shan' }] } }],
+    ['拼音词条缺 word', { pinyin: { '1': [{ pinyin: 'shan' }] } }],
+  ])('词表配置非法被拒：%s', (_label, wordbank) => {
+    const save = { ...sampleSave(), wordbank }
+    expect(validateSaveData(save)).toBe(false)
+    expect(parseSaveText(JSON.stringify(save)).ok).toBe(false)
+  })
+
+  it('导出含词表档 → 导入完整恢复', () => {
+    const wordbank = { english: { '3': ['cat'] } }
+    persistSave({ ...sampleSave(), wordbank })
+    const text = exportJson()
+    localStorage.clear()
+    const result = importJson(text)
+    expect(result.ok).toBe(true)
+    expect(loadSave().wordbank).toEqual(wordbank)
+  })
+})
+
+describe('save v7 迷宫主题设置段（HUD 切换记住上次，验收返工 F-20）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('合法主题持久化往返一致', () => {
+    const settings = { ...sampleSave().settings, mazeTheme: 'garden' as const }
+    persistSave({ ...sampleSave(), settings })
+    expect(loadSave().settings.mazeTheme).toBe('garden')
+  })
+
+  it('mazeTheme 缺省合法（v6 及更早旧档迁移后的常态，读取方兜底城堡）', () => {
+    expect(validateSaveData(sampleSave())).toBe(true)
+  })
+
+  it.each([
+    ['未知主题', 'palace'],
+    ['非字符串', 123],
+  ])('mazeTheme 非法被拒：%s', (_label, mazeTheme) => {
+    const settings = { ...sampleSave().settings, mazeTheme } as unknown as SaveData['settings']
+    const save = { ...sampleSave(), settings }
+    expect(validateSaveData(save)).toBe(false)
+    expect(parseSaveText(JSON.stringify(save)).ok).toBe(false)
+  })
+
+  it('导出含主题档 → 导入完整恢复', () => {
+    const settings = { ...sampleSave().settings, mazeTheme: 'garden' as const }
+    persistSave({ ...sampleSave(), settings })
+    const text = exportJson()
+    localStorage.clear()
+    const result = importJson(text)
+    expect(result.ok).toBe(true)
+    expect(loadSave().settings.mazeTheme).toBe('garden')
   })
 })

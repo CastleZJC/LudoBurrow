@@ -4,7 +4,7 @@
 import type { LevelRecord } from './types'
 
 export const SAVE_KEY = 'ludoburrow/save'
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 7
 
 /** AI Provider 配置（设置页录入，存本机；导出默认脱敏） */
 export interface AiConfig {
@@ -25,6 +25,27 @@ export interface SettingsData {
   locale: 'zh-CN' | 'en-US'
   timeLimit: TimeLimitData
   ai?: AiConfig
+  /** 迷宫瓦片主题（HUD 内切换写入；缺省 = 城堡。字面量与 games/maze/level.ts MazeTheme 同构，存档自持形状） */
+  mazeTheme?: 'castle' | 'garden'
+}
+
+/** 自定义拼音词条（结构同引擎 PinyinEntry；存档自持形状，不反向依赖 engines） */
+export interface WordbankPinyinEntry {
+  word: string
+  /** 音节空格分隔的小写拼音串，如 'xue xiao' */
+  pinyin: string
+}
+
+/**
+ * 自定义词表配置（键盘「英文单词 / 中文拼音」模式消费）。
+ * 缺省 / 空级别回退引擎内嵌默认词表；本地单机共享一份（无权限分割），
+ * 服务器版按用户隔离（二期，经 services wordbankRepo 分叉）。
+ */
+export interface WordbankConfig {
+  /** 英文词表覆盖：键 = 词长 '3'..'8'（≥8 归 '8'）；值 = 该级词表（纯字母） */
+  english?: Record<string, string[]>
+  /** 拼音词表覆盖：键 = 等级 '1'..'3'；值 = 词条列表 */
+  pinyin?: Record<string, WordbankPinyinEntry[]>
 }
 
 /** 单游戏进度段 */
@@ -54,14 +75,12 @@ export type JigsawSchemeSource =
   | { kind: 'builtin'; imageId: string }
   | { kind: 'custom'; assetId: string }
 
-/** 拼图切块方案（§11.8 版本与进度隔离：各自挂独立进度，互不删除） */
+/** 拼图切块方案（v6 起「方案 = 关卡」：进度统一记在专题轨 games['jigsaw:<topic>'].levels[<方案id>]） */
 export interface JigsawSchemeData {
   id: string
   name: string
   source: JigsawSchemeSource
   params: JigsawSchemeParams
-  /** 独立进度槽（与 games.jigsaw 及其他方案完全隔离） */
-  progress: GameSaveData
   createdAt: number
   updatedAt: number
 }
@@ -71,10 +90,10 @@ export interface SaveData {
   version: number
   settings: SettingsData
   games: Record<string, GameSaveData>
-  /** 拼图切块方案列表（v2；§11.8 独立存档槽） */
+  /** 拼图用户自建方案列表（v6；进度不随方案走，统一记在专题轨） */
   jigsawSchemes: JigsawSchemeData[]
-  /** 当前激活方案（null = 内置 50 关曲线；切换方案 = 切换存档槽） */
-  activeJigsawSchemeId: string | null
+  /** 自定义词表配置（v5；缺省 = 全部用引擎默认词表） */
+  wordbank?: WordbankConfig
 }
 
 /** 迁移步骤：把 from 版本数据升到 from+1（链式追赶到当前版本） */
@@ -101,7 +120,80 @@ const MIGRATIONS: Migration[] = [
       return { ...data, version: 3, settings }
     },
   },
+  {
+    // v3 → v4：键盘改多轨模型（方案 B：四模式各独立 1-50 进度轨，槽键 `keygame:<mode>`）。
+    // 旧单轨 `games.keygame`（按关卡号段派生模式）与新模型语义不兼容，删除旧槽；各模式轨首次记录时按需新建。
+    from: 3,
+    migrate(data) {
+      const games = { ...(data.games as Record<string, unknown>) }
+      delete games.keygame
+      return { ...data, version: 4, games }
+    },
+  },
+  {
+    // v4 → v5：新增自定义词表配置段（键盘英文/拼音模式可覆盖默认词表）。
+    // 纯附加可选字段：旧档无 wordbank 即「全用默认词表」，迁移仅升版本号，不改数据形状。
+    from: 4,
+    migrate(data) {
+      return { ...data, version: 5 }
+    },
+  },
+  {
+    // v5 → v6：拼图改「方案 = 关卡」模型（验收返工：关卡数按切片方案动态生成）。
+    // - games.jigsaw（旧 1-50 曲线槽）退役：旧第 n 关与新模型方案无对应关系，进度不可映射，诚实丢弃
+    // - 方案 progress 字段退役：第 1 关成绩搬到专题轨 games['jigsaw:<topic>'].levels[<方案id>]；
+    //   第 2 关起属旧「50 关阶梯」模型不再兼容，丢弃；专题已搬 k 条 → unlockedCount = k + 1
+    // - activeJigsawSchemeId 退役（激活方案概念取消：所有方案直接是专题轨内关卡）
+    from: 5,
+    migrate(data) {
+      const games = { ...(data.games as Record<string, unknown>) }
+      delete games.jigsaw
+      const moved: Record<string, { unlockedCount: number; levels: Record<string, unknown> }> = {}
+      const nextSchemes: unknown[] = []
+      for (const scheme of Array.isArray(data.jigsawSchemes) ? data.jigsawSchemes : []) {
+        if (!isRecord(scheme)) continue
+        const progress = isRecord(scheme.progress) ? scheme.progress : null
+        const first = progress && isRecord(progress.levels) ? progress.levels['1'] : undefined
+        if (first !== undefined) {
+          const slot = `jigsaw:${legacyTopicOf(scheme.source)}`
+          const slotData = moved[slot] ?? { unlockedCount: 1, levels: {} }
+          slotData.levels[scheme.id as string] = first
+          slotData.unlockedCount = Object.keys(slotData.levels).length + 1
+          moved[slot] = slotData
+        }
+        const rest = { ...scheme }
+        delete rest.progress
+        nextSchemes.push(rest)
+      }
+      const out: Record<string, unknown> = {
+        ...data,
+        version: 6,
+        games: { ...games, ...moved },
+        jigsawSchemes: nextSchemes,
+      }
+      delete out.activeJigsawSchemeId
+      return out
+    },
+  },
+  {
+    // v6 → v7：新增迷宫主题设置（验收返工 F-20：HUD 内切换并记住上次，所有关共享单一进度）。
+    // 纯附加可选字段：旧档无 mazeTheme 即默认城堡，迁移仅升版本号，不改数据形状。
+    from: 6,
+    migrate(data) {
+      return { ...data, version: 7 }
+    },
+  },
 ]
+
+/** v5→v6 迁移专用：方案归属专题推断（builtin imageId 约定 `<topic>-NN`，与 gallery.ts 一致；其余归 custom） */
+const LEGACY_TOPICS = ['animals', 'space', 'scenery', 'cartoon']
+function legacyTopicOf(source: unknown): string {
+  if (isRecord(source) && source.kind === 'builtin' && typeof source.imageId === 'string') {
+    const prefix = source.imageId.split('-')[0] ?? ''
+    if (LEGACY_TOPICS.includes(prefix)) return prefix
+  }
+  return 'custom'
+}
 
 export function defaultSave(): SaveData {
   return {
@@ -109,7 +201,6 @@ export function defaultSave(): SaveData {
     settings: defaultSettings(),
     games: {},
     jigsawSchemes: [],
-    activeJigsawSchemeId: null,
   }
 }
 
@@ -172,8 +263,39 @@ function validateSettings(v: unknown): v is SettingsData {
     isRecord(v) &&
     (v.locale === 'zh-CN' || v.locale === 'en-US') &&
     validateTimeLimit(v.timeLimit) &&
-    (v.ai === undefined || validateAi(v.ai))
+    (v.ai === undefined || validateAi(v.ai)) &&
+    (v.mazeTheme === undefined || v.mazeTheme === 'castle' || v.mazeTheme === 'garden')
   )
+}
+
+function validateWordbankPinyinEntry(v: unknown): v is WordbankPinyinEntry {
+  return (
+    isRecord(v) &&
+    typeof v.word === 'string' && v.word.length > 0 &&
+    typeof v.pinyin === 'string' && /^[a-z]+( [a-z]+)*$/.test(v.pinyin)
+  )
+}
+
+/** 词表配置校验：键限于合法分级，值为纯字母词 / 合法拼音词条（空对象合法 = 全用默认） */
+function validateWordbank(v: unknown): v is WordbankConfig {
+  if (!isRecord(v)) return false
+  if (v.english !== undefined) {
+    if (!isRecord(v.english)) return false
+    for (const [key, words] of Object.entries(v.english)) {
+      if (!/^[3-8]$/.test(key)) return false
+      if (!Array.isArray(words)) return false
+      if (!words.every((w) => typeof w === 'string' && /^[A-Za-z]+$/.test(w))) return false
+    }
+  }
+  if (v.pinyin !== undefined) {
+    if (!isRecord(v.pinyin)) return false
+    for (const [key, entries] of Object.entries(v.pinyin)) {
+      if (!/^[1-3]$/.test(key)) return false
+      if (!Array.isArray(entries)) return false
+      if (!entries.every(validateWordbankPinyinEntry)) return false
+    }
+  }
+  return true
 }
 
 /** 建议权重数组：有限正数且长度匹配网格数（归一化由写入方保证，校验容差不检查和值） */
@@ -216,7 +338,6 @@ function validateJigsawScheme(v: unknown): v is JigsawSchemeData {
     typeof v.name === 'string' &&
     validateJigsawSchemeSource(v.source) &&
     validateJigsawSchemeParams(v.params) &&
-    validateGameSave(v.progress) &&
     Number.isFinite(v.createdAt) && typeof v.createdAt === 'number' &&
     Number.isFinite(v.updatedAt) && typeof v.updatedAt === 'number'
   )
@@ -233,9 +354,7 @@ export function validateSaveData(v: unknown): v is SaveData {
     Array.isArray(v.jigsawSchemes) &&
     v.jigsawSchemes.every(validateJigsawScheme) &&
     new Set(v.jigsawSchemes.map((s) => (isRecord(s) ? s.id : '?'))).size === v.jigsawSchemes.length &&
-    (v.activeJigsawSchemeId === null ||
-      (typeof v.activeJigsawSchemeId === 'string' &&
-        v.jigsawSchemes.some((s) => isRecord(s) && s.id === v.activeJigsawSchemeId)))
+    (v.wordbank === undefined || validateWordbank(v.wordbank))
   )
 }
 

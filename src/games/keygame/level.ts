@@ -1,10 +1,13 @@
 // 键盘游戏关卡生成（开发计划 M2 / 技术架构 §10.2-§10.4）
-// 难度曲线（50 关四模式分段，大/小键盘各自成线）：
-//   1-13   大键盘随机序列（长度 3→12）      14-25  小键盘随机序列（长度 6→17）
-//   26-38  英文单词（词数 3→6、词长 3→8）   39-50  拼音（分级 1→3、词数 3→6）
-// 确定性：随机性一律经 levelSeed('keygame', n) 派生 Rng，同关卡内容恒定（§9 纪律）
+// 四模式各自独立 1-50 难度曲线（方案 B：选关页先选模式，每模式一条独立进度轨）：
+//   full-random    全键盘随机序列（长度 3→16）
+//   compact-random 紧凑键盘随机序列（长度 6→20）
+//   english        英文单词（词数 3→8、词长 3→8）
+//   pinyin         中文拼音（分级 1→3、词数 3→8）
+// 确定性：随机性经 levelSeed(`keygame:${mode}`, n) 派生 Rng，同(模式,关卡)内容恒定（§9 纪律）
 
 import type { BaseLevelConfig } from '@/core/types'
+import type { WordbankConfig } from '@/core/save'
 import { createRng, levelSeed } from '@/engines/rng'
 import {
   getPinyinByGrade,
@@ -14,6 +17,27 @@ import {
 } from '@/engines/wordbank'
 
 export type KeygameMode = 'full-random' | 'compact-random' | 'english' | 'pinyin'
+
+/** 四模式（选关页页签顺序 = 此顺序；i18n key 见 keygame.mode*） */
+export const KEYGAME_MODES: readonly KeygameMode[] = ['full-random', 'compact-random', 'english', 'pinyin']
+
+/** 模式 i18n 标签键（HUD / 选关页页签共用） */
+export const KEYGAME_MODE_LABEL_KEY: Record<KeygameMode, string> = {
+  'full-random': 'keygame.modeFull',
+  'compact-random': 'keygame.modeCompact',
+  english: 'keygame.modeEnglish',
+  pinyin: 'keygame.modePinyin',
+}
+
+/** 模式 → 虚拟键盘布局：紧凑键盘模式用 compact，其余 full */
+export function layoutOfMode(mode: KeygameMode): 'full' | 'compact' {
+  return mode === 'compact-random' ? 'compact' : 'full'
+}
+
+/** 模式守卫：track 字符串收窄为合法 KeygameMode */
+export function isKeygameMode(v: unknown): v is KeygameMode {
+  return v === 'full-random' || v === 'compact-random' || v === 'english' || v === 'pinyin'
+}
 
 /** 展示分段：chars = 目标字符（大写/数字）；hint = 拼音模式的汉字提示，其余为空串 */
 export interface TargetSegment {
@@ -38,39 +62,39 @@ function lerpStep(n: number, n0: number, n1: number, v0: number, v1: number): nu
   return v0 + Math.round(t * (v1 - v0))
 }
 
-/** 模式分段（大/小键盘各自成线 + 两种内容模式收尾） */
-function modeOf(n: number): { mode: KeygameMode; layout: 'full' | 'compact' } {
-  if (n >= 1 && n <= 13) return { mode: 'full-random', layout: 'full' }
-  if (n <= 25) return { mode: 'compact-random', layout: 'compact' }
-  if (n <= 38) return { mode: 'english', layout: 'full' }
-  return { mode: 'pinyin', layout: 'full' }
-}
-
-export function createKeygameLevel(n: number): KeygameLevelConfig {
+export function createKeygameLevel(
+  n: number,
+  mode: KeygameMode = 'full-random',
+  wordbank?: WordbankConfig,
+): KeygameLevelConfig {
   if (n < 1 || n > 50) throw new RangeError(`keygame: 非法关卡号 ${n}`)
-  const rng = createRng(levelSeed('keygame', n))
-  const { mode, layout } = modeOf(n)
+  if (!isKeygameMode(mode)) throw new RangeError(`keygame: 非法模式 ${String(mode)}`)
+  const seed = levelSeed(`keygame:${mode}`, n)
+  const rng = createRng(seed)
+  const layout = layoutOfMode(mode)
 
   let segments: TargetSegment[]
   if (mode === 'full-random') {
-    // 大键盘线：短序列起步（3 → 12 字符）
-    const len = lerpStep(n, 1, 13, 3, 12)
+    // 全键盘线：序列长度 3 → 16（跨 1-50 均匀上探）
+    const len = lerpStep(n, 1, 50, 3, 16)
     segments = [{ chars: randomCharSequence(rng, len).join(''), hint: '' }]
   } else if (mode === 'compact-random') {
-    // 小键盘线：序列更长（6 → 17 字符），难度上探
-    const len = lerpStep(n, 14, 25, 6, 17)
+    // 紧凑键盘线：序列更长 6 → 20（紧凑布局键位少，靠长度上难度）
+    const len = lerpStep(n, 1, 50, 6, 20)
     segments = [{ chars: randomCharSequence(rng, len).join(''), hint: '' }]
   } else if (mode === 'english') {
-    // 英文线：词数 3 → 6、词长 3 → 8（≥8 归长词表），关内不重复
-    const count = lerpStep(n, 26, 38, 3, 6)
-    const wordLen = lerpStep(n, 26, 38, 3, 8)
-    const pool = rng.shuffle([...getWordsByLength(wordLen)])
+    // 英文线：词数 3 → 8、词长 3 → 8（≥8 归长词桶），关内不重复；
+    // 自定义词表按词长桶覆盖（键与 getWordsByLength 分桶口径一致：≥8 归 '8'）
+    const count = lerpStep(n, 1, 50, 3, 8)
+    const wordLen = lerpStep(n, 1, 50, 3, 8)
+    const bucket = wordLen >= 8 ? '8' : String(wordLen)
+    const pool = rng.shuffle([...getWordsByLength(wordLen, wordbank?.english?.[bucket])])
     segments = pool.slice(0, count).map((word) => ({ chars: word.toUpperCase(), hint: '' }))
   } else {
-    // 拼音线：39-42 一级 / 43-46 二级 / 47-50 三级，词数 3 → 6
-    const grade = n < 43 ? 1 : n < 47 ? 2 : 3
-    const count = lerpStep(n, 39, 50, 3, 6)
-    const pool = rng.shuffle([...getPinyinByGrade(grade)])
+    // 拼音线：1-17 一级 / 18-34 二级 / 35-50 三级，词数 3 → 8；自定义词表按等级覆盖
+    const grade: 1 | 2 | 3 = n <= 17 ? 1 : n <= 34 ? 2 : 3
+    const count = lerpStep(n, 1, 50, 3, 8)
+    const pool = rng.shuffle([...getPinyinByGrade(grade, wordbank?.pinyin?.[String(grade)])])
     segments = pool.slice(0, count).map((entry) => ({
       chars: pinyinToSequence(entry).join(''),
       hint: entry.word,
@@ -79,7 +103,7 @@ export function createKeygameLevel(n: number): KeygameLevelConfig {
 
   const sequence: string[] = []
   for (const seg of segments) sequence.push(...seg.chars.split(''))
-  return { gameId: 'keygame', n, seed: levelSeed('keygame', n), mode, layout, sequence, segments }
+  return { gameId: 'keygame', n, seed, mode, layout, sequence, segments, track: mode }
 }
 
 /**

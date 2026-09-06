@@ -23,6 +23,9 @@ coverage/
 .codegraph/
 *.swp
 
+# 本地版权受限素材（用户个人导入测试用：不入库不分发，仅限本机）
+documents/local/
+
 # OS
 .DS_Store
 Thumbs.db

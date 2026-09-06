@@ -57,8 +57,8 @@ export const HERO_SPRITE_PATH = 'assets/sprites/hero.png'
 
 /** sprite 条带行序（与 gen-maze-assets.mjs FACINGS 一致） */
 const FACING_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 }
-/** 条带帧尺寸（32×32 × 3 帧 × 4 方向） */
-export const SPRITE_FRAME = 32
+/** 条带帧尺寸（v1.0 验收返工高清化：256×256 × 3 帧 × 4 方向，条带 768×1024，与 gen-maze-assets.mjs 一致） */
+export const SPRITE_FRAME = 256
 
 /** 渲染皮肤：瓦片与角色的统一绘制入口 */
 export interface TileSkin {

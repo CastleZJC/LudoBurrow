@@ -39,8 +39,10 @@ interface Flight {
   dur: number
 }
 
-const FLIGHT_MS = 240
-const DEMO_STEP_MS = 240
+/** 帮助/放弃演示动画时长（v1.0 验收返工：240 → 1000，慢速可看清去向） */
+const DEMO_STEP_MS = 1000
+/** 帮助让位块（被挤入暂存）动画：快于主飞行，先让位后落位的层次感 */
+const DISPLACE_MS = 600
 
 function el(tag: string, cls?: string): HTMLElement {
   const node = document.createElement(tag)
@@ -200,13 +202,14 @@ export function mountJigsaw(
     return { x: cx, y: cy, w: size, h: size }
   }
 
-  /** 剩余区缩略示意（剩余队列序） */
+  /** 剩余区缩略示意（剩余队列序；列数按剩余区宽度自适应——三列式右列窄，不再固定每行 24 个） */
   function remainingSlotRect(index: number): Rect {
     const order = board!.remainingOrder
     const k = Math.max(0, order.indexOf(index))
     const size = 34
-    const cx = rects.remaining.x + 6 + (k % 24) * 40
-    const cy = rects.remaining.y + 6 + Math.floor(k / 24) * 40
+    const cols = Math.max(1, Math.floor(rects.remaining.w / 40))
+    const cx = rects.remaining.x + 6 + (k % cols) * 40
+    const cy = rects.remaining.y + 6 + Math.floor(k / cols) * 40
     return { x: cx, y: cy, w: size, h: size }
   }
 
@@ -408,7 +411,7 @@ export function mountJigsaw(
     return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
   }
 
-  function pushFlight(index: number, from: Rect, to: Rect, dur = FLIGHT_MS): void {
+  function pushFlight(index: number, from: Rect, to: Rect, dur: number): void {
     flights.push({ index, from: centerOf(pieceBitmapRect(index, from)), to: centerOf(pieceBitmapRect(index, to)), start: performance.now(), dur })
     dirty = true
   }
@@ -435,9 +438,9 @@ export function mountJigsaw(
     const result = board.help()
     if (!result) return
     if (result.displacedIndex !== undefined && occupantBefore) {
-      pushFlight(result.displacedIndex, occupantBefore, pieceHomeRect(result.displacedIndex), 180)
+      pushFlight(result.displacedIndex, occupantBefore, pieceHomeRect(result.displacedIndex), DISPLACE_MS)
     }
-    pushFlight(result.pieceIndex, fromRect, pieceHomeRect(result.pieceIndex))
+    pushFlight(result.pieceIndex, fromRect, pieceHomeRect(result.pieceIndex), DEMO_STEP_MS)
     refreshHud()
     reportProgress()
     if (board.isComplete()) finish()

@@ -42,8 +42,12 @@ export const WORDS_L8: readonly string[] = [
   'understand', 'vacation', 'wonderful', 'adventure', 'sandwiches', 'swimming', 'spaceship', 'snowflake', 'toothbrush', 'watermelon',
 ]
 
-/** 按目标词长取词表（len >= 8 归 L8；未知级别抛错） */
-export function getWordsByLength(len: number): readonly string[] {
+/**
+ * 按目标词长取词表（len >= 8 归 L8；未知级别抛错）。
+ * override 非空时优先用自定义词表（设置页词表配置写入，空/缺省回退内嵌默认）。
+ */
+export function getWordsByLength(len: number, override?: readonly string[]): readonly string[] {
+  if (override && override.length > 0) return override
   switch (len) {
     case 3: return WORDS_L3
     case 4: return WORDS_L4
@@ -106,8 +110,12 @@ export const PINYIN_EXT: readonly PinyinEntry[] = [
   { word: '机器人', pinyin: 'ji qi ren' }, { word: '宇航员', pinyin: 'yu hang yuan' },
 ]
 
-/** 按等级取拼音词表（1=起步 2=常用 3=扩展） */
-export function getPinyinByGrade(grade: 1 | 2 | 3): readonly PinyinEntry[] {
+/**
+ * 按等级取拼音词表（1=起步 2=常用 3=扩展）。
+ * override 非空时优先用自定义词表（设置页词表配置写入，空/缺省回退内嵌默认）。
+ */
+export function getPinyinByGrade(grade: 1 | 2 | 3, override?: readonly PinyinEntry[]): readonly PinyinEntry[] {
+  if (override && override.length > 0) return override
   switch (grade) {
     case 1: return PINYIN_BASIC
     case 2: return PINYIN_COMMON

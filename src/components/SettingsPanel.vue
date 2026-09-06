@@ -7,6 +7,9 @@ import { exportJson, importJson } from '@/core/save'
 import type { AiConfig } from '@/core/save'
 import type { TimeLimitMode } from '@/core/settings'
 import { PROVIDER_PRESETS } from '@/ai/provider'
+import { getEnvAdapter } from '@/services'
+import { getPinyinByGrade, getWordsByLength } from '@/engines/wordbank'
+import type { WordbankConfig, WordbankPinyinEntry } from '@/core/save'
 
 const { t } = useI18n()
 const platform = usePlatformStore()
@@ -75,6 +78,100 @@ function onAiModel(event: Event): void {
 function onAiApiKey(event: Event): void {
   patchAi({ apiKey: (event.target as HTMLInputElement).value.trim() })
 }
+
+// ---- 词汇表配置（键盘英文/拼音模式消费；读写一律经适配层，本地=存档 wordbank 段单一配置）----
+/** 类别选项：英文词长桶 3-8 + 拼音等级 1-3（value 形如 'en-5' / 'py-2'，键与存档分级一致） */
+const wbCategories = [
+  ...[3, 4, 5, 6, 7, 8].map((len) => ({ value: `en-${len}`, key: 'settings.wbEnglishLen', n: len })),
+  ...[1, 2, 3].map((g) => ({ value: `py-${g}`, key: 'settings.wbPinyinGrade', n: g })),
+]
+
+const wbCategory = ref('en-3')
+const wbText = ref('')
+const wbIsEnglish = computed(() => wbCategory.value.startsWith('en-'))
+
+/** 当前类别生效词表转文本：有覆盖用覆盖，无覆盖用引擎默认（可见即所玩） */
+function wbTextOf(category: string): string {
+  const config = getEnvAdapter().wordbankRepo.getConfig()
+  if (category.startsWith('en-')) {
+    const len = Number(category.slice(3))
+    const words = config.english?.[String(len)] ?? getWordsByLength(len)
+    return words.join(', ')
+  }
+  const grade = Number(category.slice(3)) as 1 | 2 | 3
+  const entries = config.pinyin?.[String(grade)] ?? getPinyinByGrade(grade)
+  return entries.map((e) => `${e.word}|${e.pinyin}`).join('\n')
+}
+
+function loadWbText(): void {
+  wbText.value = wbTextOf(wbCategory.value)
+}
+
+/** 英文解析：非字母字符一律视分隔（逗号/空白/换行统一），仅保留字母串（与存档校验同口径） */
+function parseEnglishWords(text: string): string[] {
+  return text.split(/[^A-Za-z]+/).filter((w) => w.length > 0)
+}
+
+/** 拼音解析：每行「汉字|拼音」；拼音小写 + 空格分隔音节，非法行丢弃（与存档校验同口径） */
+function parsePinyinEntries(text: string): WordbankPinyinEntry[] {
+  const out: WordbankPinyinEntry[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const idx = line.indexOf('|')
+    if (idx < 0) continue
+    const word = line.slice(0, idx).trim()
+    const pinyin = line.slice(idx + 1).trim().toLowerCase().replace(/\s+/g, ' ')
+    if (!word || !/^[a-z]+( [a-z]+)*$/.test(pinyin)) continue
+    out.push({ word, pinyin })
+  }
+  return out
+}
+
+/** 写回当前类别：空 = 移除该类覆盖（回退默认）；两类均无覆盖时归一移除自定义段 */
+function saveWbCategory(text: string): void {
+  const repo = getEnvAdapter().wordbankRepo
+  const config: WordbankConfig = { ...repo.getConfig() }
+  if (wbCategory.value.startsWith('en-')) {
+    const bucket = String(Number(wbCategory.value.slice(3)))
+    const english = { ...(config.english ?? {}) }
+    const words = parseEnglishWords(text)
+    if (words.length > 0) english[bucket] = words
+    else delete english[bucket]
+    config.english = Object.keys(english).length > 0 ? english : undefined
+  } else {
+    const grade = String(Number(wbCategory.value.slice(3)))
+    const pinyin = { ...(config.pinyin ?? {}) }
+    const entries = parsePinyinEntries(text)
+    if (entries.length > 0) pinyin[grade] = entries
+    else delete pinyin[grade]
+    config.pinyin = Object.keys(pinyin).length > 0 ? pinyin : undefined
+  }
+  repo.saveConfig(config)
+}
+
+function onWbCategoryChange(event: Event): void {
+  wbCategory.value = (event.target as HTMLSelectElement).value
+  loadWbText()
+}
+
+function onWbTextChange(event: Event): void {
+  saveWbCategory((event.target as HTMLTextAreaElement).value)
+}
+
+function resetWbCategory(): void {
+  saveWbCategory('')
+  loadWbText()
+  feedback.value = t('settings.wbResetDone')
+}
+
+function resetWbAll(): void {
+  getEnvAdapter().wordbankRepo.saveConfig({})
+  loadWbText()
+  feedback.value = t('settings.wbResetDone')
+}
+
+loadWbText()
 
 function exportSave(): void {
   const blob = new Blob([exportJson()], { type: 'application/json' })
@@ -172,6 +269,35 @@ async function importSave(event: Event): Promise<void> {
       </template>
     </section>
 
+    <section class="settings-section" data-section="wordbank">
+      <h3>{{ t('settings.wordbankSection') }}</h3>
+      <p class="hint">{{ t('settings.wordbankHint') }}</p>
+      <label class="select-row">
+        <span>{{ t('settings.wordbankCategory') }}</span>
+        <select :value="wbCategory" data-role="wb-category" @change="onWbCategoryChange">
+          <option v-for="cat in wbCategories" :key="cat.value" :value="cat.value">
+            {{ t(cat.key, { n: cat.n }) }}
+          </option>
+        </select>
+      </label>
+      <textarea
+        :value="wbText"
+        class="wb-text"
+        rows="8"
+        data-role="wb-text"
+        @change="onWbTextChange"
+      ></textarea>
+      <p class="hint">{{ wbIsEnglish ? t('settings.wbEnglishHint') : t('settings.wbPinyinHint') }}</p>
+      <div class="wb-actions">
+        <button class="secondary-btn" data-role="wb-reset-category" @click="resetWbCategory">
+          {{ t('settings.wbResetCategory') }}
+        </button>
+        <button class="secondary-btn" data-role="wb-reset-all" @click="resetWbAll">
+          {{ t('settings.wbResetAll') }}
+        </button>
+      </div>
+    </section>
+
     <section class="settings-section" data-section="save">
       <h3>{{ t('settings.saveSection') }}</h3>
       <div class="save-actions">
@@ -235,6 +361,22 @@ async function importSave(event: Event): Promise<void> {
   width: 72px;
 }
 .save-actions {
+  display: flex;
+  gap: 12px;
+}
+.wb-text {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg, #fff);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+.wb-actions {
   display: flex;
   gap: 12px;
 }

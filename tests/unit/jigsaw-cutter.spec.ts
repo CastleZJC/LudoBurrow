@@ -108,6 +108,38 @@ describe('buildAxisLines（非均匀切割）', () => {
     expect(buildAxisLines(rowGrad, 30, 3, 3)).toEqual([0, 10, 20, 30])
   })
 
+  it('均匀微差吸附：缓变梯度（梯度几乎均匀）的线全部恰在均匀位', () => {
+    // 梯度线性缓增 1→1.099：累计等分线 26/52/76 → 梯度吸附后 25/51/75 → 微差（1px ≤ 10%×25段）全部吸附到均匀位
+    const grad = new Float64Array(100)
+    for (let i = 0; i < 100; i++) grad[i] = 1 + i / 1000
+    expect(buildAxisLines(grad, 100, 4, 1)).toEqual([0, 25, 50, 75, 100])
+  })
+
+  it('不变式：每条内部线要么恰在均匀位、要么偏离 > 平均段长 10%（微差不残留）', () => {
+    const cases: Array<[grad: Float64Array, size: number, count: number]> = [
+      [gradientProfile(noiseImage(80)).rowGrad, 80, 4],
+      [gradientProfile(noiseImage(80)).colGrad, 80, 5],
+      [gradientProfile(checkerImage(60)).rowGrad, 60, 3],
+      [gradientProfile(threeBandImage(90)).rowGrad, 90, 3],
+    ]
+    for (const [grad, size, count] of cases) {
+      const lines = buildAxisLines(grad, size, count, 2)
+      const band = (size / count) * 0.1
+      for (let k = 1; k < lines.length - 1; k++) {
+        const dev = Math.abs(lines[k]! - Math.round((size * k) / count))
+        expect(dev === 0 || dev > band, `线 ${k} 偏差 ${dev} 落入微差带 (${band.toFixed(1)})`).toBe(true)
+      }
+    }
+  })
+
+  it('显著偏差保留：内容驱动的不均匀（平坦长细节短）不被均匀化吞掉', () => {
+    const { rowGrad } = gradientProfile(threeBandImage(90))
+    const lines = buildAxisLines(rowGrad, 90, 3, 3)
+    // 均匀位 30/60，实际线 37~40 / 50 附近：偏差远超 10%×30段=3，保留内容驱动设计
+    expect(Math.abs(lines[1]! - 30)).toBeGreaterThan(3)
+    expect(Math.abs(lines[2]! - 60)).toBeGreaterThan(3)
+  })
+
   it.each([[1, 10], [0, 10], [2, 2]])('非法输入（段 %i / 尺寸 %i）抛 RangeError', (count, size) => {
     expect(() => buildAxisLines(new Float64Array(size), size, count, 1)).toThrow(RangeError)
   })

@@ -2,11 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getGame } from '@/core/game-registry'
-import { recordResult, getLevelRecord, TOTAL_LEVELS } from '@/core/level-manager'
+import { recordResult, getLevelRecord, progressSlotKey, TOTAL_LEVELS } from '@/core/level-manager'
 import { createTimer, formatElapsed, type Timer } from '@/core/timer'
 import type { BaseLevelConfig, GameInstance, GameHooks, LevelProgress, LevelResult } from '@/core/types'
 import { usePlatformStore } from '@/stores/platform'
-import { getScheme, getSchemeLevelRecord, recordSchemeResult, schemeLevel } from '@/games/jigsaw/schemes'
+import { schemeLevelNumber, createTopicLevel, topicLevelCount } from '@/games/jigsaw/schemes'
 import type { JigsawLevelConfig } from '@/games/jigsaw/level'
 import PauseOverlay from './PauseOverlay.vue'
 import SettlePanel from './SettlePanel.vue'
@@ -15,8 +15,17 @@ const props = defineProps<{ level: BaseLevelConfig }>()
 const { t } = useI18n()
 const platform = usePlatformStore()
 
-/** 拼图方案关卡（挂载时快照；成绩写入方案独立进度槽，§11.8） */
+/** 拼图方案关卡标记（内置 bs-* / 用户 js-*；成绩按方案 id 记在专题轨，方案删除重排不错位） */
 const schemeId = (props.level as JigsawLevelConfig).schemeId
+
+/** 多轨游戏进度槽键（键盘四模式 / 拼图专题）；单轨 = gameId */
+const slotKey = progressSlotKey(props.level.gameId, props.level.track)
+
+/** 本关成绩记录键：拼图方案关 = 方案 id，其他 = 关卡号 */
+const recordKey = schemeId ?? String(props.level.n)
+
+/** 轨内总关数：动态关卡游戏（拼图按方案数）经模块读取，缺省固定 50 */
+const total = computed(() => getGame(props.level.gameId)?.levelCount?.(props.level.track) ?? TOTAL_LEVELS)
 
 const mountHost = ref<HTMLElement | null>(null)
 const elapsedText = ref('00:00')
@@ -110,14 +119,10 @@ function finishWithResult(result: LevelResult, isFail: boolean): void {
   if (lockTimerId) clearInterval(lockTimerId)
   cancelAnimationFrame(rafId)
   instance?.pause()
-  const prev = schemeId
-    ? getSchemeLevelRecord(schemeId, result.n)
-    : getLevelRecord(result.gameId, result.n)
+  const prev = getLevelRecord(slotKey, recordKey)
   const record = isFail
     ? prev
-    : schemeId
-      ? recordSchemeResult(schemeId, result)
-      : recordResult(result.gameId, result)
+    : recordResult(slotKey, result, { total: total.value, recordKey })
   const isNewBest = !isFail && (
     !prev || result.elapsedMs < prev.bestMs || result.stars > prev.stars
   )
@@ -139,15 +144,22 @@ function togglePause(): void {
   }
 }
 
-/** 重建第 n 关配置（方案模式走 schemeLevel；方案已被删则回选关页兜底） */
+/**
+ * 重建第 n 关配置：拼图方案关按方案 id 重新定位（方案被删返回 null → 回选关页兜底）；
+ * 其他走模块 createLevel（动态轨越界时同样回选关页）。
+ */
 function rebuildLevel(n: number): BaseLevelConfig | null {
   const game = getGame(props.level.gameId)
   if (!game) return null
   if (schemeId) {
-    const scheme = getScheme(schemeId)
-    return scheme ? schemeLevel(scheme, n) : null
+    const loc = schemeLevelNumber(schemeId)
+    return loc ? createTopicLevel(loc.n, loc.topic) : null
   }
-  return game.createLevel(n)
+  try {
+    return game.createLevel(n, props.level.track)
+  } catch {
+    return null
+  }
 }
 
 function retryLevel(): void {
@@ -159,8 +171,13 @@ function retryLevel(): void {
 
 function nextLevel(): void {
   teardown()
-  // 最后一关完成后回选关页（方案模式同为 50 关）
-  if (props.level.n >= TOTAL_LEVELS) return platform.exitToSelect()
+  // 拼图方案关：按方案当前定位取下一关（方案被删则回选关页）；最后一关后回选关页
+  if (schemeId) {
+    const loc = schemeLevelNumber(schemeId)
+    if (!loc || loc.n >= topicLevelCount(loc.topic)) return platform.exitToSelect()
+    return platform.openLevel(createTopicLevel(loc.n + 1, loc.topic))
+  }
+  if (props.level.n >= total.value) return platform.exitToSelect()
   const config = rebuildLevel(props.level.n + 1)
   if (!config) return platform.exitToSelect()
   platform.openLevel(config)
@@ -232,6 +249,9 @@ onBeforeUnmount(teardown)
       :info="platform.settleInfo"
       :game-id="level.gameId"
       :level-n="level.n"
+      :total="total"
+      :slot-key="slotKey"
+      :record-key="recordKey"
       @next="nextLevel"
       @retry="retryLevel"
       @exit="exitLevel"

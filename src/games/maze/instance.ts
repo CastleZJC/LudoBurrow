@@ -4,11 +4,15 @@
 // 结算（§12.5）：到出口 onComplete（步数相对解长星级；meta 携带 steps/size/theme）。
 // 皮肤（theme.ts）：paletteSkin 先行渲染（零等待），PNG 皮肤异步就绪后整体重画；
 //                  测试经 deps 注入固定迷宫与皮肤，完全绕开资源加载。
+// 主题切换（验收返工 F-20）：HUD 内按钮即时切换城堡/花园并写入设置（记住上次），
+//                  所有关卡共享单一进度，主题只影响观感（背景/瓦片配色）。
+// 轨迹随机（验收返工）：生产路径 seed 每局叠加随机扰动（cfg.seed 保留为基准种子）。
 
 import type { BaseLevelConfig, GameHooks, GameInstance } from '@/core/types'
+import { updateSettings } from '@/core/settings'
 import { generateMaze, type MazeData } from '@/engines/maze-generator'
 import { i18n } from '@/i18n'
-import type { MazeLevelConfig } from './level'
+import type { MazeLevelConfig, MazeTheme } from './level'
 import { THEME_LABEL_KEY, THEME_PALETTES, loadTileSkin, paletteSkin, type TileSkin, type TileKind } from './theme'
 import { animFrameOf, calcMazeStars, createHero, isAtGoal, tryMove, type Facing, type HeroState } from './walk'
 import { cellCenter, computeView, type MazeView } from './view'
@@ -66,6 +70,15 @@ function el(tag: string, cls?: string): HTMLElement {
   return node
 }
 
+/**
+ * 每局扰动种子（验收返工 F-20：同关每局轨迹随机，不再 per-level 固定）。
+ * cfg.seed 保留为关卡基准种子（选关/存档可见）；引擎同参同迷宫的确定性不变，
+ * 测试可 spy Math.random 固定扰动值复现轨迹（或经 deps.maze 注入完全绕开）。
+ */
+function rollPlaySeed(base: number): number {
+  return (base ^ Math.floor(Math.random() * 0x1_0000_0000)) >>> 0
+}
+
 export function mountMaze(
   container: HTMLElement,
   level: BaseLevelConfig,
@@ -73,10 +86,11 @@ export function mountMaze(
   deps: MazeMountDeps = {},
 ): GameInstance {
   const cfg = level as MazeLevelConfig
-  const maze = deps.maze ?? generateMaze(cfg.seed, cfg.size, { branching: cfg.branching })
+  const maze = deps.maze ?? generateMaze(rollPlaySeed(cfg.seed), cfg.size, { branching: cfg.branching })
   let phase: Phase = 'idle'
   let hero: HeroState = createHero(maze)
-  let skin: TileSkin = deps.skin ?? paletteSkin(cfg.theme)
+  let theme: MazeTheme = cfg.theme
+  let skin: TileSkin = deps.skin ?? paletteSkin(theme)
   let view: MazeView
   let dirty = true
   let rafId = 0
@@ -86,8 +100,20 @@ export function mountMaze(
   const hud = el('div', 'mz-hud')
   const sizeEl = el('span', 'mz-size')
   sizeEl.dataset.mz = 'size'
+  // 主题切换按钮组（验收返工 F-20：当前主题 aria-pressed 高亮，点击即时换肤并持久化）
   const themeEl = el('span', 'mz-theme')
   themeEl.dataset.mz = 'theme'
+  const themeBtns = {} as Record<MazeTheme, HTMLButtonElement>
+  for (const t of ['castle', 'garden'] as const) {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'mz-theme-btn'
+    btn.dataset.mzTheme = t
+    btn.textContent = i18n.global.t(THEME_LABEL_KEY[t])
+    btn.addEventListener('click', () => switchTheme(t))
+    themeBtns[t] = btn
+    themeEl.appendChild(btn)
+  }
   const stepsEl = el('span', 'mz-steps')
   stepsEl.dataset.mz = 'steps'
   const mistakesEl = el('span', 'mz-mistakes')
@@ -120,9 +146,36 @@ export function mountMaze(
 
   function refreshHud(): void {
     sizeEl.textContent = `${cfg.size}×${cfg.size}`
-    themeEl.textContent = i18n.global.t(THEME_LABEL_KEY[cfg.theme])
+    for (const t of ['castle', 'garden'] as const) {
+      themeBtns[t].setAttribute('aria-pressed', String(theme === t))
+    }
     stepsEl.textContent = `${i18n.global.t('settle.steps')} ${hero.steps}`
     mistakesEl.textContent = `${i18n.global.t('common.mistakes')} ${hero.bumps}`
+  }
+
+  /**
+   * HUD 主题切换（验收返工 F-20）：立即换肤重画并写入设置（下次进关沿用 = 记住上次）；
+   * 进度单一不分轨，主题只影响观感。deps.skin 注入（测试）时不更换皮肤，仅刷新背景。
+   */
+  function switchTheme(next: MazeTheme): void {
+    if (phase === 'destroyed' || theme === next) return
+    theme = next
+    updateSettings({ mazeTheme: theme })
+    refreshHud()
+    if (deps.skin) {
+      dirty = true
+      requestPaint()
+      return
+    }
+    skin = paletteSkin(theme)
+    rebuildBoard()
+    requestPaint()
+    void loadTileSkin(theme).then((s) => {
+      if (phase === 'destroyed') return
+      skin = s
+      rebuildBoard()
+      requestPaint()
+    })
   }
 
   /** tilemap 奇偶语义 → 瓦片类型（墙 / 出口 / 起点 / 地板） */
@@ -157,7 +210,7 @@ export function mountMaze(
     if (phase === 'destroyed') return
     const cssW = canvas.width / dpr
     const cssH = canvas.height / dpr
-    ctx.fillStyle = THEME_PALETTES[cfg.theme].bg
+    ctx.fillStyle = THEME_PALETTES[theme].bg
     ctx.fillRect(0, 0, cssW, cssH)
     ctx.drawImage(board, view.ox, view.oy)
     // 角色：中心对齐 cell 瓦片，尺寸略放大（俯视小人稍压墙缘，视觉正常）
@@ -183,7 +236,7 @@ export function mountMaze(
       elapsedMs: 0, // 平台 timer 权威覆写（core/types 约定，与 keygame/jigsaw 同口径）
       mistakes: hero.bumps,
       stars: calcMazeStars(hero.steps, maze.solutionLength),
-      meta: { steps: hero.steps, size: cfg.size, theme: cfg.theme, solutionLength: maze.solutionLength },
+      meta: { steps: hero.steps, size: cfg.size, theme, solutionLength: maze.solutionLength },
     })
   }
 
@@ -227,7 +280,7 @@ export function mountMaze(
 
   // PNG 皮肤异步升级（deps 注入皮肤时跳过；失败保持色板兜底，§12.3 可靠性分支）
   if (!deps.skin) {
-    void loadTileSkin(cfg.theme).then((s) => {
+    void loadTileSkin(theme).then((s) => {
       if (phase === 'destroyed') return
       skin = s
       rebuildBoard()

@@ -17,7 +17,7 @@ export {
   createMazeLevel,
   sizeForLevel,
   branchingForLevel,
-  themeForLevel,
+  DEFAULT_MAZE_THEME,
   TOTAL_MAZE_LEVELS,
   type MazeLevelConfig,
   type MazeTheme,

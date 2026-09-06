@@ -47,7 +47,7 @@ describe('GameContainer + stub 插件全链路（M1 验收：可玩可结算）'
 
     // 存档写入：解锁第 2 关 + 星级记录
     expect(getUnlockedCount('stub')).toBe(2)
-    expect(getLevelRecord('stub', 1)?.stars).toBe(3)
+    expect(getLevelRecord('stub', '1')?.stars).toBe(3)
 
     // 结算面板渲染
     const settle = wrapper.find('[data-role="settle"]')

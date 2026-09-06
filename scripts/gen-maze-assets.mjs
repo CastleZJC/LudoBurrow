@@ -1,10 +1,12 @@
 // 迷宫瓦片与角色资产生成器（开发计划 M4.2/M4.3，技术架构 §12.3/§12.4）
 // 确定性程序化生成（零第三方依赖，M3.9 同口径：离线环境无外网 CC0 素材渠道）：
 //   用法：node scripts/gen-maze-assets.mjs
-//   产出：public/assets/tiles/<castle|garden>/{wall,floor,goal,start}.png（32×32）
-//         public/assets/sprites/hero.png（96×128：4 行方向 down/left/right/up × 3 列帧 stand/walk1/walk2，帧 32×32）
+//   产出：public/assets/tiles/<castle|garden>/{wall,floor,goal,start}.png（1024×1024，v1.0 验收返工高清化）
+//         public/assets/sprites/hero.png（768×1024：4 行方向 down/left/right/up × 3 列帧 stand/walk1/walk2，帧 256×256）
 //         public/assets/tiles/CREDITS.md（许可标注，同时覆盖 sprites/）
 // 运行时绘制仅 drawImage（不读像素，无 canvas taint）；皮肤加载失败由 theme.ts 色板兜底。
+// 高清化口径：像素画逻辑坐标系 T=32 不变（细节坐标零改动），Px 以整数倍率放大——
+//   瓦片 ×32（→ 1024²）、hero 帧 ×8（→ 256²）：硬边无插值，高分辨率源缩小绘制更锐利。
 
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -13,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// ---- PNG 编码（RGBA8 + filter 0 + zlib；与 gen-gallery.mjs 同实现口径） ----
+// ---- PNG 编码（RGBA8 + filter 0 + zlib deflate，手写 chunk/CRC32） ----
 const CRC_TABLE = new Int32Array(256)
 for (let n = 0; n < 256; n++) {
   let c = n
@@ -53,18 +55,26 @@ function encodePng(width, height, rgba) {
   ])
 }
 
-// ---- 像素画布（硬边 rect，像素风） ----
+// ---- 像素画布（硬边 rect，像素风；逻辑坐标 × 整数倍率放大，验收返工高清化） ----
 const T = 32
+const TILE_SCALE = 32 // 瓦片：32×32 逻辑 → 1024×1024 物理
+const HERO_SCALE = 8  // hero 帧：32×32 逻辑 → 256×256 物理（条带 768×1024）
 class Px {
-  constructor(size = T) {
+  constructor(size = T, scale = TILE_SCALE) {
     this.size = size
-    this.data = new Uint8Array(size * size * 4)
+    this.scale = scale
+    this.dim = size * scale
+    this.data = new Uint8Array(this.dim * this.dim * 4)
   }
   rect(x, y, w, h, hex, alpha = 1) {
     const [r, g, b] = hexRgb(hex)
-    for (let yy = Math.max(0, y); yy < Math.min(this.size, y + h); yy++) {
-      for (let xx = Math.max(0, x); xx < Math.min(this.size, x + w); xx++) {
-        const i = (yy * this.size + xx) * 4
+    const x0 = Math.max(0, x * this.scale)
+    const y0 = Math.max(0, y * this.scale)
+    const x1 = Math.min(this.dim, (x + w) * this.scale)
+    const y1 = Math.min(this.dim, (y + h) * this.scale)
+    for (let yy = y0; yy < y1; yy++) {
+      for (let xx = x0; xx < x1; xx++) {
+        const i = (yy * this.dim + xx) * 4
         const prev = this.data[i + 3] / 255
         this.data[i] = Math.round(r * alpha + this.data[i] * (1 - alpha) * prev)
         this.data[i + 1] = Math.round(g * alpha + this.data[i + 1] * (1 - alpha) * prev)
@@ -73,7 +83,7 @@ class Px {
       }
     }
   }
-  /** 描边圆环（像素近似：四段弧块；cx/cy/r 以像素计） */
+  /** 描边圆环（像素近似：四段弧块；cx/cy/r 以逻辑像素计） */
   ring(cx, cy, r, hex) {
     for (let a = 0; a < 64; a++) {
       const rad = (a / 64) * Math.PI * 2
@@ -83,7 +93,7 @@ class Px {
     }
   }
   png() {
-    return encodePng(this.size, this.size, this.data)
+    return encodePng(this.dim, this.dim, this.data)
   }
 }
 function hexRgb(hex) {
@@ -179,7 +189,7 @@ const SHOE = '#3a2f2a'
 const EYE = '#26221f'
 
 function heroFrame(facing, frame) {
-  const px = new Px(T)
+  const px = new Px(T, HERO_SCALE)
   // 帽 + 脸
   px.rect(10, 3, 12, 4, HAT)
   px.rect(9, 6, 14, 2, HAT) // 帽檐
@@ -250,24 +260,25 @@ for (const [themeId, tiles] of Object.entries(THEMES)) {
   const dir = join(ROOT, 'public', 'assets', 'tiles', themeId)
   mkdirSync(dir, { recursive: true })
   for (const kind of ['wall', 'floor', 'goal', 'start']) {
-    const px = new Px(T)
+    const px = new Px(T, TILE_SCALE)
     tiles[kind](px)
     write(join(dir, `${kind}.png`), px.png())
   }
 }
 
-// sprite 条带：4 行方向 × 3 列帧（96×128，行序 down/left/right/up 与 DIRS 渲染序一致）
+// sprite 条带：4 行方向 × 3 列帧（768×1024，帧 256²；行序 down/left/right/up 与 FACING_ROW 渲染序一致）
 const FACINGS = ['down', 'left', 'right', 'up']
-const STRIP_W = T * 3
-const STRIP_H = T * 4
+const FRAME = T * HERO_SCALE
+const STRIP_W = FRAME * 3
+const STRIP_H = FRAME * 4
 const strip = new Uint8Array(STRIP_W * STRIP_H * 4)
 FACINGS.forEach((facing, row) => {
   for (let col = 0; col < 3; col++) {
     const frame = heroFrame(facing, col)
-    for (let y = 0; y < T; y++) {
-      const src = y * T * 4
-      const dst = (row * T + y) * STRIP_W * 4 + col * T * 4
-      strip.set(frame.data.subarray(src, src + T * 4), dst)
+    for (let y = 0; y < FRAME; y++) {
+      const src = y * FRAME * 4
+      const dst = (row * FRAME + y) * STRIP_W * 4 + col * FRAME * 4
+      strip.set(frame.data.subarray(src, src + FRAME * 4), dst)
     }
   }
 })
@@ -283,8 +294,8 @@ writeFileSync(
 全部素材由本项目脚本 \`scripts/gen-maze-assets.mjs\` 确定性程序化生成（像素图案硬边绘制，无随机维度），
 非第三方素材，无版权与许可限制，随本项目 LICENSE（见仓库根目录）一同发布：
 
-- \`<castle|garden>/{wall,floor,goal,start}.png\`：32×32 瓦片（城堡=石砖/石板，花园=树篱/草地）
-- \`../sprites/hero.png\`：96×128 像素小人条带（4 行方向 down/left/right/up × 3 列帧 stand/walk1/walk2，帧 32×32）
+- \`<castle|garden>/{wall,floor,goal,start}.png\`：1024×1024 瓦片（v1.0 验收返工高清化：32×32 像素画逻辑网格 ×32 整数放大，硬边无插值；城堡=石砖/石板，花园=树篱/草地）
+- \`../sprites/hero.png\`：768×1024 像素小人条带（4 行方向 down/left/right/up × 3 列帧 stand/walk1/walk2，帧 256×256 = 32×32 逻辑 ×8）
 - 重新生成：\`node scripts/gen-maze-assets.mjs\`（输出恒定，可复现）
 `,
 )
