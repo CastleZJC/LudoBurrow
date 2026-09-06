@@ -358,7 +358,7 @@ describe('放弃按钮（§11.3 四阶段演示）', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('演示完毕后 onAbandon 且按钮禁用、后续交互锁定', async () => {
+  it('演示完毕触发 onComplete 结算（恒 1 星 + meta.abandoned），不再 onAbandon 直退', async () => {
     const { inst, h } = await mountReady()
     // 布置混合盘面：块 0 错放 (2,2)、块 1 正确、一块进暂存
     let from = h.currentCenter()
@@ -372,15 +372,25 @@ describe('放弃按钮（§11.3 四阶段演示）', () => {
     pointer(h.canvas, 'pointerup', h.stagingCenter().x, h.stagingCenter().y) // 块 2 暂存
 
     click(h.container.querySelector('[data-jg="abandon"]')!)
-    expect(h.abandoned).toHaveLength(0) // 演示未完不结算
+    expect(h.results).toHaveLength(0) // 演示未完不结算
     const helpBtn = h.container.querySelector('[data-jg="help"]') as HTMLButtonElement
     const abandonBtn = h.container.querySelector('[data-jg="abandon"]') as HTMLButtonElement
     expect(helpBtn.disabled).toBe(true)
-    // 9 步演示：每步 DEMO_STEP_MS+40 = 1040ms（v1.0 验收返工 240→1000）
+    // 9 步演示：每步 DEMO_STEP_MS+40 = 1040ms
     vi.advanceTimersByTime(1040 * 9 + 100)
-    expect(h.abandoned).toHaveLength(1)
+    // 复用正常完成结算链（GameContainer → SettlePanel：真实用时/重玩/下一关），不再 onAbandon 直退
+    expect(h.abandoned).toHaveLength(0)
+    expect(h.results).toHaveLength(1)
+    expect(h.results[0]).toMatchObject({
+      gameId: 'jigsaw',
+      n: 1,
+      elapsedMs: 0, // 平台计时器权威覆写为真实用时（含演示时间，用户决策）
+      mistakes: 0,
+      stars: 1, // 放弃恒 1 星（非独立完成）；mergeLevelRecord 取高不覆盖历史
+      meta: { abandoned: true, helps: 0 },
+    })
     expect(abandonBtn.disabled).toBe(true)
-    // 放弃后交互锁定：指针事件无效
+    // 结算后交互锁定：指针事件无效
     const before = h.progress.length
     pointer(h.canvas, 'pointerdown', h.currentCenter().x, h.currentCenter().y)
     pointer(h.canvas, 'pointerup', h.slotCenter(0, 0).x, h.slotCenter(0, 0).y)

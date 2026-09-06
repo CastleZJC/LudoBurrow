@@ -33,7 +33,7 @@ export interface JigsawMountDeps {
   deck?: number[]
 }
 
-type Phase = 'loading' | 'idle' | 'running' | 'paused' | 'demo' | 'done' | 'abandoned' | 'destroyed'
+type Phase = 'loading' | 'idle' | 'running' | 'paused' | 'demo' | 'done' | 'destroyed'
 
 interface Flight {
   index: number
@@ -514,9 +514,19 @@ export function mountJigsaw(
 
     const playStep = (k: number): void => {
       if (k >= steps.length) {
+        // A3：演示播完复用正常完成结算链（onComplete → finishWithResult → SettlePanel，反馈 5）。
+        // 恒 1 星（非独立完成）；meta.abandoned 仅数据标记；elapsedMs 由平台计时器权威覆写（含演示时间，用户决策）；
+        // mergeLevelRecord 星级取高不覆盖历史，unlockedCount 前进 n+1 = 下一关照常解锁（用户决策）。
         board!.settle()
-        phase = 'abandoned'
-        hooks.onAbandon()
+        phase = 'done'
+        hooks.onComplete({
+          gameId: 'jigsaw',
+          n: cfg.n,
+          elapsedMs: 0,
+          mistakes: board!.helps,
+          stars: 1,
+          meta: { abandoned: true, helps: board!.helps },
+        })
         return
       }
       const step = steps[k]
