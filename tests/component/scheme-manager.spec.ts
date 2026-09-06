@@ -312,8 +312,8 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
     const input = pickBatchInput(wrapper)
     Object.defineProperty(input, 'files', {
       value: [
-        new File([new Uint8Array([1, 2, 3])], '汪汪队1.jpeg', { type: 'image/jpeg' }),
-        new File([new Uint8Array([4, 5, 6])], '奥特曼1.jpeg', { type: 'image/jpeg' }),
+        new File([new Uint8Array([1, 2, 3])], 'sample-photo-1.jpeg', { type: 'image/jpeg' }),
+        new File([new Uint8Array([4, 5, 6])], 'sample-photo-2.jpeg', { type: 'image/jpeg' }),
       ],
       configurable: true,
     })
@@ -326,10 +326,10 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
       expect(s.source.kind).toBe('custom')
     }
     // 第 1 张档 1（导入序轮转）→ 5×3；第 2 张档 2 → 6×3（同图不同档 = 难度阶梯的批量入口）
-    expect(all[0]).toMatchObject({ name: '汪汪队1' })
+    expect(all[0]).toMatchObject({ name: 'sample-photo-1' })
     expect(all[0]!.params.rows).toBe(5)
     expect(all[0]!.params.cols).toBe(3)
-    expect(all[1]).toMatchObject({ name: '奥特曼1' })
+    expect(all[1]).toMatchObject({ name: 'sample-photo-2' })
     expect(all[1]!.params.rows).toBe(6)
     expect(all[1]!.params.cols).toBe(3)
     expect(wrapper.find('[data-role="batch-feedback"]').text()).toContain('2')
