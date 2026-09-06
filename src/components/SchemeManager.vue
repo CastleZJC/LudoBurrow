@@ -20,8 +20,19 @@ import {
   topicOfSource,
 } from '@/games/jigsaw/schemes'
 import { complexityForPieces, pickBestSpec } from '@/games/jigsaw/optimize'
-import { levelSeed } from '@/engines/rng'
-import { GALLERY, GALLERY_TOPICS, downscaleToAnalysis, loadSourceImage } from '@/games/jigsaw/gallery'
+import { createRng, levelSeed } from '@/engines/rng'
+import {
+  buildAxisLines,
+  buildTabSpecs,
+  sampleEdgePoints,
+} from '@/engines/jigsaw-cutter'
+import {
+  GALLERY,
+  GALLERY_TOPICS,
+  downscaleToAnalysis,
+  loadSourceImage,
+  type ComplexityLevel,
+} from '@/games/jigsaw/gallery'
 import { THUMBS } from '@/games/jigsaw/thumbs'
 
 const { t } = useI18n()
@@ -149,11 +160,12 @@ async function onUpload(event: Event): Promise<void> {
   }
 }
 
-// ---- 实时预览：底图（缩略 data URI / 上传 objectURL）+ 网格线 + 锯齿深度示意 ----
+// ---- 实时预览：底图（缩略 data URI / 上传 objectURL）+ 真实锯齿切割线（引擎同源采样，验收四轮六/七）----
 const previewCanvas = ref<HTMLCanvasElement | null>(null)
 let previewToken = 0
 
-watch([previewSrc, rows, cols, tabDepth, panelOpen, appliedSuggestion], () => {
+// 验收四轮六：seed 纳入重绘依赖 —— 换花样即时可见（此前换种子无任何可见反馈，被误报「点不了」）
+watch([previewSrc, rows, cols, tabDepth, seed, panelOpen, appliedSuggestion], () => {
   // 手动改网格数使建议权重长度失效 → 回退均匀示意（防入档长度不符）
   if (
     appliedSuggestion.value &&
@@ -182,17 +194,6 @@ function redrawPreview(): void {
   }
 }
 
-/** 线位置：恒均匀等分（验收返工二轮：切块全均匀，建议只影响块数，权重仅入档兼容历史方案） */
-function linePositions(count: number, size: number): number[] {
-  return Array.from({ length: count + 1 }, (_, i) => Math.round((i * size) / count))
-}
-
-function segsOf(lines: number[]): number[] {
-  const out: number[] = []
-  for (let i = 1; i < lines.length; i += 1) out.push(lines[i]! - lines[i - 1]!)
-  return out
-}
-
 function paintPreview(img: HTMLImageElement | null): void {
   const canvas = previewCanvas.value
   const ctx = canvas?.getContext('2d')
@@ -216,31 +217,40 @@ function paintPreview(img: HTMLImageElement | null): void {
       }
     }
   }
-  // 切割线示意（恒均匀直线，与引擎 buildAxisLines 同式；锯齿深度按最深块示意）
+  // 真实锯齿切割线（引擎同源采样：buildTabSpecs + sampleEdgePoints；
+  // 验收四轮六/七：seed/tabDepth/rows/cols 全联动所见即所得，换花样/调深度即时可见）
+  const imgW = img && img.width > 0 ? img.width : rect.w
+  const imgH = img && img.height > 0 ? img.height : rect.h
+  const kx = rect.w / imgW
+  const ky = rect.h / imgH
+  const kMin = Math.min(kx, ky) // 块形等比 → 锯齿偏移取两轴较小缩放，形态不失真
+  const rowLines = buildAxisLines(imgH, rows.value)
+  const colLines = buildAxisLines(imgW, cols.value)
+  // 与 instance.ts buildPieceBitmaps 同式：tabPx = tabDepth × (min 边 / max(rows, cols))
+  const tabPx = (tabDepth.value * Math.min(imgW, imgH)) / Math.max(rows.value, cols.value)
+  const rng = createRng(seed.value)
   ctx.strokeStyle = 'rgba(58,110,165,0.85)'
   ctx.lineWidth = 1.5
-  const rowLines = linePositions(rows.value, rect.h)
-  const colLines = linePositions(cols.value, rect.w)
-  const minSeg = Math.min(...segsOf(rowLines), ...segsOf(colLines))
-  const tabR = Math.min((tabDepth.value * minSeg) / 2, 10)
-  for (let i = 1; i < rows.value; i++) {
-    const y = rect.y + rowLines[i]!
+  for (const spec of buildTabSpecs('h', rowLines, colLines, rng, tabDepth.value)) {
+    const pts = sampleEdgePoints(spec, imgW, 'before', tabPx)
     ctx.beginPath()
-    ctx.moveTo(rect.x, y)
-    ctx.lineTo(rect.x + rect.w, y)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(rect.x + rect.w / 2, y, tabR, Math.PI, 0, i % 2 === 0)
+    pts.forEach((p, i) => {
+      const x = rect.x + p.along * kx
+      const y = rect.y + spec.at * ky + p.offset * kMin
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
     ctx.stroke()
   }
-  for (let j = 1; j < cols.value; j++) {
-    const x = rect.x + colLines[j]!
+  for (const spec of buildTabSpecs('v', colLines, rowLines, rng, tabDepth.value)) {
+    const pts = sampleEdgePoints(spec, imgH, 'before', tabPx)
     ctx.beginPath()
-    ctx.moveTo(x, rect.y)
-    ctx.lineTo(x, rect.y + rect.h)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(x, rect.y + rect.h / 2, tabR, Math.PI / 2, -Math.PI / 2, j % 2 === 0)
+    pts.forEach((p, i) => {
+      const y = rect.y + p.along * ky
+      const x = rect.x + spec.at * kx + p.offset * kMin
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
     ctx.stroke()
   }
   ctx.strokeStyle = '#3a6ea5'
@@ -401,6 +411,7 @@ async function onAiSuggest(): Promise<void> {
 
 // ---- 自动最优（验收返工「每图自动选最优切块」的人工入口）----
 // 保持当前块数档位（难度不变），按图内容选最优行列分配；仅回填表单，用户仍可继续手调/保存。
+// 验收四轮七：锯齿方案一并更新（深度推荐带随机 + 花样重摇），不再只调切块数量。
 async function onAutoBest(): Promise<void> {
   if (autoBesting.value) return
   autoBesting.value = true
@@ -410,6 +421,8 @@ async function onAutoBest(): Promise<void> {
     const best = pickBestSpec(image, complexityForPieces(rows.value * cols.value))
     rows.value = best.spec.rows
     cols.value = best.spec.cols
+    tabDepth.value = Math.round((0.1 + Math.random() * 0.1) * 100) / 100 // 0.10-0.20 推荐带（与滑杆步长对齐）
+    seed.value = Math.floor(Math.random() * 0x1_0000_0000)
     // 规格变了：AI 建议权重长度不再匹配，显式失效（watch 亦会兜底）
     appliedSuggestion.value = null
     saveConfirm.value = false
@@ -428,8 +441,8 @@ onBeforeUnmount(() => {
 })
 
 // ---- 批量导入（本地图片 → 解析像素 → 按最优切块直接建档为可玩方案）----
-// 每张：入素材仓库 → 真实像素分析 → pickBestSpec（c2 档 12-20 块）→ 建方案（确定性 seed）；
-// 单张失败跳过不阻断整批；建完即出现在 custom 专题可开玩。
+// 每张：入素材仓库 → 真实像素分析 → pickBestSpec（难度档随导入序轮转 1/2/3，验收四轮五：整批不再同规格）
+// → 建方案（确定性 seed）；单张失败跳过不阻断整批；建完即出现在 custom 专题可开玩。
 const batchImporting = ref(false)
 const batchFeedback = ref('')
 const batchInput = ref<HTMLInputElement | null>(null)
@@ -449,7 +462,10 @@ async function onBatchImport(event: Event): Promise<void> {
   const adapter = getEnvAdapter()
   let ok = 0
   let failed = 0
+  let idx = 0
   for (const file of files) {
+    const level = ((idx % 3) + 1) as ComplexityLevel // 轮转难度档（成败都推进，序号即多样性来源）
+    idx += 1
     try {
       const ref = await adapter.assetRepo.saveImage(file, {
         name: file.name,
@@ -459,7 +475,7 @@ async function onBatchImport(event: Event): Promise<void> {
       })
       const blob = await adapter.assetRepo.loadImage({ id: ref.id })
       const img = await loadSourceImage(await blobToDataUrl(blob))
-      const best = pickBestSpec(downscaleToAnalysis(img), 2)
+      const best = pickBestSpec(downscaleToAnalysis(img), level)
       createScheme(file.name.replace(/\.[^.]+$/, '') || file.name, { kind: 'custom', assetId: ref.id }, {
         rows: best.spec.rows,
         cols: best.spec.cols,

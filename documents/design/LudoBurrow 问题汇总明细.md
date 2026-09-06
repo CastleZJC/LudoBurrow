@@ -15,6 +15,7 @@
 > | V1.5 | 2026-09-06 10:05:00 | 开发累积 | v1.0 验收返工期新增 1 条：P4-04 setup.ts 全局 RAF mock 在 happy-dom 下未生效（__flushRaf 空转，用例内局部 stub 规避） | castle |
 > | V1.6 | 2026-09-06 11:15:00 | 开发累积 | v1.0 验收返工期（拼图优选与本地素材实测）新增 5 条：P4-05 happy-dom 大 Blob/IDB 模拟层性能 / P4-06 模块级缓存跨 describe 泄漏 / P6-03 PowerShell 整数除法静默取整 / P6-04 PS5.1 UTF8 写入带 BOM / P6-05 SearchReplace「兑底」伪影 | castle |
 > | V1.7 | 2026-09-06 14:20:00 | 开发累积 | v1.1.0 验收返工二轮新增 2 条：P4-07 均匀化后「对比本地」类用例需构造确定性分差 / P6-06 生成脚本模板字符串内反引号必须转义；P6-05 补第三批拦截记录 | castle |
+> | V1.8 | 2026-09-06 16:40:00 | 开发累积 | v1.1.0 验收返工三轮（第四批反馈，拼图九项）新增 1 条：P4-08 优选规格断言不能凭记忆推导（候选序稳定排序 + round 整数化均匀度参与纯色图评分 + 档窗口约束，须实跑校准）；P6-01 补无参调用 Mandatory 参数脚本挂起、P6-05 补第四批拦截 2 次 | castle |
 >
 > **适用范围**：LudoBurrow 开发全周期踩坑记录（AI 会话与人工开发通用）
 
@@ -170,6 +171,16 @@
 
 **参考**：`tests/unit/ai-suggest.spec.ts`（stripeHalfImage）、验收返工二轮（切块全均匀）。
 
+### P4-08 优选规格断言不能凭记忆推导：候选序 + 整数化均匀度 + 档窗口约束须实跑校准
+
+**现象**：六档窗口改造后，凭直觉预写的择优断言集中翻车 4 处——`candidateSpecs(2)[0]` 期望 3×4 实为 2×6；竖图 32×64 c2 期望 6×3 实为 5×2；横图 64×32 c2 期望 3×6 实为 2×5；warm 预热 space-03（档 3）期望 5×3 实为 6×3。
+
+**根因**：三个耦合点凭记忆推不准——①候选序 = 生成序（rows 外层）经「|块数−target|」稳定排序，同偏差保持生成序（2×6 先于 3×4），非直觉的「更方在前」；②`buildAxisLines` 用 Math.round 取整，非整除切割的块面积不均 → uniformity < 1 参与评分（纯色图 quality 只剩均匀度项，与块形惩罚折算竞争）；③正方形块候选（rows = 2×cols）可能根本不在档窗口内（c2 [10,14] 无：6×3=18 超窗；c3 [15,20] 含 18 → 直接胜出）。
+
+**解决**：择优类断言一律实跑校准——先跑 `pickBestSpec` 看 ranked 再写期望值；窗口/候选数断言（如「c2 候选 8 个」）与择优断言分层写，前者锁窗口语义、后者锁内容偏好；跨档断言（同图不同档）注释写明「档内是否有正方形候选」判据。
+
+**参考**：`tests/unit/jigsaw-optimize.spec.ts`（六档断言校准）、`tests/component/scheme-manager.spec.ts`（批量导入 4×2/5×2）；验收返工三轮（六档互斥窗口）。
+
 ---
 
 ## 5. 资产与图片
@@ -190,7 +201,7 @@
 
 ### P6-01 跨工具 PowerShell 命令引号剥离与一元 -not 优先级陷阱
 
-**现象**：两类失败——①经 Bash 工具执行 powershell 内联命令，含嵌套引号 / `$_` / `$var =` 赋值的复杂命令被剥离引号后报「字符串缺少终止符」「无法将"="项识别为 cmdlet」；②M6.4 冒烟判定 `-not $html -match '<script...'` 结果与预期反转（误报「产物含外链 script」），node fetch 对比证实服务器返回与本地 dist 完全一致、宽松正则双 0 命中，产物干净。
+**现象**：两类失败——①经 Bash 工具执行 powershell 内联命令，含嵌套引号 / `$_` / `$var =` 赋值的复杂命令被剥离引号后报「字符串缺少终止符」「无法将"="项识别为 cmdlet」；②M6.4 冒烟判定 `-not $html -match '<script...'` 结果与预期反转（误报「产物含外链 script」），node fetch 对比证实服务器返回与本地 dist 完全一致、宽松正则双 0 命中，产物干净。③验收返工三轮：无参调用带 `[Parameter(Mandatory)]` 的 check-color.ps1 挂起（等待 stdin 输入而非报错）；嵌套 `powershell -Command "…"` 内层单引号/中文路径静默失效（Select-String 空输出）。
 
 **根因**：①Bash → powershell.exe 的跨工具引号转义边界不透传嵌套引号与 `$` 变量；②PowerShell 一元运算符 `-not` 优先于二元 `-match` 绑定，表达式实际解析为 `(-not $html) -match '...'`——先对非空字符串取反得 `$false`，再与模式匹配恒 `$false`，判定逻辑被短路反转。
 
@@ -230,13 +241,13 @@
 
 ### P6-05 SearchReplace 输出「兑底」伪影：替换含「兜底」文本后需 grep 验证
 
-**现象**：多次对含「兜底」的原文执行 SearchReplace 后，new_text 中「兜底」偶发变成「兑底」（如 gen-maze-assets.mjs 注释、SchemeManager onAutoBest 注释）；本会话修错时 new_text 又连带写错一次（「兑底。→ 兜底」补箭头未换字）。验收返工二轮再拦 3 次（jigsaw instance.ts onPointerDown 注释、maze-theme.spec 用例标题、技术架构文档表格行/开发计划返工行），高频复发。
+**现象**：多次对含「兜底」的原文执行 SearchReplace 后，new_text 中「兜底」偶发变成「兑底」（如 gen-maze-assets.mjs 注释、SchemeManager onAutoBest 注释）；本会话修错时 new_text 又连带写错一次（「兑底。→ 兜底」补箭头未换字）。验收返工二轮再拦 3 次（jigsaw instance.ts onPointerDown 注释、maze-theme.spec 用例标题、技术架构文档表格行/开发计划返工行），验收返工三轮又拦 2 次（schemes.ts builtinGrid 占位注释、SchemeManager onAutoBest 重写注释），高频复发。
 
 **根因**：工具链编辑含高频术语的长文本时的偶发字符替换伪影，无规律可预测；人肉复查 new_text 也难一眼识别。
 
 **解决**：纪律——任何替换后若文本含「兜底/退路/回落」类术语，立即 `grep_code '兑底'` 全仓验证（已多次拦截）；提交前全仓扫描一次作为门禁步骤。
 
-**参考**：v1.0 验收返工多次实证（fb-jig-scheme / fb-maze-assets / gen-maze-assets 修复）；验收返工二轮 3 次拦截（含新增文本也中招，写入与替换同样需验）。
+**参考**：v1.0 验收返工多次实证（fb-jig-scheme / fb-maze-assets / gen-maze-assets 修复）；验收返工二轮 3 次拦截（含新增文本也中招，写入与替换同样需验）；验收返工三轮 2 次拦截。
 
 ### P6-06 生成脚本模板字符串内反引号必须 \` 转义，裸写即截断报错
 

@@ -29,6 +29,8 @@ import type { JigsawLevelConfig } from './level'
 export interface JigsawMountDeps {
   analysisImage?: ImageDataLike
   sourceImage?: CanvasImageSource & { width: number; height: number }
+  /** 剩余队列推出顺序（测试注入；缺省 = seed 派生确定性洗牌，验收四轮一） */
+  deck?: number[]
 }
 
 type Phase = 'loading' | 'idle' | 'running' | 'paused' | 'demo' | 'done' | 'abandoned' | 'destroyed'
@@ -338,7 +340,10 @@ export function mountJigsaw(
     }
 
     // 飞行块（插值位置；尺寸取终点块位图矩形 × 轻微拋物缩放）
-    flights = flights.filter((f) => ts - f.start < f.dur)
+    // 验收四轮八：飞行到期的帧移除后盘面静态位尚未绘过 → 置 dirty 补一帧，避免块「消失到下次点击」
+    const aliveFlights = flights.filter((f) => ts - f.start < f.dur)
+    if (aliveFlights.length !== flights.length) dirty = true
+    flights = aliveFlights
     for (const f of flights) {
       const t = Math.min(1, (ts - f.start) / f.dur)
       const ease = t * (2 - t) // easeOutQuad
@@ -490,7 +495,7 @@ export function mountJigsaw(
     if (board.isComplete()) finish()
   }
 
-  // ---- 放弃演示（§11.3 四阶段）----
+  // ---- 放弃演示（§11.3 四阶段；验收四轮九：逐步真实落子，不再「先铺满再逐块覆盖」）----
   function onAbandonClick(): void {
     if (phase !== 'running' || !board || !plan) return
     phase = 'demo'
@@ -507,18 +512,18 @@ export function mountJigsaw(
         return
       }
       const step = steps[k]
-      let from: Rect
-      if (step.fromSlot) {
-        from = slotRect(content, plan!, step.fromSlot.row, step.fromSlot.col)
-      } else if (step.fromZone === 'current') {
-        from = currentHome()
-      } else if (step.fromZone === 'staging') {
-        from = stagingSlotRect(step.pieceIndex)
-      } else {
-        from = remainingSlotRect(step.pieceIndex)
+      // 落子前快照：applyAbandonStep 会改真实盘面（含让位块移入暂存）
+      const from = pieceHomeRect(step.pieceIndex)
+      const displacedFrom = step.displacedIndex !== undefined ? pieceHomeRect(step.displacedIndex) : null
+      board!.applyAbandonStep(step)
+      if (step.displacedIndex !== undefined && displacedFrom) {
+        pushFlight(step.displacedIndex, displacedFrom, pieceHomeRect(step.displacedIndex), DISPLACE_MS)
       }
       const to = slotRect(content, plan!, step.toSlot.row, step.toSlot.col)
       pushFlight(step.pieceIndex, from, to, DEMO_STEP_MS)
+      // 演示中不走 afterPlace（避免中途 allPlaced 触发结算/错位闪烁）；放弃语义恒 onAbandon
+      refreshHud()
+      reportProgress()
       const timer = setTimeout(() => playStep(k + 1), DEMO_STEP_MS + 40)
       timers.push(timer)
     }
@@ -696,7 +701,7 @@ export function mountJigsaw(
         : createCutPlan(analysis, cutBase, cfg.seed)
       source = src
       hiScale = src.width / plan.width
-      board = new JigsawBoard(plan)
+      board = new JigsawBoard(plan, deps.deck)
       buildPieceBitmaps()
       board.pushNext()
       refreshHud()

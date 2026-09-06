@@ -35,11 +35,15 @@ describe('内置方案目录（每图一个，确定性派生）', () => {
     }
   })
 
-  it('占位网格按复杂度分档（1→3×3 / 2→4×4 / 3→5×5），seed 确定性派生', () => {
+  it('占位网格按六档复杂度分档（1→3×3 / 2→3×4 / 3→4×4 / 4→5×5 / 5→5×6 / 6→6×6），seed 确定性派生', () => {
+    const table: Record<number, { rows: number; cols: number }> = {
+      1: { rows: 3, cols: 3 }, 2: { rows: 3, cols: 4 }, 3: { rows: 4, cols: 4 },
+      4: { rows: 5, cols: 5 }, 5: { rows: 5, cols: 6 }, 6: { rows: 6, cols: 6 },
+    }
     for (const scheme of builtinSchemes()) {
       const complexity = GALLERY.find((e) => `${BUILTIN_SCHEME_PREFIX}${e.id}` === scheme.id)!.complexity
-      expect(scheme.params.rows).toBe(complexity + 2)
-      expect(scheme.params.cols).toBe(complexity + 2)
+      expect(scheme.params.rows).toBe(table[complexity]!.rows)
+      expect(scheme.params.cols).toBe(table[complexity]!.cols)
       expect(scheme.params.seed).toBe(levelSeed(`jigsaw-builtin:${scheme.name}`, 1))
     }
   })
@@ -57,10 +61,10 @@ describe('内置方案规格自动优选联动（验收返工：每图自动选�
     resetSpecCache()
   })
 
-  it('缓存未预热：回落复杂度占位网格（3/4/5 阶梯保持）', () => {
-    const s = builtinSchemes().find((x) => x.id === 'bs-animals-05')! // 复杂度 3
+  it('缓存未预热：回落复杂度占位网格（六档阶梯保持）', () => {
+    const s = builtinSchemes().find((x) => x.id === 'bs-animals-05')! // 复杂度 5
     expect(s.params.rows).toBe(5)
-    expect(s.params.cols).toBe(5)
+    expect(s.params.cols).toBe(6)
   })
 
   it('预热后：内置方案 rows/cols 跟随最优规格，seed/锯齿口径不变', () => {
@@ -84,9 +88,9 @@ describe('内置方案规格自动优选联动（验收返工：每图自动选�
   it('单图预热不影响其他图（各自独立回落，难度档不串）', () => {
     rememberSpec('animals-01', { rows: 6, cols: 3 })
     expect(createTopicLevel(1, 'animals').rows).toBe(6)
-    // animals-02 同为复杂度 1 但未预热 → 占位 3×3
+    // animals-02 复杂度 2 但未预热 → 占位 3×4
     expect(createTopicLevel(2, 'animals').rows).toBe(3)
-    expect(createTopicLevel(2, 'animals').cols).toBe(3)
+    expect(createTopicLevel(2, 'animals').cols).toBe(4)
   })
 })
 

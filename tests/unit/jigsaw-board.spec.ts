@@ -1,7 +1,10 @@
 // 拼图盘面纯逻辑单测（测试规范 §3.3 必测：区域状态机 / 吸附落子与让位 / 三区校验 / 帮助与放弃语义）
 // 手工构造最小 CutPlan（board 只消费 rows/cols/pieces 网格坐标，与切块算法解耦）
+// 顺序推出注入：验收四轮一后生产缺省 = seed 洗牌；语义用例注入顺序 deck 保持确定性，
+// 洗牌行为由独立 describe 验证（shuffleDeck）。
 import { describe, it, expect } from 'vitest'
-import { JigsawBoard } from '@/games/jigsaw/board'
+import { JigsawBoard, shuffleDeck } from '@/games/jigsaw/board'
+import { createRng } from '@/engines/rng'
 import type { CutPlan, PieceDef } from '@/engines/jigsaw-cutter/types'
 
 function makePlan(rows: number, cols: number): CutPlan {
@@ -40,9 +43,14 @@ function makePlan(rows: number, cols: number): CutPlan {
   }
 }
 
+/** 顺序推出的盘面（deck = [0..n-1]）：保持区域状态机用例的确定性 */
+function orderedBoard(rows: number, cols: number): JigsawBoard {
+  return new JigsawBoard(makePlan(rows, cols), Array.from({ length: rows * cols }, (_, i) => i))
+}
+
 describe('初始化与查询', () => {
-  it('新盘面：全部块 remaining、current 空、三区非空', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+  it('新盘面（顺序注入）：全部块 remaining、current 空、三区非空', () => {
+    const board = orderedBoard(3, 3)
     expect(board.remainingOrder).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
     expect(board.currentIndex).toBeNull()
     expect(board.stagingList).toEqual([])
@@ -56,15 +64,38 @@ describe('初始化与查询', () => {
   })
 
   it('pieceAt 非法索引抛 RangeError', () => {
-    const board = new JigsawBoard(makePlan(2, 2))
+    const board = orderedBoard(2, 2)
     expect(() => board.pieceAt(4)).toThrow(RangeError)
     expect(() => board.pieceAt(-1)).toThrow(RangeError)
   })
 })
 
+describe('推出顺序洗牌（验收四轮一：不再从左到右、从上到下）', () => {
+  it('shuffleDeck：确定性全排列（同 rng 序列同结果，排序后 = [0..n-1]）', () => {
+    const a = shuffleDeck(9, createRng(42))
+    const b = shuffleDeck(9, createRng(42))
+    expect(a).toEqual(b)
+    expect([...a].sort((x, y) => x - y)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  it('缺省 deck = seed 派生洗牌：remainingOrder 非顺序、仍是全排列', () => {
+    const board = new JigsawBoard(makePlan(3, 3)) // makePlan seed = 1
+    expect(board.remainingOrder).not.toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    expect([...board.remainingOrder].sort((x, y) => x - y)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  it('同 seed 同洗牌（同图同方案推出序恒定）；换 seed 推出序变化', () => {
+    const again = new JigsawBoard(makePlan(3, 3))
+    const first = new JigsawBoard(makePlan(3, 3))
+    expect(again.remainingOrder).toEqual(first.remainingOrder)
+    const other = new JigsawBoard({ ...makePlan(3, 3), seed: 2 })
+    expect(other.remainingOrder).not.toEqual(first.remainingOrder)
+  })
+})
+
 describe('pushNext（剩余队列 FIFO 推送）', () => {
   it('依次推送队列首块；current 非空或剩余空时返回 null', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     expect(board.pushNext()).toBe(0)
     expect(board.currentIndex).toBe(0)
     // current 已有块 → 不再推送
@@ -87,7 +118,7 @@ describe('pushNext（剩余队列 FIFO 推送）', () => {
 
 describe('placePiece（网格吸附落子与占用让位）', () => {
   it('空槽落子 ok，块进入 board 并记录槽位', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     const outcome = board.placePiece(4, 1, 1)
     expect(outcome).toEqual({ kind: 'ok' })
     expect(board.getState().pieces[4]).toMatchObject({ zone: 'board', slotRow: 1, slotCol: 1 })
@@ -95,7 +126,7 @@ describe('placePiece（网格吸附落子与占用让位）', () => {
   })
 
   it('目标槽被占：占用块移暂存并返回 ok-displaced（猜错也稳稳卡进，§11.2）', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 2) // 块 4 错放块 5 的正确位
     const outcome = board.placePiece(5, 1, 2) // 块 5 强占，块 4 让位
     expect(outcome).toEqual({ kind: 'ok-displaced', displacedIndex: 4 })
@@ -105,7 +136,7 @@ describe('placePiece（网格吸附落子与占用让位）', () => {
   })
 
   it('占用块恰好放对时仍让位（帮助同款语义）', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 1) // 放对
     expect(board.isCorrectlyPlaced(4)).toBe(true)
     const outcome = board.placePiece(5, 1, 1) // 强占
@@ -114,7 +145,7 @@ describe('placePiece（网格吸附落子与占用让位）', () => {
   })
 
   it('同块同槽重复放置幂等 ok；换槽则旧槽自动释放', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 1)
     expect(board.placePiece(4, 1, 1)).toEqual({ kind: 'ok' })
     expect(board.placePiece(4, 0, 0)).toEqual({ kind: 'ok' })
@@ -123,7 +154,7 @@ describe('placePiece（网格吸附落子与占用让位）', () => {
   })
 
   it('槽位越界抛 RangeError', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     expect(() => board.placePiece(0, 3, 0)).toThrow(RangeError)
     expect(() => board.placePiece(0, 0, -1)).toThrow(RangeError)
   })
@@ -131,7 +162,7 @@ describe('placePiece（网格吸附落子与占用让位）', () => {
 
 describe('moveToStaging / promoteFromStaging（暂存区往返）', () => {
   it('promoteFromStaging：暂存块升至 current，原 current 退回剩余队列首', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.pushNext() // current = 0
     board.moveToStaging(5) // 块 5 从 remaining 直入暂存（纯逻辑层允许）
     board.promoteFromStaging(5)
@@ -143,12 +174,12 @@ describe('moveToStaging / promoteFromStaging（暂存区往返）', () => {
   })
 
   it('promoteFromStaging 非 staging 块抛错', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     expect(() => board.promoteFromStaging(0)).toThrow(/不在暂存区/)
   })
 
   it('moveToStaging 清空槽位，盘面块可撤回暂存', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 1)
     board.moveToStaging(4)
     expect(board.slotOccupant(1, 1)).toBeNull()
@@ -159,7 +190,7 @@ describe('moveToStaging / promoteFromStaging（暂存区往返）', () => {
 
 describe('help（§11.4 帮助语义）', () => {
   it('current 空时自动推出下一块并归位，帮助计数 +1', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     const result = board.help()
     expect(result).toEqual({ pieceIndex: 0 })
     expect(board.isCorrectlyPlaced(0)).toBe(true)
@@ -168,7 +199,7 @@ describe('help（§11.4 帮助语义）', () => {
   })
 
   it('正确位被错块占用：错块先移暂存，返回 displacedIndex', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(8, 0, 0) // 块 8 错占块 0 的正确位
     board.pushNext() // current = 0
     const result = board.help()
@@ -178,7 +209,7 @@ describe('help（§11.4 帮助语义）', () => {
   })
 
   it('无 current 且剩余空时返回 null；结算后帮助不可用', () => {
-    const board = new JigsawBoard(makePlan(2, 2))
+    const board = orderedBoard(2, 2)
     expect(board.pushNext()).toBe(0)
     board.placePiece(0, 0, 0)
     expect(board.pushNext()).toBe(1)
@@ -198,7 +229,7 @@ describe('help（§11.4 帮助语义）', () => {
 
 describe('isComplete（三区校验，§11.2）', () => {
   it('全部正确归位 → complete；一块错位 → 不 complete；一块在暂存 → allPlaced false', () => {
-    const board = new JigsawBoard(makePlan(2, 2))
+    const board = orderedBoard(2, 2)
     board.placePiece(0, 0, 0)
     board.placePiece(1, 0, 1)
     board.placePiece(2, 1, 0)
@@ -215,14 +246,14 @@ describe('isComplete（三区校验，§11.2）', () => {
 
 describe('stars（帮助口径：0 帮助 3 星 / ≤总块数 10% 2 星 / 否则 1 星）', () => {
   it('无帮助 3 星；9 块盘 1 次帮助即 1 星（floor(0.9)=0）', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     expect(board.stars()).toBe(3)
     board.help()
     expect(board.stars()).toBe(1)
   })
 
   it('25 块盘：2 次帮助 2 星，3 次帮助 1 星', () => {
-    const board = new JigsawBoard(makePlan(5, 5))
+    const board = orderedBoard(5, 5)
     board.help()
     board.help()
     expect(board.stars()).toBe(2)
@@ -234,7 +265,7 @@ describe('stars（帮助口径：0 帮助 3 星 / ≤总块数 10% 2 星 / 否�
 describe('abandonSteps（放弃演示四阶段，§11.3）', () => {
   function mixedBoard(): JigsawBoard {
     // 3×3：块 5 错位在盘面；块 3、7 在暂存；块 0 为 current；其余 remaining
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(5, 2, 1) // 正确位 (1,2)，错放 (2,1)
     board.pushNext() // current = 0
     board.moveToStaging(3)
@@ -242,7 +273,12 @@ describe('abandonSteps（放弃演示四阶段，§11.3）', () => {
     return board
   }
 
-  it('固定顺序：①盘面错块 → ②暂存 → ③当前 → ④剩余；执行后盘面完整', () => {
+  /** 播放全部步骤（与 instance.ts onAbandonClick 同构：逐步真实落子） */
+  function playAll(board: JigsawBoard, steps: ReturnType<JigsawBoard['abandonSteps']>): void {
+    for (const step of steps) board.applyAbandonStep(step)
+  }
+
+  it('固定顺序：①盘面错块 → ②暂存 → ③当前 → ④剩余；逐步落子后盘面完整（验收四轮九：纯预演不改状态）', () => {
     const board = mixedBoard()
     const steps = board.abandonSteps()
     expect(steps.map((s) => s.pieceIndex)).toEqual([5, 3, 7, 0, 1, 2, 4, 6, 8])
@@ -259,35 +295,41 @@ describe('abandonSteps（放弃演示四阶段，§11.3）', () => {
     expect(steps[2]).toMatchObject({ pieceIndex: 7, fromZone: 'staging', toSlot: { row: 2, col: 1 } })
     // 阶段 ③：当前块归位
     expect(steps[3]).toMatchObject({ pieceIndex: 0, fromZone: 'current', toSlot: { row: 0, col: 0 } })
-    // 阶段 ④：剩余块按顺序归位
+    // 阶段 ④：剩余块按推出顺序归位
     expect(steps.slice(4).every((s) => s.fromZone === 'remaining')).toBe(true)
-    // 演示序列同步状态：执行完即完整拼图
+    // 纯计算预演：不落子前盘面未变；逐步落子后即完整拼图
+    expect(board.allPlaced()).toBe(false)
+    playAll(board, steps)
     expect(board.isComplete()).toBe(true)
   })
 
   it('链式让位：归位时正确位被占的块先移暂存（步骤标记 displacedIndex）', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 2) // 块 4 错占块 5 的正确位
     board.placePiece(5, 1, 1) // 块 5 错占块 4 的正确位
     const steps = board.abandonSteps()
     expect(steps[0]).toMatchObject({ pieceIndex: 4, displacedIndex: 5, toSlot: { row: 1, col: 1 } })
     // 块 5 被挤到暂存后仍会在序列中归位（在阶段 ① 快照内）
     expect(steps[1]).toMatchObject({ pieceIndex: 5, fromZone: 'staging', toSlot: { row: 1, col: 2 } })
+    playAll(board, steps)
     expect(board.isComplete()).toBe(true)
   })
 
   it('已放对的块不产生步骤', () => {
-    const board = new JigsawBoard(makePlan(3, 3))
+    const board = orderedBoard(3, 3)
     board.placePiece(4, 1, 1) // 放对
     const steps = board.abandonSteps()
     expect(steps.map((s) => s.pieceIndex)).toEqual([0, 1, 2, 3, 5, 6, 7, 8])
+    playAll(board, steps)
     expect(board.isComplete()).toBe(true)
   })
 
   it('空盘面（全新）产生全部剩余块的归位序列', () => {
-    const board = new JigsawBoard(makePlan(2, 2))
+    const board = orderedBoard(2, 2)
     const steps = board.abandonSteps()
     expect(steps).toHaveLength(4)
     expect(steps.every((s) => s.fromZone === 'remaining' && s.fromSlot === null)).toBe(true)
+    playAll(board, steps)
+    expect(board.isComplete()).toBe(true)
   })
 })

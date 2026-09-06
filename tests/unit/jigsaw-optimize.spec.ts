@@ -48,49 +48,61 @@ function checkerImage(w: number, h: number, cell = 8): ImageDataLike {
   return { width: w, height: h, data }
 }
 
-describe('candidateSpecs（难度档候选窗口，确定性顺序）', () => {
-  it('三档首个候选 = 占位阶梯规格（3×3 / 4×4 / 5×5）：内容无偏向时难度曲线不变', () => {
-    expect(candidateSpecs(1)[0]).toEqual({ rows: 3, cols: 3 })
-    expect(candidateSpecs(2)[0]).toEqual({ rows: 4, cols: 4 })
-    expect(candidateSpecs(3)[0]).toEqual({ rows: 5, cols: 5 })
+describe('candidateSpecs（难度档候选窗口，确定性顺序；验收四轮五：六档互斥递增）', () => {
+  it('六档首个候选 = 目标块数最贴近的生成序首位（2×4 / 2×6 / 4×4 / 4×6 / 5×6 / 6×6）', () => {
+    expect(candidateSpecs(1)[0]).toEqual({ rows: 2, cols: 4 })
+    expect(candidateSpecs(2)[0]).toEqual({ rows: 2, cols: 6 })
+    expect(candidateSpecs(3)[0]).toEqual({ rows: 4, cols: 4 })
+    expect(candidateSpecs(4)[0]).toEqual({ rows: 4, cols: 6 })
+    expect(candidateSpecs(5)[0]).toEqual({ rows: 5, cols: 6 })
+    expect(candidateSpecs(6)[0]).toEqual({ rows: 6, cols: 6 })
   })
 
-  it('候选全部落在难度档块数窗口内、单边 ∈ [2,6]、无重复', () => {
-    for (const complexity of [1, 2, 3] as const) {
-      const window = COMPLEXITY_PIECES[complexity]
-      const specs = candidateSpecs(complexity)
-      expect(specs.length).toBeGreaterThan(0)
+  it('六档窗口互斥：后档最小块数 > 前档最大块数（难度严格递增，验收四轮五核心）', () => {
+    for (let c = 2; c <= 6; c++) {
+      expect(COMPLEXITY_PIECES[c as 2].min).toBeGreaterThan(COMPLEXITY_PIECES[(c - 1) as 1].max)
+    }
+  })
+
+  it('候选全部落在难度档块数窗口内、单边 ∈ [2,7]、无重复；每档至少 3 个候选（形状可选）', () => {
+    for (let complexity = 1; complexity <= 6; complexity++) {
+      const window = COMPLEXITY_PIECES[complexity as 1]
+      const specs = candidateSpecs(complexity as 1)
+      expect(specs.length).toBeGreaterThanOrEqual(3)
       for (const s of specs) {
         expect(s.rows * s.cols).toBeGreaterThanOrEqual(window.min)
         expect(s.rows * s.cols).toBeLessThanOrEqual(window.max)
         expect(s.rows).toBeGreaterThanOrEqual(2)
-        expect(s.rows).toBeLessThanOrEqual(6)
+        expect(s.rows).toBeLessThanOrEqual(7)
         expect(s.cols).toBeGreaterThanOrEqual(2)
-        expect(s.cols).toBeLessThanOrEqual(6)
+        expect(s.cols).toBeLessThanOrEqual(7)
       }
       const keys = new Set(specs.map((s) => `${s.rows}x${s.cols}`))
       expect(keys.size).toBe(specs.length)
     }
   })
 
-  it('c2 窗口候选共 11 个，排序按「块数贴近目标 16」非降（同分 tie-break 依据）', () => {
+  it('c2 窗口候选共 8 个，排序按「块数贴近目标 12」非降（同分 tie-break 依据）', () => {
     const specs = candidateSpecs(2)
-    expect(specs).toHaveLength(11)
-    const deviations = specs.map((s) => Math.abs(s.rows * s.cols - 16))
+    expect(specs).toHaveLength(8)
+    const deviations = specs.map((s) => Math.abs(s.rows * s.cols - 12))
     for (let i = 1; i < deviations.length; i++) {
       expect(deviations[i]!).toBeGreaterThanOrEqual(deviations[i - 1]!)
     }
   })
 
-  it('complexityForPieces：块数反查难度档（窗口边界 12/20 归低档）', () => {
+  it('complexityForPieces：块数反查难度档（六档边界 9/14/20/26/34 归低档）', () => {
     expect(complexityForPieces(9)).toBe(1)
-    expect(complexityForPieces(12)).toBe(1)
-    expect(complexityForPieces(13)).toBe(2)
-    expect(complexityForPieces(16)).toBe(2)
-    expect(complexityForPieces(20)).toBe(2)
-    expect(complexityForPieces(21)).toBe(3)
-    expect(complexityForPieces(25)).toBe(3)
-    expect(complexityForPieces(30)).toBe(3)
+    expect(complexityForPieces(10)).toBe(2)
+    expect(complexityForPieces(14)).toBe(2)
+    expect(complexityForPieces(15)).toBe(3)
+    expect(complexityForPieces(20)).toBe(3)
+    expect(complexityForPieces(21)).toBe(4)
+    expect(complexityForPieces(26)).toBe(4)
+    expect(complexityForPieces(27)).toBe(5)
+    expect(complexityForPieces(34)).toBe(5)
+    expect(complexityForPieces(35)).toBe(6)
+    expect(complexityForPieces(49)).toBe(6)
   })
 })
 
@@ -125,21 +137,22 @@ describe('scoreSpec（评分语义：区分度 / 均匀度 / 块形）', () => {
 })
 
 describe('pickBestSpec（每图按内容择优）', () => {
-  it('纯色方图 c2 → 4×4（区分度无差异时由块形与均匀度决定：回到占位阶梯）', () => {
-    expect(pickBestSpec(flatImage(64, 64), 2).spec).toEqual({ rows: 4, cols: 4 })
+  it('纯色方图 c2 → 3×4（档内无正方形候选：区分度无差异时选块形最接近正方形的 3×4/4×3，tie-break 取候选序靠前）', () => {
+    expect(pickBestSpec(flatImage(64, 64), 2).spec).toEqual({ rows: 3, cols: 4 })
   })
 
   it('纯色方图 c1 → 3×3（同上，c1 档内唯一正方形候选）', () => {
     expect(pickBestSpec(flatImage(64, 64), 1).spec).toEqual({ rows: 3, cols: 3 })
   })
 
-  it('竖长图：选 rows=2×cols 的正方形块规格（32×64 → c1 档 4×2 / c2 档 6×3）', () => {
+  it('竖长图：档内有正方形块候选选正方形（c1 → 4×2）；无则选块形最接近的（c2 → 5×2）', () => {
+    // c2 窗口 [10,14] 无 rows=2×cols 候选（6×3=18 超窗）→ 5×2 块形惩罚 0.322 窗口内最小
     expect(pickBestSpec(flatImage(32, 64), 1).spec).toEqual({ rows: 4, cols: 2 })
-    expect(pickBestSpec(flatImage(32, 64), 2).spec).toEqual({ rows: 6, cols: 3 })
+    expect(pickBestSpec(flatImage(32, 64), 2).spec).toEqual({ rows: 5, cols: 2 })
   })
 
-  it('横长图对称：64×32 → c2 档 3×6', () => {
-    expect(pickBestSpec(flatImage(64, 32), 2).spec).toEqual({ rows: 3, cols: 6 })
+  it('横长图对称：64×32 → c2 档 2×5', () => {
+    expect(pickBestSpec(flatImage(64, 32), 2).spec).toEqual({ rows: 2, cols: 5 })
   })
 
   it('内容驱动：丰富图综合分显著高于纯色图，且最优仍在候选集内、ranked 完整', () => {
@@ -201,7 +214,7 @@ describe('warmBuiltinOptima（内置图库预热）', () => {
     expect(failed).toEqual([])
     expect(ok).toHaveLength(GALLERY.length)
     expect(decode).toHaveBeenCalledTimes(GALLERY.length)
-    // animals-01 复杂度 1 / space-03 复杂度 2：同一竖图在各档窗口内选块形最优
+    // animals-01 难度档 1 / space-03 难度档 3：同一竖图 c1 选正方形候选 4×2；c3 窗口 [15,20] 含正方形候选 6×3
     expect(bestSpecFor('animals-01')).toEqual({ rows: 4, cols: 2 })
     expect(bestSpecFor('space-03')).toEqual({ rows: 6, cols: 3 })
   })
@@ -215,8 +228,8 @@ describe('warmBuiltinOptima（内置图库预热）', () => {
     expect(failed).toEqual(['animals-01'])
     expect(ok).toHaveLength(GALLERY.length - 1)
     expect(bestSpecFor('animals-01')).toBeUndefined()
-    // 其余方图正常出规格（c1 → 3×3）
-    expect(bestSpecFor('animals-02')).toEqual({ rows: 3, cols: 3 })
+    // 其余方图正常出规格（animals-02 难度档 2 → 档内块形最优 3×4）
+    expect(bestSpecFor('animals-02')).toEqual({ rows: 3, cols: 4 })
   })
 
   it('幂等：已缓存图跳过，二次预热不重复解码', async () => {

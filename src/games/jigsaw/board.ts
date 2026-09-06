@@ -2,6 +2,22 @@
 // 无 DOM / 无 Canvas：渲染层（instance.ts）只消费状态与操作结果；全部语义可单测。
 
 import type { CutPlan } from '@/engines/jigsaw-cutter'
+import { createRng } from '@/engines/rng'
+
+/** 推出顺序洗牌盐（与切块锯齿的 rng 流隔离：换切法 = 换锯齿形态 + 换块推出顺序） */
+const DECK_SALT = 0x9e3779b9
+
+/** Fisher-Yates 确定性洗牌（验收四轮一：块推出顺序不再从左到右、从上到下） */
+export function shuffleDeck(count: number, rng: { next(): number }): number[] {
+  const deck = Array.from({ length: count }, (_, i) => i)
+  for (let i = count - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1))
+    const t = deck[i]!
+    deck[i] = deck[j]!
+    deck[j] = t
+  }
+  return deck
+}
 
 /** 块所在区域（五区布局中块的四种归属） */
 export type PieceZone = 'remaining' | 'current' | 'staging' | 'board'
@@ -39,17 +55,20 @@ export interface HelpResult {
 
 /**
  * 拼图盘面：管理全部块的区域归属与槽位。
- * 生命周期 = 一关游戏；pieces 顺序与 CutPlan 对齐（remaining 按原始顺序 FIFO 推出）。
+ * 生命周期 = 一关游戏；pieces 顺序与 CutPlan 对齐；推出顺序由 deck 决定
+ * （验收四轮一：缺省 = plan.seed 派生确定性洗牌，不再从左到右上到下；测试可显式注入）。
  */
 export class JigsawBoard {
   readonly plan: CutPlan
   readonly rows: number
   readonly cols: number
   private states: BoardPieceState[]
+  /** 剩余队列推出顺序（全排列；remaining 按此序展示与推出） */
+  private deck: number[]
   private helpsUsed = 0
   private settled = false
 
-  constructor(plan: CutPlan) {
+  constructor(plan: CutPlan, deck?: number[]) {
     this.plan = plan
     this.rows = plan.params.rows
     this.cols = plan.params.cols
@@ -59,6 +78,7 @@ export class JigsawBoard {
       slotRow: null,
       slotCol: null,
     }))
+    this.deck = deck ?? shuffleDeck(this.states.length, createRng(plan.seed ^ DECK_SALT))
   }
 
   // ---- 查询 ----
@@ -73,9 +93,9 @@ export class JigsawBoard {
     return found ? found.index : null
   }
 
-  /** 剩余队列（按推出顺序） */
+  /** 剩余队列（按 deck 推出顺序；洗牌后不再从左到右上到下） */
   get remainingOrder(): number[] {
-    return this.states.filter((s) => s.zone === 'remaining').map((s) => s.index)
+    return this.deck.filter((i) => this.pieceAt(i).zone === 'remaining')
   }
 
   /** 暂存区块列表 */
@@ -164,7 +184,10 @@ export class JigsawBoard {
     const s = this.pieceAt(index)
     if (s.zone !== 'staging') throw new Error(`jigsaw: 块 ${index} 不在暂存区`)
     const cur = this.currentIndex
-    if (cur !== null) this.pieceAt(cur).zone = 'remaining'
+    if (cur !== null) {
+      this.pieceAt(cur).zone = 'remaining'
+      this.deck = [cur, ...this.deck.filter((i) => i !== cur)]
+    }
     s.zone = 'current'
   }
 
@@ -189,47 +212,84 @@ export class JigsawBoard {
 
   /**
    * 放弃演示步骤序列（§11.3 固定顺序）：
-   * ① 盘面错块逐个修正 → ② 暂存块归位 → ③ 当前块归位 → ④ 剩余块依次归位。
-   * 已放对的块不动也不产生步骤；正确位被占时占用块先移暂存（步骤内标记）。
+   * ① 盘面错块逐个修正 → ② 暂存块归位（含阶段①被挤入暂存的块）→ ③ 当前块归位 → ④ 剩余块依次归位。
+   * 纯计算（验收四轮九）：影子盘面预演，不改真实状态 —— 播放时经 applyAbandonStep 逐步落子，
+   * 避免「盘面先铺满再逐块覆盖」；已放对的块不产生步骤；正确位被占时占用块先移暂存（步骤内标记）。
    */
   abandonSteps(): AbandonStep[] {
     const steps: AbandonStep[] = []
-    const piece = (i: number) => this.plan.pieces[i]
+    const piece = (i: number) => this.plan.pieces[i]!
     const correctSlot = (i: number) => ({ row: piece(i).row, col: piece(i).col })
 
-    const emit = (i: number, displaced?: number): void => {
-      const s = this.pieceAt(i)
-      const slot = correctSlot(i)
-      // 正确位若被其他块占着，该块先移暂存
-      const occupant = this.slotOccupant(slot.row, slot.col)
-      if (occupant !== null && occupant !== i) {
-        this.moveToStaging(occupant)
-        displaced = occupant
+    // 影子盘面（预演专用：与 placePiece 让位语义同构）
+    const zone: PieceZone[] = this.states.map((s) => s.zone)
+    const slotRow: (number | null)[] = this.states.map((s) => s.slotRow)
+    const slotCol: (number | null)[] = this.states.map((s) => s.slotCol)
+    const occupantOf = (row: number, col: number): number | null => {
+      for (let i = 0; i < zone.length; i++) {
+        if (zone[i] === 'board' && slotRow[i] === row && slotCol[i] === col) return i
       }
-      const fromSlot = s.zone === 'board' && s.slotRow !== null && s.slotCol !== null
-        ? { row: s.slotRow, col: s.slotCol }
+      return null
+    }
+    const shadowPlace = (i: number, row: number, col: number): number | undefined => {
+      const occ = occupantOf(row, col)
+      let displaced: number | undefined
+      if (occ !== null && occ !== i) {
+        zone[occ] = 'staging'
+        slotRow[occ] = null
+        slotCol[occ] = null
+        displaced = occ
+      }
+      zone[i] = 'board'
+      slotRow[i] = row
+      slotCol[i] = col
+      return displaced
+    }
+
+    // 阶段①④输入快照；阶段②取预演现势暂存区（初始暂存 + 阶段①被挤入的，不重不漏）
+    const misplaced: number[] = []
+    const initialStaging: number[] = []
+    for (let i = 0; i < zone.length; i++) {
+      if (zone[i] === 'board' && !(slotRow[i] === piece(i).row && slotCol[i] === piece(i).col)) {
+        misplaced.push(i)
+      } else if (zone[i] === 'staging') {
+        initialStaging.push(i)
+      }
+    }
+    const current = this.currentIndex
+    const remaining = [...this.remainingOrder]
+
+    const emit = (i: number): void => {
+      // 已被前序步骤归位的块不重复产生步骤（旧语义「已放对不动」）
+      if (zone[i] === 'board' && slotRow[i] === piece(i).row && slotCol[i] === piece(i).col) return
+      const fromZone = zone[i]!
+      const fromSlot = fromZone === 'board' && slotRow[i] !== null && slotCol[i] !== null
+        ? { row: slotRow[i]!, col: slotCol[i]! }
         : null
+      const slot = correctSlot(i)
+      const displaced = shadowPlace(i, slot.row, slot.col)
       steps.push({
         pieceIndex: i,
-        fromZone: s.zone,
+        fromZone,
         fromSlot,
         toSlot: slot,
         wasCorrect: false,
         ...(displaced !== undefined ? { displacedIndex: displaced } : {}),
       })
-      // 同步状态，保证后续步骤的占用判断基于已修正盘面
-      const st = this.pieceAt(i)
-      st.zone = 'board'
-      st.slotRow = slot.row
-      st.slotCol = slot.col
     }
 
-    for (const i of this.misplacedOnBoard()) emit(i)
-    for (const i of this.stagingList) emit(i)
-    const cur = this.currentIndex
-    if (cur !== null) emit(cur)
-    for (const i of this.remainingOrder) emit(i)
+    for (const i of misplaced) emit(i)
+    const stagingNow: number[] = []
+    for (let i = 0; i < zone.length; i++) if (zone[i] === 'staging') stagingNow.push(i)
+    for (const i of [...initialStaging, ...stagingNow.filter((i) => !initialStaging.includes(i))]) emit(i)
+    if (current !== null) emit(current)
+    for (const i of remaining) emit(i)
     return steps
+  }
+
+  /** 播放一步放弃演示（验收四轮九）：真实落子（含让位），与 abandonSteps 预演同构 */
+  applyAbandonStep(step: AbandonStep): void {
+    this.placePiece(step.pieceIndex, step.toSlot.row, step.toSlot.col)
   }
 
   /** 帮助次数星级（口径与 keygame 失误一致：0 帮助 3 星、≤总块数 10% 2 星、否则 1 星） */

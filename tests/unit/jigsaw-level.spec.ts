@@ -8,16 +8,16 @@ import {
   loadAnalysisImage,
 } from '@/games/jigsaw/gallery'
 
-describe('内置图库清单（§15.3 每专题 ≥5 张；M6.1 高难度段扩充）', () => {
-  it('4 专题 × 每专题 6 张，复杂度分布 2/2/2', () => {
+describe('内置图库清单（§15.3 每专题 ≥5 张；验收四轮五：六档难度阶梯）', () => {
+  it('4 专题 × 每专题 6 张，难度档 1-6 各一张（专题内块数窗口互斥递增）', () => {
     expect(GALLERY).toHaveLength(24)
     expect(GALLERY_TOPICS).toHaveLength(4)
     for (const topic of GALLERY_TOPICS) {
       const items = GALLERY.filter((e) => e.topic === topic.id)
       expect(items.length).toBeGreaterThanOrEqual(5)
-      expect(items.filter((e) => e.complexity === 1)).toHaveLength(2)
-      expect(items.filter((e) => e.complexity === 2)).toHaveLength(2)
-      expect(items.filter((e) => e.complexity === 3)).toHaveLength(2)
+      for (let c = 1; c <= 6; c++) {
+        expect(items.filter((e) => e.complexity === c)).toHaveLength(1)
+      }
     }
   })
 
@@ -28,9 +28,9 @@ describe('内置图库清单（§15.3 每专题 ≥5 张；M6.1 高难度段扩�
     }
   })
 
-  it('每复杂度段至少 4 张（内置方案占位网格分档不枯竭）', () => {
-    for (const c of [1, 2, 3] as const) {
-      expect(GALLERY.filter((e) => e.complexity === c).length).toBeGreaterThanOrEqual(4)
+  it('每难度档 4 张（4 专题各 1：占位网格分档不枯竭）', () => {
+    for (let c = 1; c <= 6; c++) {
+      expect(GALLERY.filter((e) => e.complexity === c).length).toBe(4)
     }
   })
 

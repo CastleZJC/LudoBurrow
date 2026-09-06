@@ -8,6 +8,8 @@ import type { TabSpec } from './types'
 const SEGMENTS_PER_PIECE_EDGE = 3
 /** 平坦段概率（约 12% 的段不带凸凹，增加形态多样性） */
 const FLAT_CHANCE = 0.12
+/** 锯齿骨架每段样条插点数（验收四轮七圆润化：3 → 每段 16 点，折线转平滑曲线） */
+const SMOOTH_SUBDIV = 3
 
 /**
  * 为一组同向内部切割线生成锯齿规格。
@@ -52,6 +54,41 @@ export interface EdgePoint {
   offset: number
 }
 
+/**
+ * Catmull-Rom 样条插值单点（p1→p2 段，t∈(0,1]；切线由邻点 p0/p3 决定，端点自然延长）。
+ * 验收四轮七：锯齿边缘圆润化 —— 肩/峰折线顶点经样条细分后为平滑曲线，
+ * 点列端点（肩部/段尾基准零点）精确保留，两侧块共享同一点列仍互补贴合。
+ */
+function catmullPoint(
+  p0: EdgePoint,
+  p1: EdgePoint,
+  p2: EdgePoint,
+  p3: EdgePoint,
+  t: number,
+): EdgePoint {
+  const t2 = t * t
+  const t3 = t2 * t
+  const f = (a: number, b: number, c: number, d: number): number =>
+    0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3)
+  return {
+    along: f(p0.along, p1.along, p2.along, p3.along),
+    offset: f(p0.offset, p1.offset, p2.offset, p3.offset),
+  }
+}
+
+/** 顶点列样条细分（sub = 每段插点数）：输出含首点、不含尾点；首尾顶点用相邻点自然延长切线 */
+function smoothPoints(pts: readonly EdgePoint[], sub: number): EdgePoint[] {
+  const out: EdgePoint[] = [pts[0]!]
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]!
+    const p1 = pts[i]!
+    const p2 = pts[i + 1]!
+    const p3 = pts[i + 2] ?? pts[i + 1]!
+    for (let k = 1; k <= sub; k++) out.push(catmullPoint(p0, p1, p2, p3, k / sub))
+  }
+  return out
+}
+
 export function sampleEdgePoints(
   spec: TabSpec,
   length: number,
@@ -71,19 +108,20 @@ export function sampleEdgePoints(
       points.push({ along: end, offset: 0 })
       continue
     }
-    // 段内锯齿：起 → 凸肩(25%) → 峰(50%) → 凸肩(75%) → 段尾
+    // 段内锯齿骨架：起 → 凸肩(25%) → 峰(50%) → 凸肩(75%) → 段尾；
+    // 骨架经 Catmull-Rom 细分（验收四轮七圆润化），肩部零点与段尾零点保持精确
     const mid = (start + end) / 2
     const shoulder1 = start + segWidth * 0.25
     const shoulder2 = start + segWidth * 0.75
     const tabLen = segWidth * 0.5 // 凸起部分占半段（肩到肩）
-    points.push(
+    const skeleton: EdgePoint[] = [
       { along: shoulder1, offset: 0 },
       { along: shoulder1 + tabLen * 0.2, offset: depth * shape },
       { along: mid, offset: depth * shape },
       { along: shoulder2 - tabLen * 0.2, offset: depth * shape },
       { along: shoulder2, offset: 0 },
-      { along: end, offset: 0 },
-    )
+    ]
+    points.push(...smoothPoints(skeleton, SMOOTH_SUBDIV), { along: end, offset: 0 })
   }
   return points
 }

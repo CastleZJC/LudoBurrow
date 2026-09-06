@@ -9,13 +9,16 @@ import { THUMBS } from './thumbs'
 
 export type GalleryTopicId = 'animals' | 'space' | 'scenery' | 'cartoon'
 
+/** 难度档（验收四轮五：三档 → 六档；每专题内关卡块数窗口互斥递增，见 optimize.ts COMPLEXITY_PIECES） */
+export type ComplexityLevel = 1 | 2 | 3 | 4 | 5 | 6
+
 export interface GalleryEntry {
   id: string
   topic: GalleryTopicId
   /** public/assets/images/<topic>/ 下的文件名 */
   file: string
-  /** 图片复杂度：1=主体突出色块分明 / 3=细节丰富色彩相近（内置方案占位网格与后续「最优切块」分析用） */
-  complexity: 1 | 2 | 3
+  /** 图片难度档：1=最简（大块）→ 6=最难（小块）；决定该图候选规格的块数窗口（optimize.ts） */
+  complexity: ComplexityLevel
 }
 
 /** 专题分组（i18n key 见语言包 jigsaw.topic*） */
@@ -26,32 +29,34 @@ export const GALLERY_TOPICS: readonly { id: GalleryTopicId; labelKey: string }[]
   { id: 'cartoon', labelKey: 'jigsaw.topicCartoon' },
 ]
 
-/** 内置图库清单（24 张：每专题 6 张，复杂度 2/2/2 分布；M6.1 高难度段扩充） */
+/** 内置图库清单（24 张：每专题 6 张，难度档 1-6 逐张递增 —— 专题内关卡块数严格递增，验收四轮五）
+ *  选图规则（验收四轮入档）：彩色、色彩鲜明、主体清晰、能引起孩子兴趣；
+ *  取图管线（fetch-gallery.mjs）逐候选饱和度校验（check-color.ps1），灰度/黑白候选自动跳过 */
 export const GALLERY: readonly GalleryEntry[] = [
   { id: 'animals-01', topic: 'animals', file: 'animals-01.jpg', complexity: 1 },
-  { id: 'animals-02', topic: 'animals', file: 'animals-02.jpg', complexity: 1 },
-  { id: 'animals-03', topic: 'animals', file: 'animals-03.jpg', complexity: 2 },
-  { id: 'animals-04', topic: 'animals', file: 'animals-04.jpg', complexity: 2 },
-  { id: 'animals-05', topic: 'animals', file: 'animals-05.jpg', complexity: 3 },
-  { id: 'animals-06', topic: 'animals', file: 'animals-06.jpg', complexity: 3 },
+  { id: 'animals-02', topic: 'animals', file: 'animals-02.jpg', complexity: 2 },
+  { id: 'animals-03', topic: 'animals', file: 'animals-03.jpg', complexity: 3 },
+  { id: 'animals-04', topic: 'animals', file: 'animals-04.jpg', complexity: 4 },
+  { id: 'animals-05', topic: 'animals', file: 'animals-05.jpg', complexity: 5 },
+  { id: 'animals-06', topic: 'animals', file: 'animals-06.jpg', complexity: 6 },
   { id: 'space-01', topic: 'space', file: 'space-01.jpg', complexity: 1 },
-  { id: 'space-02', topic: 'space', file: 'space-02.jpg', complexity: 1 },
-  { id: 'space-03', topic: 'space', file: 'space-03.jpg', complexity: 2 },
-  { id: 'space-04', topic: 'space', file: 'space-04.jpg', complexity: 2 },
-  { id: 'space-05', topic: 'space', file: 'space-05.jpg', complexity: 3 },
-  { id: 'space-06', topic: 'space', file: 'space-06.jpg', complexity: 3 },
+  { id: 'space-02', topic: 'space', file: 'space-02.jpg', complexity: 2 },
+  { id: 'space-03', topic: 'space', file: 'space-03.jpg', complexity: 3 },
+  { id: 'space-04', topic: 'space', file: 'space-04.jpg', complexity: 4 },
+  { id: 'space-05', topic: 'space', file: 'space-05.jpg', complexity: 5 },
+  { id: 'space-06', topic: 'space', file: 'space-06.jpg', complexity: 6 },
   { id: 'scenery-01', topic: 'scenery', file: 'scenery-01.jpg', complexity: 1 },
-  { id: 'scenery-02', topic: 'scenery', file: 'scenery-02.jpg', complexity: 1 },
-  { id: 'scenery-03', topic: 'scenery', file: 'scenery-03.jpg', complexity: 2 },
-  { id: 'scenery-04', topic: 'scenery', file: 'scenery-04.jpg', complexity: 2 },
-  { id: 'scenery-05', topic: 'scenery', file: 'scenery-05.jpg', complexity: 3 },
-  { id: 'scenery-06', topic: 'scenery', file: 'scenery-06.jpg', complexity: 3 },
+  { id: 'scenery-02', topic: 'scenery', file: 'scenery-02.jpg', complexity: 2 },
+  { id: 'scenery-03', topic: 'scenery', file: 'scenery-03.jpg', complexity: 3 },
+  { id: 'scenery-04', topic: 'scenery', file: 'scenery-04.jpg', complexity: 4 },
+  { id: 'scenery-05', topic: 'scenery', file: 'scenery-05.jpg', complexity: 5 },
+  { id: 'scenery-06', topic: 'scenery', file: 'scenery-06.jpg', complexity: 6 },
   { id: 'cartoon-01', topic: 'cartoon', file: 'cartoon-01.jpg', complexity: 1 },
-  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.jpg', complexity: 1 },
-  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.jpg', complexity: 2 },
-  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.jpg', complexity: 2 },
-  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.jpg', complexity: 3 },
-  { id: 'cartoon-06', topic: 'cartoon', file: 'cartoon-06.png', complexity: 3 },
+  { id: 'cartoon-02', topic: 'cartoon', file: 'cartoon-02.jpg', complexity: 2 },
+  { id: 'cartoon-03', topic: 'cartoon', file: 'cartoon-03.jpg', complexity: 3 },
+  { id: 'cartoon-04', topic: 'cartoon', file: 'cartoon-04.jpg', complexity: 4 },
+  { id: 'cartoon-05', topic: 'cartoon', file: 'cartoon-05.jpg', complexity: 5 },
+  { id: 'cartoon-06', topic: 'cartoon', file: 'cartoon-06.jpg', complexity: 6 },
 ]
 
 /** 源图分发路径（相对路径，file:// 直接可读，仅绘制用） */

@@ -1,13 +1,15 @@
 // 切块规格自动优选（验收返工「每图自动选最优切块方案」）
-// 语义：难度档（图库 complexity）决定块数窗口，窗口内按图片内容挑出「块最好认、切得最匀、块形最正」的 rows×cols；
+// 语义：难度档（图库 complexity 1-6）决定块数窗口，窗口内按图片内容挑出「块最好认、切得最匀、块形最正」的 rows×cols；
 //       只选 rows/cols —— 锯齿深度与种子不参与区分度评分（评分只采样块矩形），保持既有参数口径不变。
+// 验收四轮五：六档块数窗口互斥递增（6-9 / 10-14 / 15-20 / 21-26 / 27-34 / 35-49）——
+//       无论内容分析结果如何，专题内关卡块数严格递增，难度阶梯不被分析偏好填平。
 // 确定性：输入 = 内嵌分析缩略（thumbs.ts data URI）+ 纯函数评分 → 同版本同图恒同结果，任何设备可复现；
 //         规格不是用户数据，不入档（存档 schema 零变更），每次启动重算 + 进程内缓存复用。
-// 兜底：无 Canvas 像素回读能力（异常环境 / 测试 mock）或单图分析失败 → 回落复杂度占位网格（schemes.ts）。
+// 回落：无 Canvas 像素回读能力（异常环境 / 测试 mock）或单图分析失败 → 回落六档占位网格（schemes.ts）。
 
 import { buildAxisLines, pieceScore } from '@/engines/jigsaw-cutter'
 import type { ImageDataLike, PieceDef } from '@/engines/jigsaw-cutter'
-import { GALLERY, loadAnalysisImage } from './gallery'
+import { GALLERY, loadAnalysisImage, type ComplexityLevel } from './gallery'
 import type { GalleryEntry } from './gallery'
 
 /** 切块规格（行×列） */
@@ -16,19 +18,23 @@ export interface GridSpec {
   cols: number
 }
 
+export type { ComplexityLevel }
+
 /**
- * 难度档 → 块数窗口与目标块数。
- * target 与旧「复杂度 + 2」占位网格同块数（1→3×3=9 / 2→4×4=16 / 3→5×5=25）：
- * 内容无显著偏向的图仍选回占位规格，难度阶梯与验收前的关卡曲线一致。
+ * 难度档 → 块数窗口与目标块数（六档互斥：窗口首尾相接不重叠，块数严格递增）。
+ * target 取窗口内候选较多的中值规格；各窗口内均含正方形与非正方形候选（内容分析有形状可选）。
  */
-export const COMPLEXITY_PIECES: Record<1 | 2 | 3, { min: number; max: number; target: number }> = {
-  1: { min: 6, max: 12, target: 9 },
-  2: { min: 12, max: 20, target: 16 },
-  3: { min: 20, max: 30, target: 25 },
+export const COMPLEXITY_PIECES: Record<ComplexityLevel, { min: number; max: number; target: number }> = {
+  1: { min: 6, max: 9, target: 8 },
+  2: { min: 10, max: 14, target: 12 },
+  3: { min: 15, max: 20, target: 16 },
+  4: { min: 21, max: 26, target: 24 },
+  5: { min: 27, max: 34, target: 30 },
+  6: { min: 35, max: 49, target: 36 },
 }
 
-/** 规格单边上限（内置图库难度阶梯不超过 6；引擎本身支持到 12） */
-const MAX_EDGE = 6
+/** 规格单边上限（验收四轮五：6 → 7，高档窗口 35-49 需 5×7/6×7 候选保形状可选） */
+const MAX_EDGE = 7
 
 /** 区分度阈值（与引擎默认一致：低于此分的块算「弱块」） */
 const WEAK_THRESHOLD = 18
@@ -41,8 +47,8 @@ const W_MEAN = 0.4
 const W_MIN = 0.2
 const W_WEAK = 0.2
 const W_UNIFORM = 0.2
-/** 块形偏离正方形的扣分上限（比例差 2 倍及以上扣满） */
-const ASPECT_WEIGHT = 0.35
+/** 块宽高比偏离正方形的惩罚（0 = 正方形，1 = 偏离 ≥2 倍）；验收四轮五：0.35 → 0.30，内容偏好可翻越形状惩罚 */
+const ASPECT_WEIGHT = 0.3
 /** 单图分析超时（异常图源不至于让预热悬挂） */
 const WARM_TIMEOUT_MS = 4000
 
@@ -84,10 +90,10 @@ function std(values: number[]): number {
 }
 
 /**
- * 候选规格（确定性顺序）：块数落在难度档窗口内、单边 ≤ 6 的全部 rows×cols，
+ * 候选规格（确定性顺序）：块数落在难度档窗口内、单边 ≤ 7 的全部 rows×cols，
  * 按「块数贴近目标」升序排列（同偏差保持 rows 升序生成序）——同分时优先难度最贴近占位阶梯的规格。
  */
-export function candidateSpecs(complexity: 1 | 2 | 3): GridSpec[] {
+export function candidateSpecs(complexity: ComplexityLevel): GridSpec[] {
   const window = COMPLEXITY_PIECES[complexity]
   const out: GridSpec[] = []
   for (let rows = 2; rows <= MAX_EDGE; rows++) {
@@ -104,12 +110,15 @@ export function candidateSpecs(complexity: 1 | 2 | 3): GridSpec[] {
 
 /**
  * 块数 → 难度档（自定义上传图无 complexity 元数据时用：按当前表单块数保持档位不变，只优化行列分配）。
- * 窗口边界重叠处（12 / 20）归低档，与 candidateSpecs 的窗口口径一致。
+ * 六档窗口互斥，边界值归低档（9→档1、14→档2…），与 candidateSpecs 的窗口口径一致。
  */
-export function complexityForPieces(pieces: number): 1 | 2 | 3 {
+export function complexityForPieces(pieces: number): ComplexityLevel {
   if (pieces <= COMPLEXITY_PIECES[1].max) return 1
   if (pieces <= COMPLEXITY_PIECES[2].max) return 2
-  return 3
+  if (pieces <= COMPLEXITY_PIECES[3].max) return 3
+  if (pieces <= COMPLEXITY_PIECES[4].max) return 4
+  if (pieces <= COMPLEXITY_PIECES[5].max) return 5
+  return 6
 }
 
 /** 评估用块矩形（不生成锯齿规格：区分度评分只采样矩形，锯齿不参与） */
@@ -192,7 +201,7 @@ export function scoreSpec(
  */
 export function pickBestSpec(
   image: ImageDataLike,
-  complexity: 1 | 2 | 3,
+  complexity: ComplexityLevel,
   opts: { threshold?: number } = {},
 ): BestSpecResult {
   const ranked = candidateSpecs(complexity).map((spec) => scoreSpec(image, spec, opts))

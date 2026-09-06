@@ -251,8 +251,8 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
     for (let i = 0; i < tries && !done(); i += 1) await new Promise((r) => setTimeout(r, 0))
   }
 
-  it('多图一次导入：每张按图选最优规格建档（竖图 → 6×3），文件名去扩展名为方案名', async () => {
-    downscaleMock.mockReturnValue(flatImage(96, 192)) // 竖长图 → c2 档唯一正方形块候选 6×3
+  it('多图一次导入：难度档随导入序轮转（档 1 → 4×2、档 2 → 5×2），文件名去扩展名为方案名', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192)) // 竖长图：档 1 唯一正方形候选 4×2；档 2 无正方形候选 → 块形最接近的 5×2
     let seq = 0
     saveImageMock.mockImplementation(async () => ({ id: `asset-${(seq += 1)}` }))
     loadImageMock.mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }))
@@ -272,10 +272,14 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
     expect(all).toHaveLength(2)
     for (const s of all) {
       expect(s.source.kind).toBe('custom')
-      expect(s.params.rows).toBe(6)
-      expect(s.params.cols).toBe(3)
     }
-    expect(all.map((s) => s.name).sort()).toEqual(['汪汪队1', '奥特曼1'].sort())
+    // 第 1 张档 1（导入序轮转）→ 4×2；第 2 张档 2 → 5×2（同图不同档 = 难度阶梯的批量入口）
+    expect(all[0]).toMatchObject({ name: '汪汪队1' })
+    expect(all[0]!.params.rows).toBe(4)
+    expect(all[0]!.params.cols).toBe(2)
+    expect(all[1]).toMatchObject({ name: '奥特曼1' })
+    expect(all[1]!.params.rows).toBe(5)
+    expect(all[1]!.params.cols).toBe(2)
     expect(wrapper.find('[data-role="batch-feedback"]').text()).toContain('2')
     wrapper.unmount()
   })

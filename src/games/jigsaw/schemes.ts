@@ -7,7 +7,7 @@
 
 import { loadSave, persistSave } from '@/core/save'
 import type { JigsawSchemeData, JigsawSchemeParams, JigsawSchemeSource } from '@/core/save'
-import { GALLERY, GALLERY_TOPICS, galleryEntry } from './gallery'
+import { GALLERY, GALLERY_TOPICS, galleryEntry, type ComplexityLevel } from './gallery'
 import type { GalleryTopicId } from './gallery'
 import { bestSpecFor } from './optimize'
 import { levelSeed } from '@/engines/rng'
@@ -48,12 +48,19 @@ export function topicOfSource(source: JigsawSchemeSource): JigsawTopicId {
 // ---- 内置方案（每图一个，确定性派生）----
 
 /**
- * 复杂度兜底网格：1→3×3 / 2→4×4 / 3→5×5。
- * 仅在「每图自动最优规格」（optimize.ts）尚未解析或该图分析失败时使用；
- * 兜底块数 = 优选窗口的目标块数，故难度阶梯两条路径一致。
+ * 复杂度占位网格（验收四轮五：六档）：每档窗口内最接近正方形的规格，
+ * 块数 9/12/16/25/30/36 严格递增；仅在「每图自动最优规格」（optimize.ts）尚未解析或分析失败时使用。
  */
-function builtinGrid(complexity: 1 | 2 | 3): number {
-  return complexity + 2
+function builtinGrid(complexity: ComplexityLevel): { rows: number; cols: number } {
+  const table: Record<ComplexityLevel, { rows: number; cols: number }> = {
+    1: { rows: 3, cols: 3 },
+    2: { rows: 3, cols: 4 },
+    3: { rows: 4, cols: 4 },
+    4: { rows: 5, cols: 5 },
+    5: { rows: 5, cols: 6 },
+    6: { rows: 6, cols: 6 },
+  }
+  return table[complexity]
 }
 
 /**
@@ -70,8 +77,8 @@ export function builtinSchemes(): SchemeCatalogEntry[] {
       topic: entry.topic,
       source: { kind: 'builtin' as const, imageId: entry.id },
       params: {
-        rows: spec?.rows ?? fallback,
-        cols: spec?.cols ?? fallback,
+        rows: spec?.rows ?? fallback.rows,
+        cols: spec?.cols ?? fallback.cols,
         tabDepth: 0.16,
         uniquenessThreshold: 18,
         seed: levelSeed(`jigsaw-builtin:${entry.id}`, 1),

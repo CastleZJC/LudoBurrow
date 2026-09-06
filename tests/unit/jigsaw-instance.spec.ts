@@ -72,7 +72,12 @@ function flatImage(size = 90): ImageDataLike {
 
 function makeDeps() {
   const img = flatImage()
-  return { analysisImage: img, sourceImage: { width: 90, height: 90 } as unknown as CanvasImageSource & { width: number; height: number } }
+  return {
+    analysisImage: img,
+    sourceImage: { width: 90, height: 90 } as unknown as CanvasImageSource & { width: number; height: number },
+    // 顺序推出注入（验收四轮一：生产缺省为 seed 洗牌；交互用例按序放置依赖确定性推出序）
+    deck: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+  }
 }
 
 interface Harness {

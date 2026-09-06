@@ -1,6 +1,6 @@
 # 内置图库素材许可（LudoBurrow）
 
-素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)，经 `scripts/fetch-gallery.mjs` 获取（2048 宽服务端缩略）。
+素材来源：[Wikimedia Commons](https://commons.wikimedia.org/)，经 `scripts/fetch-gallery.mjs` 获取（2048 宽服务端缩略；彩色规则校验见 scripts/check-color.ps1）。
 按各自许可证使用；CC-BY 条目已署名。若需移除某图，替换同专题同复杂度图片并更新本文件。
 
 | id | 标题 | 作者 | 许可 | 来源页 |
@@ -11,7 +11,7 @@
 | animals-04 | File:Cervus nippon dybowski Solo.jpg | Altaileopard ; modified by Wildfeuer | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Cervus_nippon_dybowski_Solo.jpg |
 | animals-05 | File:Coral Reef.jpg | Jerry Reid | Public domain | https://commons.wikimedia.org/wiki/File:Coral_Reef.jpg |
 | animals-06 | File:Hummingbird hawkmoth a.jpg | No machine-readable author provided. Yummifruitbat assumed (based on copyright claims). | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Hummingbird_hawkmoth_a.jpg |
-| space-01 | File:LUNAR ORBITER PAGE - Limb of Copernicus Impact Crater.jpg | NASA/JPL/USGS | Public domain | https://commons.wikimedia.org/wiki/File:LUNAR_ORBITER_PAGE_-_Limb_of_Copernicus_Impact_Crater.jpg |
+| space-01 | File:The Blue Marble.jpg | The photo was taken by the crew of Apollo 17 on their way to the Moon. Antarctica, Africa, the Arabian Peninsula, Madagascar, and part of Asia are visible. Deglr6328 's comments on modifying the image: I cropped the image and adjusted only the brightness/contrast and gamma in photoshop to, what appears to my eye, be a better color match to what might actually be seen from space than the color in Image:The Earth seen from Apollo 17.jpg , which I feel is too dark/red and just odd looking (like an old faded photo). I tried to match the color in the version I uploaded to other examples of this shot as provided by NASA on various pages of theirs. | Public domain | https://commons.wikimedia.org/wiki/File:The_Blue_Marble.jpg |
 | space-02 | File:Portrait of Jupiter from Cassini.jpg | NASA/JPL/Space Science Institute | Public domain | https://commons.wikimedia.org/wiki/File:Portrait_of_Jupiter_from_Cassini.jpg |
 | space-03 | File:Saturn from Cassini Orbiter (2004-10-06).jpg | NASA/JPL/Space Science Institute | Public domain | https://commons.wikimedia.org/wiki/File:Saturn_from_Cassini_Orbiter_(2004-10-06).jpg |
 | space-04 | File:Andromeda galaxy.jpg | NASA/JPL/California Institute of Technology | Public domain | https://commons.wikimedia.org/wiki/File:Andromeda_galaxy.jpg |
@@ -23,9 +23,9 @@
 | scenery-04 | File:Lavender field on Hvar.JPG | F.G. comm | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Lavender_field_on_Hvar.JPG |
 | scenery-05 | File:Rice Terraces Banaue.jpg | Magalhães | Public domain | https://commons.wikimedia.org/wiki/File:Rice_Terraces_Banaue.jpg |
 | scenery-06 | File:New York City at night HDR.jpg | Paulo Barcellos Jr. | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:New_York_City_at_night_HDR.jpg |
-| cartoon-01 | File:Once again the buzzing fly came in at the window (1901) by Arthur Rackham.jpg | Arthur Rackham | Public domain | https://commons.wikimedia.org/wiki/File:Once_again_the_buzzing_fly_came_in_at_the_window_(1901)_by_Arthur_Rackham.jpg |
-| cartoon-02 | File:I samma ögonblick var hon förvandlad till en underskön liten älva.jpg | John Bauer | Public domain | https://commons.wikimedia.org/wiki/File:I_samma_%C3%B6gonblick_var_hon_f%C3%B6rvandlad_till_en_undersk%C3%B6n_liten_%C3%A4lva.jpg |
+| cartoon-01 | File:Edmund Dulac-Urashima Taro-1916.jpg | Edmund Dulac | Public domain | https://commons.wikimedia.org/wiki/File:Edmund_Dulac-Urashima_Taro-1916.jpg |
+| cartoon-02 | File:Illustration by Kay Nielsen 3.jpg | Kay Rasmus Nielsen | Public domain | https://commons.wikimedia.org/wiki/File:Illustration_by_Kay_Nielsen_3.jpg |
 | cartoon-03 | File:3F2.jpg | c.9.i.atelier graphique | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:3F2.jpg |
-| cartoon-04 | File:He raised his hammer with a mighty swing (1901) by Arthur Rackham.jpg | Arthur Rackham | Public domain | https://commons.wikimedia.org/wiki/File:He_raised_his_hammer_with_a_mighty_swing_(1901)_by_Arthur_Rackham.jpg |
+| cartoon-04 | File:Arjuna and river Nymph.jpg | Mackenzie, Donald Alexander, 1873-1936; Goble, Warwick | Public domain | https://commons.wikimedia.org/wiki/File:Arjuna_and_river_Nymph.jpg |
 | cartoon-05 | File:Kittelsen - Nøkken (Nasjonalmuseet)2.jpg | Theodor Kittelsen | Public domain | https://commons.wikimedia.org/wiki/File:Kittelsen_-_N%C3%B8kken_(Nasjonalmuseet)2.jpg |
-| cartoon-06 | File:Aunt Jo's Scrap-Bag Volume 2 frontispiece (page 69).png | May Alcott | Public domain | https://commons.wikimedia.org/wiki/File:Aunt_Jo%27s_Scrap-Bag_Volume_2_frontispiece_(page_69).png |
+| cartoon-06 | File:Damayanthi and swan.jpg | Mackenzie, Donald Alexander, 1873-1936; Goble, Warwick | Public domain | https://commons.wikimedia.org/wiki/File:Damayanthi_and_swan.jpg |
