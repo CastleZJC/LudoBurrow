@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   COMPLEXITY_PIECES,
   candidateSpecs,
-  complexityForPieces,
   scoreSpec,
   pickBestSpec,
   bestSpecFor,
@@ -91,19 +90,6 @@ describe('candidateSpecs（难度档候选窗口，确定性顺序；验收四�
     }
   })
 
-  it('complexityForPieces：块数反查难度档（六档边界 9/14/20/26/34 归低档）', () => {
-    expect(complexityForPieces(9)).toBe(1)
-    expect(complexityForPieces(10)).toBe(2)
-    expect(complexityForPieces(14)).toBe(2)
-    expect(complexityForPieces(15)).toBe(3)
-    expect(complexityForPieces(20)).toBe(3)
-    expect(complexityForPieces(21)).toBe(4)
-    expect(complexityForPieces(26)).toBe(4)
-    expect(complexityForPieces(27)).toBe(5)
-    expect(complexityForPieces(34)).toBe(5)
-    expect(complexityForPieces(35)).toBe(6)
-    expect(complexityForPieces(49)).toBe(6)
-  })
 })
 
 describe('scoreSpec（评分语义：区分度 / 均匀度 / 块形）', () => {

@@ -108,19 +108,6 @@ export function candidateSpecs(complexity: ComplexityLevel): GridSpec[] {
   )
 }
 
-/**
- * 块数 → 难度档（自定义上传图无 complexity 元数据时用：按当前表单块数保持档位不变，只优化行列分配）。
- * 六档窗口互斥，边界值归低档（9→档1、14→档2…），与 candidateSpecs 的窗口口径一致。
- */
-export function complexityForPieces(pieces: number): ComplexityLevel {
-  if (pieces <= COMPLEXITY_PIECES[1].max) return 1
-  if (pieces <= COMPLEXITY_PIECES[2].max) return 2
-  if (pieces <= COMPLEXITY_PIECES[3].max) return 3
-  if (pieces <= COMPLEXITY_PIECES[4].max) return 4
-  if (pieces <= COMPLEXITY_PIECES[5].max) return 5
-  return 6
-}
-
 /** 评估用块矩形（不生成锯齿规格：区分度评分只采样矩形，锯齿不参与） */
 function evalPieces(rowLines: number[], colLines: number[]): PieceDef[] {
   const rows = rowLines.length - 1
