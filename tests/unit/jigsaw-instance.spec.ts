@@ -28,12 +28,16 @@ vi.mock('@/services', () => ({
 const proto = HTMLCanvasElement.prototype as unknown as { getContext?: unknown }
 const originalGetContext = proto.getContext
 
+// 渲染帧计数（A1 断言用：clearRect 每渲染帧恰好一次）
+const renderFrames = { count: 0 }
+
 function makeCtx(): CanvasRenderingContext2D {
   const store: Record<string, unknown> = {}
   return new Proxy(store as unknown as CanvasRenderingContext2D, {
     get(target, prop, receiver) {
       const store = target as unknown as Record<string, unknown>
       if (prop === 'canvas') return { width: 0, height: 0 }
+      if (prop === 'clearRect') return () => { renderFrames.count += 1 }
       if (!(prop in store)) {
         Object.defineProperty(store, prop, {
           value: () => undefined,
@@ -402,5 +406,23 @@ describe('生命周期', () => {
     expect(h.progress.length).toBe(before)
     expect(h.results).toHaveLength(0)
     expect(h.container.children.length).toBe(0) // root 已移除
+  })
+})
+
+describe('渲染补帧（A1：帮助飞行到期后不再消失）', () => {
+  beforeEach(() =>
+    // 显式 fake performance + rAF：默认 toFake 集合不保证含二者，飞行到期判定依赖 ts 与 start 同钟
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'requestAnimationFrame', 'cancelAnimationFrame'] }),
+  )
+  afterEach(() => vi.useRealTimers())
+
+  it('帮助飞行到期后自动补绘（到期帧 + 至少一次补绘帧）', async () => {
+    const { inst, h } = await mountReady()
+    click(h.container.querySelector('[data-jg="help"]')!) // 飞行 start=0，DEMO_STEP_MS=1000
+    vi.advanceTimersByTime(999) // 飞行期内
+    const during = renderFrames.count
+    vi.advanceTimersByTime(600) // 越过到期点：到期帧 + 补绘帧
+    expect(renderFrames.count - during).toBeGreaterThanOrEqual(2)
+    inst.destroy()
   })
 })

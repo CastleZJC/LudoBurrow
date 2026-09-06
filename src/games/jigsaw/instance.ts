@@ -340,7 +340,7 @@ export function mountJigsaw(
     }
 
     // 飞行块（插值位置；尺寸取终点块位图矩形 × 轻微拋物缩放）
-    // 验收四轮八：飞行到期的帧移除后盘面静态位尚未绘过 → 置 dirty 补一帧，避免块「消失到下次点击」
+    // A1：飞行到期的帧静态层尚未绘制该块（isInFlightOrDrag 命中旧数组）→ 置 dirty 下一帧补绘；tick 先清后画保证该 dirty 不被吞
     const aliveFlights = flights.filter((f) => ts - f.start < f.dur)
     if (aliveFlights.length !== flights.length) dirty = true
     flights = aliveFlights
@@ -413,8 +413,8 @@ export function mountJigsaw(
   function tick(ts: number): void {
     if (phase === 'destroyed') return
     if (dirty || flights.length > 0 || drag || ts < misplacedFlashUntil) {
+      dirty = false // 先清后画：render 内「飞行到期」补设的 dirty 保留到下一帧，触发一次补绘（A1 根治）
       render(ts)
-      dirty = false
     }
     rafId = requestAnimationFrame(tick)
   }
