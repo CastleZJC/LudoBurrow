@@ -75,12 +75,17 @@ export type JigsawSchemeSource =
   | { kind: 'builtin'; imageId: string }
   | { kind: 'custom'; assetId: string }
 
+/** 方案切片模式（反馈 2 三分类）：custom = 手动参数 / auto = 自动最优 / ai = AI 建议切块；旧档缺省 = 自定义 */
+export type JigsawSchemeMode = 'custom' | 'auto' | 'ai'
+
 /** 拼图切块方案（v6 起「方案 = 关卡」：进度统一记在专题轨 games['jigsaw:<topic>'].levels[<方案id>]） */
 export interface JigsawSchemeData {
   id: string
   name: string
   source: JigsawSchemeSource
   params: JigsawSchemeParams
+  /** 切片模式（可选，旧档缺省 = 自定义；仅 UI 标签展示，不参与切块计算） */
+  mode?: JigsawSchemeMode
   createdAt: number
   updatedAt: number
 }
@@ -343,6 +348,7 @@ function validateJigsawScheme(v: unknown): v is JigsawSchemeData {
     typeof v.name === 'string' &&
     validateJigsawSchemeSource(v.source) &&
     validateJigsawSchemeParams(v.params) &&
+    (v.mode === undefined || v.mode === 'custom' || v.mode === 'auto' || v.mode === 'ai') &&
     Number.isFinite(v.createdAt) && typeof v.createdAt === 'number' &&
     Number.isFinite(v.updatedAt) && typeof v.updatedAt === 'number'
   )

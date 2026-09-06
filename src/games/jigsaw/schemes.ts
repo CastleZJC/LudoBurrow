@@ -6,7 +6,7 @@
 // 旧「激活方案 / 方案 50 关阶梯 / 独立进度槽」模型已随存档 v6 迁移退役。
 
 import { loadSave, persistSave } from '@/core/save'
-import type { JigsawSchemeData, JigsawSchemeParams, JigsawSchemeSource } from '@/core/save'
+import type { JigsawSchemeData, JigsawSchemeMode, JigsawSchemeParams, JigsawSchemeSource } from '@/core/save'
 import { GALLERY, GALLERY_TOPICS, galleryEntry, type ComplexityLevel } from './gallery'
 import type { GalleryTopicId } from './gallery'
 import { bestSpecFor } from './optimize'
@@ -106,11 +106,12 @@ function newSchemeId(): string {
   return `js-${Date.now().toString(36)}-${idSeq.toString(36)}`
 }
 
-/** 创建方案：创建即在所属专题轨末尾追加一个新关卡（无需激活） */
+/** 创建方案：创建即在所属专题轨末尾追加一个新关卡（无需激活）；mode = 切片模式标签（缺省不入档） */
 export function createScheme(
   name: string,
   source: JigsawSchemeSource,
   params: JigsawSchemeParams,
+  mode?: JigsawSchemeMode,
 ): JigsawSchemeData {
   const now = Date.now()
   const scheme: JigsawSchemeData = {
@@ -118,6 +119,7 @@ export function createScheme(
     name: name.trim() || `方案 ${listSchemes().length + 1}`,
     source,
     params,
+    ...(mode ? { mode } : {}),
     createdAt: now,
     updatedAt: now,
   }

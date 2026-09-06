@@ -457,3 +457,22 @@ describe('save v7 迷宫主题设置段（HUD 切换记住上次，验收返工 
     expect(loadSave().settings.mazeTheme).toBe('garden')
   })
 })
+
+describe('方案 mode 字段（反馈 2 三分类）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('mode 可选：auto/ai 入档往返保留，缺省合法（旧档 = 自定义）', () => {
+    const a = { ...sampleScheme('js-a'), mode: 'auto' as const }
+    const b = { ...sampleScheme('js-b'), mode: 'ai' as const }
+    persistSave({ ...sampleSave(), jigsawSchemes: [a, b, sampleScheme('js-c')] })
+    const loaded = loadSave()
+    expect(loaded.jigsawSchemes[0]!.mode).toBe('auto')
+    expect(loaded.jigsawSchemes[1]!.mode).toBe('ai')
+    expect(loaded.jigsawSchemes[2]!.mode).toBeUndefined()
+  })
+
+  it('非法 mode 整档拒绝（corrupt，不静默清空）', () => {
+    const raw = JSON.stringify({ ...sampleSave(), jigsawSchemes: [{ ...sampleScheme(), mode: 'wrong' }] })
+    expect(parseSaveText(raw).ok).toBe(false)
+  })
+})
