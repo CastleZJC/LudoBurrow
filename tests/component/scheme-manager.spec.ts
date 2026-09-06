@@ -108,6 +108,22 @@ describe('SchemeManager 渲染与新建', () => {
     expect(listSchemes()).toHaveLength(0)
     wrapper.unmount()
   })
+
+  it('卡片 meta 显示类型标签（缺省=自定义/自动最优/AI 切块），不再显示种子尾号', async () => {
+    createScheme('手动的', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    createScheme('自动的', { kind: 'builtin', imageId: 'animals-01' }, PARAMS, 'auto')
+    createScheme('AI的', { kind: 'builtin', imageId: 'animals-01' }, PARAMS, 'ai')
+    const wrapper = mountWithApp(SchemeManager)
+    const text = wrapper
+      .findAll('[data-scheme]')
+      .map((c) => c.text())
+      .join(' | ')
+    expect(text).toContain('自定义')
+    expect(text).toContain('自动最优')
+    expect(text).toContain('AI 切块')
+    expect(wrapper.text()).not.toContain('#')
+    wrapper.unmount()
+  })
 })
 
 describe('SchemeManager 上传闭环（M3.11）', () => {
@@ -320,7 +336,7 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
   })
 })
 
-describe('SchemeManager 自动最优（验收返工「每图自动选最优切块」人工入口）', () => {
+describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
@@ -330,51 +346,49 @@ describe('SchemeManager 自动最优（验收返工「每图自动选最优切�
     downscaleMock.mockReset().mockReturnValue(flatImage(96, 96))
   })
 
-  it('竖长图：按当前块数档选 rows=2×cols 的最优规格并回填表单', async () => {
-    downscaleMock.mockReturnValue(flatImage(96, 192))
+  it('切到自动模式即按图选规格：竖长图 + 简单档 → 5×2，卡片入档 mode=auto', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192)) // 简单档(c2)窗口内块形最接近 = 5×2（与批量导入档 2 同口径）
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
-    // 表单默认 4×4 = 16 块 → c2 档；96×192 竖图最优 = 6×3（窗口内唯一正方形块候选）
-    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await wrapper.find('[data-role="mode-auto"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
-    const val = (sel: string) => (wrapper.find(sel).element as HTMLInputElement).value
-    expect(val('[data-field="rows"]')).toBe('6')
-    expect(val('[data-field="cols"]')).toBe('3')
-    expect(wrapper.find('[data-role="auto-best-feedback"]').text()).toContain('6×3')
-    wrapper.unmount()
-  })
-
-  it('回填后保存：方案按最优规格入档（同图多切片的人工入口）', async () => {
-    downscaleMock.mockReturnValue(flatImage(96, 192))
-    const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
-    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await wrapper.find('[data-role="difficulty-easy"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
-    expect(scheme.params.rows).toBe(6)
-    expect(scheme.params.cols).toBe(3)
+    expect(scheme.params.rows).toBe(5)
+    expect(scheme.params.cols).toBe(2)
+    expect(scheme.mode).toBe('auto')
     wrapper.unmount()
   })
 
-  it('取图失败：提示失败且表单参数保留', async () => {
+  it('分析失败：回落难度占位网格（中等 5×5）仍可保存', async () => {
     loadSourceImageMock.mockRejectedValue(new Error('boom'))
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
-    await wrapper.find('[data-role="auto-best"]').trigger('click')
+    await wrapper.find('[data-role="mode-auto"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
-    expect(wrapper.find('[data-role="auto-best-feedback"]').text()).toContain('无法分析')
-    expect((wrapper.find('[data-field="rows"]').element as HTMLInputElement).value).toBe('4')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('无法分析')
+    await wrapper.find('[data-role="save-scheme"]').trigger('click')
+    const scheme = listSchemes()[0]!
+    expect(scheme.params.rows).toBe(5)
+    expect(scheme.params.cols).toBe(5)
+    expect(scheme.mode).toBe('auto')
     wrapper.unmount()
   })
 
-  it('custom 来源未上传：按钮禁用（与 AI 建议同条件）', async () => {
+  it('seed/threshold/换花样 不再外露（反馈 2 去内部参数）', async () => {
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
-    const btn = () => wrapper.find('[data-role="auto-best"]').element as HTMLButtonElement
-    expect(btn().disabled).toBe(false)
-    await wrapper.find('[data-role="source-custom"]').trigger('click')
-    expect(btn().disabled).toBe(true)
+    expect(wrapper.find('[data-field="seed"]').exists()).toBe(false)
+    expect(wrapper.find('[data-field="threshold"]').exists()).toBe(false)
+    expect(wrapper.find('[data-role="reroll"]').exists()).toBe(false)
+    expect(wrapper.find('[data-role="mode-custom"]').exists()).toBe(true)
+    expect(wrapper.find('[data-role="mode-auto"]').exists()).toBe(true)
+    expect(wrapper.find('[data-role="mode-ai"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })
@@ -412,7 +426,7 @@ describe('SchemeManager 空态直达批量导入（验收返工三：选关空�
   })
 })
 
-describe('SchemeManager AI 建议链路（M5.5 / §14.4 非阻断降级）', () => {
+describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 applied 一律降级自动最优）', () => {
   const PLAN_STUB = { pieces: [] }
 
   beforeEach(() => {
@@ -421,26 +435,25 @@ describe('SchemeManager AI 建议链路（M5.5 / §14.4 非阻断降级）', () 
     saveImageMock.mockReset()
     suggestMock.mockReset()
     loadSourceImageMock.mockReset().mockResolvedValue({ width: 96, height: 96 })
-    downscaleMock.mockReset().mockReturnValue({
-      width: 96,
-      height: 96,
-      data: new Uint8ClampedArray(96 * 96 * 4).fill(128),
-    })
+    downscaleMock.mockReset().mockReturnValue(flatImage(96, 96))
   })
+
+  async function openAiMode(wrapper: VueWrapper): Promise<void> {
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await wrapper.find('[data-role="mode-ai"]').trigger('click')
+  }
 
   it('内置图可直接请求；自定义来源未上传时按钮禁用', async () => {
     const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
-
+    await openAiMode(wrapper)
     const btn = () => wrapper.find('[data-role="ai-suggest"]').element as HTMLButtonElement
     expect(btn().disabled).toBe(false)
-
     await wrapper.find('[data-role="source-custom"]').trigger('click')
     expect(btn().disabled).toBe(true)
     wrapper.unmount()
   })
 
-  it('applied：建议回填表单 + 提示，保存 → suggestion 随方案入档', async () => {
+  it('applied：建议回填 + 提示，保存 → suggestion 与 mode=ai 入档', async () => {
     suggestMock.mockResolvedValue({
       kind: 'applied',
       plan: PLAN_STUB,
@@ -453,26 +466,19 @@ describe('SchemeManager AI 建议链路（M5.5 / §14.4 非阻断降级）', () 
     })
 
     const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
-    await wrapper.find('[data-field="rows"]').setValue(4) // 建议将覆盖为 3
+    await openAiMode(wrapper)
     await wrapper.find('[data-role="ai-suggest"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
 
-    // 请求参数：base 来自表单、图 = 内置缩略 data URI、ai 未配置（未开启）
+    // 请求参数：base 来自表单默认 4×4、图 = 内置缩略 data URI、ai 未配置（未开启）
     const call = suggestMock.mock.calls[0] as unknown[]
-    expect(call[1]).toMatchObject({ rows: 4, cols: 4 })
-    // 内置图库分析缩略为真实开源素材（JPEG/PNG data URI，见 fetch-gallery.mjs）
+    expect(call[1]).toMatchObject({ rows: 4, cols: 4, uniquenessThreshold: 18 })
     const img = String(call[3])
     expect(img.startsWith('data:image/jpeg;base64,') || img.startsWith('data:image/png;base64,')).toBe(true)
     expect(call[4]).toBeUndefined()
 
-    // 表单回填 + 非阻断提示
-    const inputVal = (sel: string): string => (wrapper.find(sel).element as HTMLInputElement).value
-    expect(inputVal('[data-field="rows"]')).toBe('3')
-    expect(inputVal('[data-field="cols"]')).toBe('5')
     expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('3×5')
-
-    // 保存 → 权重入档（长度与网格一致）
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
     expect(scheme.params.rows).toBe(3)
@@ -481,53 +487,61 @@ describe('SchemeManager AI 建议链路（M5.5 / §14.4 非阻断降级）', () 
       rowWeights: [0.2, 0.3, 0.5],
       colWeights: [0.4, 0.2, 0.2, 0.1, 0.1],
     })
+    expect(scheme.mode).toBe('ai')
     wrapper.unmount()
   })
 
-  it('fallback（未配置）：非阻断提示去设置页，保存不带 suggestion', async () => {
+  it('fallback（未配置）：自动降级为最优切块 + 提示，保存 mode=auto 不带 suggestion', async () => {
     suggestMock.mockResolvedValue({ kind: 'fallback', reason: 'not-configured', plan: PLAN_STUB })
 
     const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await openAiMode(wrapper)
     await wrapper.find('[data-role="ai-suggest"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
 
-    expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('设置')
+    expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('已自动按最优')
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
-    expect(listSchemes()[0]!.params.suggestion).toBeUndefined()
+    const scheme = listSchemes()[0]!
+    expect(scheme.params.suggestion).toBeUndefined()
+    expect(scheme.mode).toBe('auto') // 降级后 = 自动最优
     wrapper.unmount()
   })
 
-  it('rejected（低质量）：提示保留本地切块，参数不变', async () => {
+  it('rejected（低质量）：同样降级自动最优（不再保留原参数）', async () => {
     suggestMock.mockResolvedValue({ kind: 'rejected', reason: 'low-quality', plan: PLAN_STUB })
 
     const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await openAiMode(wrapper)
     await wrapper.find('[data-role="ai-suggest"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
 
-    expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('本地')
-    expect((wrapper.find('[data-field="rows"]').element as HTMLInputElement).value).toBe('4')
+    expect(wrapper.find('[data-role="ai-feedback"]').text()).toContain('已自动按最优')
     wrapper.unmount()
   })
 
-  it('applied 后手动改网格数 → 建议失效（保存不带 suggestion）', async () => {
+  it('AI 建议应用后切回自定义：建议清除，保存不带 suggestion（mode=custom）', async () => {
     suggestMock.mockResolvedValue({
       kind: 'applied',
       plan: PLAN_STUB,
-      suggestion: { rows: 3, cols: 3, rowWeights: [0.2, 0.3, 0.5], colWeights: [0.4, 0.3, 0.3] },
+      suggestion: { rows: 3, cols: 5, rowWeights: [0.2, 0.3, 0.5], colWeights: [0.4, 0.2, 0.2, 0.1, 0.1] },
     })
 
     const wrapper = mountWithApp(SchemeManager)
-    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+    await openAiMode(wrapper)
     await wrapper.find('[data-role="ai-suggest"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
-    await wrapper.find('[data-field="rows"]').setValue(6) // 手动改 → 长度失效
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.find('[data-role="mode-custom"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
 
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
-    expect(scheme.params.rows).toBe(6)
     expect(scheme.params.suggestion).toBeUndefined()
+    expect(scheme.mode).toBe('custom')
     wrapper.unmount()
   })
 })

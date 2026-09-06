@@ -6,7 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnvAdapter } from '@/services'
-import type { JigsawSchemeData, JigsawSchemeSource } from '@/core/save'
+import type { JigsawSchemeData, JigsawSchemeMode, JigsawSchemeSource } from '@/core/save'
 import { getSettings } from '@/core/settings'
 import { getLevelRecord, progressSlotKey } from '@/core/level-manager'
 import { usePlatformStore } from '@/stores/platform'
@@ -19,7 +19,7 @@ import {
   listSchemes,
   topicOfSource,
 } from '@/games/jigsaw/schemes'
-import { complexityForPieces, pickBestSpec } from '@/games/jigsaw/optimize'
+import { pickBestSpec } from '@/games/jigsaw/optimize'
 import { createRng, levelSeed } from '@/engines/rng'
 import {
   buildAxisLines,
@@ -58,8 +58,18 @@ const customPreviewUrl = ref('')
 const rows = ref(4)
 const cols = ref(4)
 const tabDepth = ref(0.16)
-const threshold = ref(18)
 const seed = ref(Math.floor(Math.random() * 0x1_0000_0000))
+// ---- 三分类模式（反馈 2）：custom 手动 / auto 自动最优 / ai AI 切块 ----
+const mode = ref<'custom' | 'auto' | 'ai'>('custom')
+const difficulty = ref<'easy' | 'medium' | 'hard'>('medium')
+/** 难度三档 → 复杂度档（块数窗口：简单 10-14 / 中等 21-26 / 困难 35-49） */
+const DIFFICULTY_COMPLEXITY = { easy: 2, medium: 4, hard: 6 } as const
+/** 分析失败回落：难度占位网格（与 schemes.ts builtinGrid 同档口径） */
+const DIFFICULTY_FALLBACK = {
+  easy: { rows: 3, cols: 4 },
+  medium: { rows: 5, cols: 5 },
+  hard: { rows: 6, cols: 6 },
+} as const
 const uploading = ref(false)
 const uploadError = ref('')
 const formError = ref('')
@@ -70,9 +80,9 @@ let saveConfirmTimer: ReturnType<typeof setTimeout> | null = null
 const suggesting = ref(false)
 const aiFeedback = ref('')
 const appliedSuggestion = ref<NormalizedSuggestion | null>(null)
-// ---- 自动最优状态（验收返工「同图多切片」增强：按图内容选规格，仅回填表单不直接建方案）----
-const autoBesting = ref(false)
-const autoBestFeedback = ref('')
+// ---- 自动最优状态（模式 auto：难度档 → 复杂度窗口，按图内容选规格，仅回填表单不直接建方案）----
+const autoRunning = ref(false)
+const autoFeedback = ref('')
 
 const PREVIEW_SIZE = 240
 
@@ -87,10 +97,13 @@ const topicGroups = GALLERY_TOPICS.map((topic) => ({
 
 function openPanel(): void {
   panelOpen.value = true
+  seed.value = Math.floor(Math.random() * 0x1_0000_0000) // 内部花样：不外露不可编辑（反馈 2）
+  mode.value = 'custom'
+  difficulty.value = 'medium'
   formError.value = ''
   saveConfirm.value = false
   aiFeedback.value = ''
-  autoBestFeedback.value = ''
+  autoFeedback.value = ''
   appliedSuggestion.value = null
 }
 
@@ -99,17 +112,12 @@ function closePanel(): void {
   formError.value = ''
   saveConfirm.value = false
   aiFeedback.value = ''
-  autoBestFeedback.value = ''
+  autoFeedback.value = ''
   appliedSuggestion.value = null
   if (saveConfirmTimer) {
     clearTimeout(saveConfirmTimer)
     saveConfirmTimer = null
   }
-}
-
-function rerollSeed(): void {
-  seed.value = Math.floor(Math.random() * 0x1_0000_0000)
-  saveConfirm.value = false
 }
 
 // ---- 参数校验（与 save.ts validateJigsawSchemeParams 同口径） ----
@@ -123,8 +131,6 @@ function validateForm(): string {
   if (!Number.isInteger(rows.value) || rows.value < 2 || rows.value > 12) return t('schemes.invalidParams')
   if (!Number.isInteger(cols.value) || cols.value < 2 || cols.value > 12) return t('schemes.invalidParams')
   if (tabDepth.value < 0.08 || tabDepth.value > 0.25) return t('schemes.invalidParams')
-  if (!Number.isInteger(threshold.value) || threshold.value < 0 || threshold.value > 100) return t('schemes.invalidParams')
-  if (!Number.isInteger(seed.value) || seed.value < 0 || seed.value > 0xffffffff) return t('schemes.invalidParams')
   if (sourceKind.value === 'custom' && !customAssetId.value) return t('schemes.needImage')
   return ''
 }
@@ -164,7 +170,13 @@ async function onUpload(event: Event): Promise<void> {
 const previewCanvas = ref<HTMLCanvasElement | null>(null)
 let previewToken = 0
 
-// 验收四轮六：seed 纳入重绘依赖 —— 换花样即时可见（此前换种子无任何可见反馈，被误报「点不了」）
+// 模式联动：进 auto 即按当前图与难度自动选规格（换图/换难度重算）；离开 ai 清除建议权重（防跨模式误带）
+watch([mode, difficulty, panelOpen, imageId, customAssetId], async () => {
+  if (mode.value !== 'ai' && appliedSuggestion.value) appliedSuggestion.value = null
+  if (mode.value === 'auto' && panelOpen.value) await runAutoSpec()
+})
+
+// 验收四轮六：seed 纳入重绘依赖 —— 花样随面板打开内部随机，预览与保存所见即所得
 watch([previewSrc, rows, cols, tabDepth, seed, panelOpen, appliedSuggestion], () => {
   // 手动改网格数使建议权重长度失效 → 回退均匀示意（防入档长度不符）
   if (
@@ -263,9 +275,11 @@ function sourceLabel(scheme: JigsawSchemeData): string {
   return scheme.source.kind === 'builtin' ? scheme.source.imageId : t('schemes.customImage')
 }
 
-/** 种子短标识（36 进制末 4 位）：同图多方案（同规格不同切法）在列表里可区分 */
-function seedTag(seed: number): string {
-  return seed.toString(36).slice(-4)
+/** 卡片类型标签（反馈 2：旧档缺省 = 自定义） */
+function modeLabel(scheme: JigsawSchemeData): string {
+  return t(
+    scheme.mode === 'auto' ? 'schemes.modeAuto' : scheme.mode === 'ai' ? 'schemes.modeAi' : 'schemes.modeCustom',
+  )
 }
 
 // 删除二次确认（首次点按弹确认态，3 秒未确认自动复原；有成绩的方案同样保留该确认门槛）
@@ -336,14 +350,21 @@ function saveScheme(): void {
       : undefined
   // 空名兜底 key 化（M6.6：英文界面不再出现中文默认名；纯层 createScheme 内部兜底仅作防御）
   const finalName = name.value.trim() || t('schemes.defaultName', { n: listSchemes().length + 1 })
-  createScheme(finalName, currentSource(), {
-    rows: rows.value,
-    cols: cols.value,
-    tabDepth: tabDepth.value,
-    uniquenessThreshold: threshold.value,
-    seed: seed.value,
-    ...(suggestion ? { suggestion } : {}),
-  })
+  const savedMode: JigsawSchemeMode =
+    mode.value === 'custom' ? 'custom' : suggestion && mode.value === 'ai' ? 'ai' : 'auto'
+  createScheme(
+    finalName,
+    currentSource(),
+    {
+      rows: rows.value,
+      cols: cols.value,
+      tabDepth: tabDepth.value,
+      uniquenessThreshold: 18,
+      seed: seed.value,
+      ...(suggestion ? { suggestion } : {}),
+    },
+    savedMode,
+  )
   closePanel()
   refresh()
 }
@@ -384,7 +405,7 @@ async function onAiSuggest(): Promise<void> {
     const { dataUrl, image: analysis } = await currentAnalysis()
     const outcome = await suggestCutPlan(
       analysis,
-      { rows: rows.value, cols: cols.value, tabDepth: tabDepth.value, uniquenessThreshold: threshold.value },
+      { rows: rows.value, cols: cols.value, tabDepth: tabDepth.value, uniquenessThreshold: 18 },
       seed.value,
       dataUrl,
       getSettings().ai,
@@ -394,43 +415,39 @@ async function onAiSuggest(): Promise<void> {
       cols.value = outcome.suggestion.cols
       appliedSuggestion.value = outcome.suggestion
       aiFeedback.value = t('schemes.aiApplied', { rows: rows.value, cols: cols.value })
-    } else if (outcome.kind === 'rejected') {
-      aiFeedback.value =
-        outcome.reason === 'low-quality' ? t('schemes.aiRejectedQuality') : t('schemes.aiRejectedInvalid')
-    } else {
-      aiFeedback.value =
-        outcome.reason === 'not-configured' ? t('schemes.aiNotConfigured') : t('schemes.aiFallback')
+      return
     }
   } catch {
-    // 意外异常同样非阻断：本地算法永远可用（§14.4）
-    aiFeedback.value = t('schemes.aiFallback')
+    // 意外异常同降级链（§14.4 非阻断：本地算法永远可用）
   } finally {
     suggesting.value = false
   }
+  // 未配置/超时/被拒 → 自动执行自动最优回填 + 降级提示（三分类降级链，反馈 2）
+  await runAutoSpec()
+  aiFeedback.value = t('schemes.aiDegradedAuto', { rows: rows.value, cols: cols.value })
 }
 
-// ---- 自动最优（验收返工「每图自动选最优切块」的人工入口）----
-// 保持当前块数档位（难度不变），按图内容选最优行列分配；仅回填表单，用户仍可继续手调/保存。
-// 验收四轮七：锯齿方案一并更新（深度推荐带随机 + 花样重摇），不再只调切块数量。
-async function onAutoBest(): Promise<void> {
-  if (autoBesting.value) return
-  autoBesting.value = true
-  autoBestFeedback.value = ''
+// ---- 自动最优（模式 auto：难度档 → 复杂度窗口，按图内容选规格；失败回落难度占位网格）----
+// 无按钮：进 auto 模式 / 换难度 / 换图时由 watch 触发；仅回填表单，用户仍可保存。
+async function runAutoSpec(): Promise<void> {
+  if (autoRunning.value) return
+  autoRunning.value = true
+  autoFeedback.value = ''
   try {
     const { image } = await currentAnalysis()
-    const best = pickBestSpec(image, complexityForPieces(rows.value * cols.value))
+    const best = pickBestSpec(image, DIFFICULTY_COMPLEXITY[difficulty.value])
     rows.value = best.spec.rows
     cols.value = best.spec.cols
     tabDepth.value = Math.round((0.1 + Math.random() * 0.1) * 100) / 100 // 0.10-0.20 推荐带（与滑杆步长对齐）
-    seed.value = Math.floor(Math.random() * 0x1_0000_0000)
-    // 规格变了：AI 建议权重长度不再匹配，显式失效（watch 亦会兜底）
-    appliedSuggestion.value = null
     saveConfirm.value = false
-    autoBestFeedback.value = t('schemes.autoBestDone', { rows: best.spec.rows, cols: best.spec.cols })
+    autoFeedback.value = t('schemes.autoBestDone', { rows: best.spec.rows, cols: best.spec.cols })
   } catch {
-    autoBestFeedback.value = t('schemes.autoBestFail')
+    const fb = DIFFICULTY_FALLBACK[difficulty.value]
+    rows.value = fb.rows
+    cols.value = fb.cols
+    autoFeedback.value = t('schemes.autoBestFail')
   } finally {
-    autoBesting.value = false
+    autoRunning.value = false
   }
 }
 
@@ -476,13 +493,18 @@ async function onBatchImport(event: Event): Promise<void> {
       const blob = await adapter.assetRepo.loadImage({ id: ref.id })
       const img = await loadSourceImage(await blobToDataUrl(blob))
       const best = pickBestSpec(downscaleToAnalysis(img), level)
-      createScheme(file.name.replace(/\.[^.]+$/, '') || file.name, { kind: 'custom', assetId: ref.id }, {
-        rows: best.spec.rows,
-        cols: best.spec.cols,
-        tabDepth: 0.16,
-        uniquenessThreshold: 18,
-        seed: levelSeed(`auto:${ref.id}`, 1),
-      })
+      createScheme(
+        file.name.replace(/\.[^.]+$/, '') || file.name,
+        { kind: 'custom', assetId: ref.id },
+        {
+          rows: best.spec.rows,
+          cols: best.spec.cols,
+          tabDepth: 0.16,
+          uniquenessThreshold: 18,
+          seed: levelSeed(`auto:${ref.id}`, 1),
+        },
+        'auto',
+      )
       ok += 1
     } catch {
       failed += 1
@@ -544,7 +566,7 @@ onMounted(() => {
           <span class="sm-name">{{ s.name }}</span>
         </div>
         <p class="sm-meta">
-          {{ sourceLabel(s) }} · {{ s.params.rows }}×{{ s.params.cols }} · #{{ seedTag(s.params.seed) }}
+          {{ sourceLabel(s) }} · {{ s.params.rows }}×{{ s.params.cols }} · {{ modeLabel(s) }}
         </p>
         <div class="sm-actions">
           <button
@@ -565,6 +587,36 @@ onMounted(() => {
         <span>{{ t('schemes.name') }}</span>
         <input v-model="name" type="text" :placeholder="t('schemes.namePlaceholder')" data-field="name" />
       </label>
+
+      <div class="sm-field">
+        <span>{{ t('schemes.mode') }}</span>
+        <div class="sm-seg">
+          <button
+            type="button"
+            :class="{ 'is-on': mode === 'custom' }"
+            data-role="mode-custom"
+            @click="mode = 'custom'"
+          >
+            {{ t('schemes.modeCustom') }}
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-on': mode === 'auto' }"
+            data-role="mode-auto"
+            @click="mode = 'auto'"
+          >
+            {{ t('schemes.modeAuto') }}
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-on': mode === 'ai' }"
+            data-role="mode-ai"
+            @click="mode = 'ai'"
+          >
+            {{ t('schemes.modeAi') }}
+          </button>
+        </div>
+      </div>
 
       <div class="sm-field">
         <span>{{ t('schemes.source') }}</span>
@@ -611,7 +663,7 @@ onMounted(() => {
         <span v-if="uploadError" class="sm-error" data-role="upload-error">{{ uploadError }}</span>
       </div>
 
-      <div class="sm-params">
+      <div v-if="mode === 'custom'" class="sm-params">
         <label class="sm-field">
           <span>{{ t('schemes.rows') }}</span>
           <input v-model.number="rows" type="number" min="2" max="12" data-field="rows" />
@@ -624,30 +676,40 @@ onMounted(() => {
           <span>{{ t('schemes.tabDepth') }}（{{ tabDepth.toFixed(2) }}）</span>
           <input v-model.number="tabDepth" type="range" min="0.08" max="0.25" step="0.01" data-field="tabDepth" />
         </label>
-        <label class="sm-field">
-          <span>{{ t('schemes.threshold') }}</span>
-          <input v-model.number="threshold" type="number" min="0" max="100" data-field="threshold" />
-        </label>
-        <label class="sm-field">
-          <span>{{ t('schemes.seed') }}</span>
-          <input v-model.number="seed" type="number" min="0" data-field="seed" />
-        </label>
-        <button type="button" class="secondary-btn" data-role="reroll" @click="rerollSeed">
-          {{ t('schemes.reroll') }}
-        </button>
       </div>
 
-      <div class="sm-suggest-row">
-        <button
-          type="button"
-          class="secondary-btn"
-          :disabled="autoBesting || (sourceKind === 'custom' && !customAssetId)"
-          data-role="auto-best"
-          @click="onAutoBest"
-        >
-          {{ autoBesting ? t('schemes.autoBestBusy') : t('schemes.autoBest') }}
-        </button>
-        <span v-if="autoBestFeedback" class="sm-ai-feedback" data-role="auto-best-feedback">{{ autoBestFeedback }}</span>
+      <div v-else-if="mode === 'auto'" class="sm-field">
+        <span>{{ t('schemes.difficulty') }}</span>
+        <div class="sm-seg">
+          <button
+            type="button"
+            :class="{ 'is-on': difficulty === 'easy' }"
+            data-role="difficulty-easy"
+            @click="difficulty = 'easy'"
+          >
+            {{ t('schemes.difficultyEasy') }}
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-on': difficulty === 'medium' }"
+            data-role="difficulty-medium"
+            @click="difficulty = 'medium'"
+          >
+            {{ t('schemes.difficultyMedium') }}
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-on': difficulty === 'hard' }"
+            data-role="difficulty-hard"
+            @click="difficulty = 'hard'"
+          >
+            {{ t('schemes.difficultyHard') }}
+          </button>
+        </div>
+        <span v-if="autoFeedback" class="sm-ai-feedback" data-role="auto-feedback">{{ autoFeedback }}</span>
+      </div>
+
+      <div v-else class="sm-suggest-row">
         <button
           type="button"
           class="secondary-btn"
@@ -655,7 +717,7 @@ onMounted(() => {
           data-role="ai-suggest"
           @click="onAiSuggest"
         >
-          {{ suggesting ? t('schemes.aiThinking') : t('schemes.aiSuggest') }}
+          {{ suggesting ? t('schemes.aiThinking') : t('schemes.modeAi') }}
         </button>
         <span v-if="aiFeedback" class="sm-ai-feedback" data-role="ai-feedback">{{ aiFeedback }}</span>
       </div>
