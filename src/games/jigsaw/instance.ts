@@ -539,7 +539,7 @@ export function mountJigsaw(
       }
       const to = slotRect(content, plan!, step.toSlot.row, step.toSlot.col)
       pushFlight(step.pieceIndex, from, to, DEMO_STEP_MS)
-      // 演示中不走 afterPlace（避免中途 allPlaced 触发结算/错位闪烁）；放弃语义恒 onAbandon
+      // 不走 afterPlace：演示中途 allPlaced 会误触结算/错位闪烁打断演示；终局统一由播完分支走 onComplete 完成结算链
       refreshHud()
       reportProgress()
       const timer = setTimeout(() => playStep(k + 1), DEMO_STEP_MS + 40)
