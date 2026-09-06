@@ -239,7 +239,7 @@ localStorage 在 file:// 下 Chrome/Edge/Firefox 均可用（按 origin 隔离�
 | `games/keygame/` | 键盘游戏 GameModule 实现 | `keygameModule: GameModule` |
 | `games/jigsaw/` | 拼图游戏 GameModule 实现 | `jigsawModule: GameModule` |
 | `games/maze/` | 迷宫游戏 GameModule 实现 | `mazeModule: GameModule` |
-| `engines/jigsaw-cutter/` | 切块引擎：梯度分析 + 非均匀网格 + 锯齿凸凹 + 唯一性校验；AI 建议规范化 | `cut(image, options): CutPlan` / `normalizeAiSuggestion(json)` |
+| `engines/jigsaw-cutter/` | 切块引擎：梯度分析 + 均匀网格（内容只定块数，验收返工二轮）+ 锯齿凸凹 + 唯一性校验；AI 建议规范化 | `cut(image, options): CutPlan` / `normalizeAiSuggestion(json)` |
 | `engines/maze-generator/` | 迷宫生成：mulberry32 + 递归回溯 + 分支度 | `generateMaze(seed, size, options): MazeData` |
 | `engines/wordbank/` | 词库：数字/字母序列、英文分级词、拼音词表 | `getSequence(level)` / `getWords(level)` / `getPinyin(level)` |
 | `engines/rng.ts` | mulberry32 PRNG 封装（三游戏共用） | `createRng(seed)` |
@@ -364,6 +364,8 @@ interface GameHooks {
 → onComplete/onAbandon → 平台结算 → destroy() → 返回关卡选择
 ```
 
+> **验收返工（重玩纪元）**：结算/暂停的「重玩」与再次进关均经 `openLevel` 重入——每次自增 `levelEpoch` 纪元，App.vue 的 GameContainer `:key` 含纪元，同关重玩强制销毁重建实例（修复同 key 复用导致实例已 destroy 后重玩白屏）。
+
 ## 8.5 新游戏接入步骤
 
 1. 新建 `games/xxx/`，实现 GameModule 五成员
@@ -412,9 +414,11 @@ interface GameHooks {
 
 单字符 → 序列变长 → 引入限时速度要求 → 单词/拼音词长递增；大/小键盘模式各自成线，由 `createLevel(n)` 参数化生成。
 
+> **验收返工（词序 = 词表顺序）**：英文/拼音模式的取词为**词表顺序滚动窗口**（`pickInOrder`，词表本身按由简到难编排）：拼音一级首关从首词「大/da」起（1-17 一级 / 18-34 二级 / 35-50 三级，换级从该级首词重启窗口），英文按词长桶内顺序推进（首关从桶首词起）；随机序列模式仍由关卡种子派生（确定性不变）。自定义词表仅替换词池，顺序滚动口径不变。
+
 ## 10.5 实现要点
 
-- 虚拟键盘为 DOM/CSS 组件（非 Canvas），键位布局数据驱动（大/小两套布局常量）
+- 虚拟键盘为 DOM/CSS 组件（非 Canvas），键位布局数据驱动（大/小两套布局常量）；按实际布局宽度渲染不拉伸铺满（验收返工：拉伸铺满致键位变形失真），目标词区与键盘间保持适度间距
 - 物理键盘监听 keydown → 归一化 key 标识 → 与目标序列比对
 - 成绩 = 用时 + 错误次数 → 星级
 
@@ -433,6 +437,8 @@ interface GameHooks {
 │ (可放大细节) │                       │ (按顺序缩略列表) │
 └─────────────┴───────────────────────┴─────────────┘
 ```
+
+> **验收返工二轮（缩略零失真）**：各区图/块缩略统一走 `fitRectAspect` 等比 contain（不拉伸变形）；左上参考图为清晰等比缩略，点击弹框放大至接近原尺寸（点击任意处关闭）；左下/右上/右下为块的等比缩略，拖拽中按拼板槽位原尺寸绘制（与吸附落位零缩放跳变）。
 
 ## 11.2 玩法流程
 
@@ -463,9 +469,9 @@ interface GameHooks {
 
 - 切割线可落在任何区域（包括人脸，线下拼图同样切脸）
 - **避免大片同色区域密集切块**：纯色块（天空、白墙）无法相互区分，产生「模棱两可的位置」，必须规避
-- 实现路径：**非均匀网格 + 锯齿凸凹边缘**。对图像做梯度/颜色方差分析，同色平坦区使用更大的块（少切），细节丰富区使用更小的块（多切）；锯齿凸凹方向/尺寸带随机种子，为形状匹配提供额外线索
-- **均匀微差吸附**（v1.0 验收返工）：切割线距理想均匀位偏差 ≤ 平均段长 10% 时吸附到均匀位（微差肉眼难辨，与其留不齐的缝不如切齐）；显著偏差（>10%）是内容驱动的有意设计，保留非均匀。AI 建议线不经此步（权重即用户显式语义）
-- **块唯一性校验**：切割完成后对每块计算视觉区分度评分（颜色方差/边缘特征），低于阈值的块自动调整所属切割线，从算法上保证「不存在模棱两可的位置」
+- 实现路径：**均匀网格 + 锯齿凸凹边缘**。对图像做梯度/颜色方差分析，据内容复杂度决定**切块数量**（同色平坦区少切大块、细节丰富区多切小块）；锯齿凸凹方向/尺寸带随机种子，为形状匹配提供额外线索
+- **切块全均匀**（验收返工二轮）：切割线一律等分（`buildAxisLines` 纯均匀 `round(size×k/count)`），±10% 微差吸附机制退役——内容分析与 AI 建议只贡献 rows/cols（块数），不再移动切割线；块大小完全一致，视觉整齐与吸附校准确定性优先
+- **块唯一性校验（评分保留）**：切割完成后仍对每块计算视觉区分度评分（minScore），低分规格在优选/建议链路被抑制；但不再挪动切割线（均匀契约下 `adjusted` 恒 0，CutPlan 字段保留仅作历史方案兼容）
 
 **本地算法为默认兜底**：纯前端计算（Canvas 像素采样），离线 file:// 模式永远可用。
 
@@ -479,7 +485,7 @@ interface GameHooks {
 | GLM（智谱） | OpenAI 兼容模式 | 用户指定优先 |
 | 自定义 | 任意 OpenAI 兼容 base URL | 扩展预留 |
 
-API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存储，不上传）。AI 调用失败、超时、未配置时**自动降级本地算法，功能不中断**。AI 返回的建议同样经过块唯一性校验，不合法则降级。
+API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存储，不上传）。AI 调用失败、超时、未配置时**自动降级本地算法，功能不中断**。AI 返回的建议同样经过块唯一性校验，不合法则降级。验收返工二轮起，建议只贡献 rows/cols（权重字段仅随方案入档作历史兼容，切割线恒均匀）；应用前与本地同块数网格做质量门槛对比（minScore 不占优则拒绝，回退本地）。
 
 ## 11.8 切块工作流与版本隔离（独立功能，不混入游戏内）
 
@@ -492,6 +498,8 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 **版本与进度隔离**：同图可并存多个方案（不同网格/种子/建议权重 = 不同版本），互不覆盖；每方案进度按「专题轨 + 方案 id 键」独立记录（§11.5），删除方案只移除其关卡位与进度键。已有摆放进度时重新切块（同方案改参数）须二次确认（F-18，防误触销毁当前盘面；其余方案进度不受影响）。
 
+> **验收返工（本地图片直达链路）**：本地图片批量导入自动建档（每图入 IndexedDB → 像素分析 → §11.10 优选规格直接建方案）；选关页 custom 专题空态提供「导入本地图片」直达按钮，进入方案页自动打开文件选择器（一次性标志 `schemesAutoBatch`，消费自清零）。
+
 ## 11.9 图片来源
 
 - **内置图库**：CC0/CC-BY 高清图（≥1K 分辨率），按专题分组（动物、太空、风景、卡通等），来源 Wikimedia Commons / Kenney / OpenGameArt，随仓库携带并在文档标注每张图的 license
@@ -502,7 +510,7 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 > **v1.0 验收返工**：内置方案的网格不再按复杂度占位（3/4/5 方块），改为**按图内容自动选最优规格**——难度档定块数窗口，窗口内枚举 rows×cols 评分择优（`games/jigsaw/optimize.ts`）。
 
 - **难度档窗口**（块数：最小-最大-目标）：c1 = 6-12-9、c2 = 12-20-16、c3 = 20-30-25；目标值 = 原占位块数（内容无偏向的图选回 3×3/4×4/5×5，难度曲线两路径一致）；候选单边 ∈ [2,6]
-- **评分**（0-100）：`100 × (0.4·clamp(mean/45) + 0.2·clamp(min/25) + 0.2·(1−weakRatio@阈值18) + 0.2·面积均匀度) × (1 − 0.35·块形惩罚)`——前三项复用切块引擎的块区分度评分（pieceScore 轻量评估：只采样块矩形，锯齿与唯一性贪心不参与）；面积均匀度惩罚非均匀切割的块大小悬殊；块形惩罚（|ln(块宽/块高)|/ln2，方形为 0 条形罚满）引导每块接近正方形（更接近线下拼图体验）
+- **评分**（0-100）：`100 × (0.4·clamp(mean/45) + 0.2·clamp(min/25) + 0.2·(1−weakRatio@阈值18) + 0.2·面积均匀度) × (1 − 0.35·块形惩罚)`——前三项复用切块引擎的块区分度评分（pieceScore 轻量评估：只采样块矩形，锯齿与唯一性贪心不参与）；面积均匀度惩罚非均匀切割的块大小悬殊（验收返工二轮起切割恒均匀，该项恒满分，仅保留公式一致性）；块形惩罚（|ln(块宽/块高)|/ln2，方形为 0 条形罚满）引导每块接近正方形（更接近线下拼图体验）
 - **确定性**：输入 = 内嵌 thumbs（192 长边分析缩略）+ 纯函数评分 → 任何设备同图同结果；**规格不入档**（非用户数据，仅进程内 Map 缓存），每次启动重算
 - **预热链**：`main.ts` 挂载后 `warmBuiltinOptima()` 后台逐图分析（不阻塞首屏，单图 4s 超时）+ 选关页（拼图）挂载幂等补预热（提示行不锁关卡格）；未预热完成 / 单图失败 / 无 Canvas 像素能力（`canAnalyze` 自检，异常环境零悬挂）时**回落复杂度占位网格**，功能永不中断
 - **人工同图多切片**：新建面板「自动最优」按钮（`pickBestSpec` + `complexityForPieces` 按当前表单块数保档）一键回填 rows/cols（仅回填不自动建档，保存仍走显式确认）；方案卡片 meta 带 seed 短标识（36 进制末 4 位）区分同图同规格不同切法
@@ -529,11 +537,11 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 ## 12.3 主题（瓦片皮肤制）
 
-每主题一套 CC0 像素瓦片 + 调色。候选：**城堡、花园、雪原、火山、海底、丛林、太空站、矿洞**（首期实现**城堡 + 花园**，其余按主题包扩展，M6 后增量）。
+每主题一套 CC0 像素瓦片 + 调色。主题全集：**城堡、花园、雪原、火山、海底、丛林、太空站、矿洞**（`MAZE_THEMES` 单一出处；验收返工二轮补齐后 6 个推荐主题，花园 goal 瓦片改木门、墙/地瓦片图案加密）。
 
 > **M4 实施口径**：离线环境无外网素材渠道（同 §15.3 图库口径）→ 瓦片由 `scripts/gen-maze-assets.mjs` 确定性程序化生成 PNG（每主题 wall/floor/goal/start 四瓦片，1024×1024：v1.0 验收返工高清化，32×32 像素画逻辑网格 ×32 整数放大，`assets/tiles/<主题>/`）；运行时**皮肤双轨**——paletteSkin 色板几何绘制先行渲染（零等待），PNG 皮肤异步加载成功后整体重画，任一资源失败保持色板兜底（可玩性优先）。`TileSkin` 同构接口（drawTile/drawHero）是渲染层唯一绘制入口，instance 不感知皮肤来源。
 
-> **v1.0 验收返工（HUD 主题切换）**：关卡内 HUD 主题区为两枚切换按钮（城堡/花园，当前主题 `aria-pressed` 高亮），点击即时换肤重画（paletteSkin 先行 + PNG 异步整体重画）并写入 `settings.mazeTheme` 持久化（下次进关沿用 = **记住上次主题**）；结算 `meta.theme` 记录结算时主题。
+> **v1.0 验收返工（HUD 主题切换）**：关卡内 HUD 主题区为 8 枚切换按钮（`MAZE_THEMES` 全集，当前主题 `aria-pressed` 高亮），点击即时换肤重画（paletteSkin 先行 + PNG 异步整体重画）并写入 `settings.mazeTheme` 持久化（下次进关沿用 = **记住上次主题**）；结算 `meta.theme` 记录结算时主题。
 
 ## 12.4 角色
 
@@ -570,7 +578,7 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 ## 13.4 设置（core/settings.ts）
 
-全局设置项：**语言（locale，中/英，切换立即生效）**、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）、迷宫主题（mazeTheme，城堡/花园；**迷宫 HUD 内切换写入**，不在设置页暴露，缺省城堡，存档 v7 新增）。设置并入存档单一 key，经 settings.ts 统一读写。
+全局设置项：**语言（locale，中/英，切换立即生效）**、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）、迷宫主题（mazeTheme，8 主题全集见 §12.3；**迷宫 HUD 内切换写入**，不在设置页暴露，缺省城堡，存档 v7 新增）。设置并入存档单一 key，经 settings.ts 统一读写。
 
 ## 13.5 多语言（i18n）
 
@@ -637,9 +645,9 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 > **M5 实施口径**（2026-09-06 落地）：
 >
 > - **模块落点**：`src/ai/provider.ts`（Provider 层「HTTP 进文本出」：PROVIDER_PRESETS 预设 qwen = DashScope compatible-mode + qwen-vl-max、glm = bigmodel `api/paas/v4` + **glm-5.3**（开发计划模型口径）、custom 留空；`resolveProviderConfig` 显式填写优先于预设；`createSuggestionProvider` → POST `{baseURL}/chat/completions` + Bearer 鉴权 + AbortController 超时中断；ProviderError 四分类 timeout / network / http-error / no-content；**不解析 JSON，解析归引擎层**）+ `src/ai/suggest.ts`（降级编排 `suggestCutPlan`：本地算法先算恒为兜底与对比基准；三态九分支同 §14.4——applied / rejected(invalid-json、invalid-schema、low-quality，其中 low-quality = AI 方案 minScore 低于本地基准时对比择优拒绝) / fallback(not-configured、timeout、network、http-error、no-content)，rejected 与 fallback 均携带本地 plan；非 ProviderError 意外错误上抛不吞；DEFAULT_TIMEOUT_MS = 30s）+ `engines/jigsaw-cutter/suggest.ts`（§14.5 规范化器，见下）
-> - **规范化器四步**：parseSuggestionText（剥 markdown 围栏 + isPlainObject）→ normalizeSuggestion（rows/cols 整数 [2,12] **严格拒绝而非钳制**——钳制破坏权重与行列数的对应；权重长度严格匹配；0/负值/非数字拒，WEIGHT_FLOOR = 0.01 抬底后归一化和为 1）→ weightsToLines（cumsum 等分 + **Math.round 网格对齐 + 单调递增钳制**，问题汇总 P4-03 实证）→ createCutPlanFromSuggestion（建议线替换 buildAxisLines，复用 buildTabSpecs / assemblePieces / ensureUniqueness 闭环，与本地算法完全同源下游）
-> - **建议持久化**：JigsawSchemeParams.suggestion 只存归一化权重（rows/cols 在参数主体），save 端校验有限正数 + 长度匹配；方案网格阶梯进阶后长度不符自动回退本地算法（建议只影响方案起步切法）
-> - **UI 接线**：设置页 AI 配置区（M5.2：关闭开关 = 移除存档 ai 段；导出脱敏）+ 切块工作流 AI 建议按钮（M5.5：内置图 data URI / 自定义图 IndexedDB blob → data URL 双路径；建议生效回填网格并以非均匀线实时预览；手动改网格时建议自动失效）
+> - **规范化器四步**：parseSuggestionText（剥 markdown 围栏 + isPlainObject）→ normalizeSuggestion（rows/cols 整数 [2,12] **严格拒绝而非钳制**；权重长度严格匹配；0/负值/非数字拒，WEIGHT_FLOOR = 0.01 抬底后归一化和为 1）→ createCutPlanFromSuggestion（验收返工二轮均匀化：只取 rows/cols 重建均匀网格，`createCutPlan(image, { ...base, rows, cols }, seed)` 复用本地算法全闭环；旧 weightsToLines 已退役，P4-03 的浮点对齐问题随同消亡）
+> - **建议持久化**：JigsawSchemeParams.suggestion 只存归一化权重（rows/cols 在参数主体，仅作历史方案兼容与 AI 输出留痕），save 端校验有限正数 + 长度匹配；网格生成不再消费权重（切割恒均匀）
+> - **UI 接线**：设置页 AI 配置区（M5.2：关闭开关 = 移除存档 ai 段；导出脱敏）+ 切块工作流 AI 建议按钮（M5.5：内置图 data URI / 自定义图 IndexedDB blob → data URL 双路径；建议生效回填网格并以均匀线实时预览；手动改网格时建议自动失效）
 
 # 15. 数据与资产管理
 
@@ -651,7 +659,7 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 | 英文词库 | TS 模块 | 分级词表（3 字母 → 8+ 字母），来源开源词表整理 |
 | 拼音词库 | TS 模块 | `{word:'学校', pinyin:'xue xiao'}` 结构，常用字词分级 |
 | 内置图库 | `assets/images/<专题>/` | M3 实施为确定性程序化生成 PNG（1024 源图仅绘制 + 192 分析缩略内嵌 `thumbs.ts`，`CREDITS.md` 标注，见 §15.3）；预留 CC0/CC-BY 收录位（≥1K，逐张标注） |
-| 瓦片/sprite | `assets/tiles/<主题>/`、`assets/sprites/` | M4 实施为确定性程序化生成 PNG（gen-maze-assets.mjs：8 张 1024² 瓦片 + 768×1024 hero 条带共 9 文件约 114KB——v1.0 验收返工高清化，像素画逻辑网格整数倍放大；CREDITS.md 标注随 MIT）；运行时 paletteSkin 色板兜底（§12.3），CC0 收录位保留（M6 后增量） |
+| 瓦片/sprite | `assets/tiles/<主题>/`、`assets/sprites/` | M4 实施为确定性程序化生成 PNG（gen-maze-assets.mjs：验收返工二轮 8 主题 × 4 瓦片 = 32 张 1024² + 768×1024 hero 条带共 33 文件约 399KB——像素画逻辑网格整数倍放大；CREDITS.md 标注随 MIT）；运行时 paletteSkin 色板兜底（§12.3），CC0 收录位保留（M6 后增量） |
 | 自定义图片 | FileReader 导入 → services/ 素材仓库 | 本地 IndexedDB 持久化（跨会话保留）；Web 二期服务端按用户隔离；不落仓库 |
 
 ## 15.2 词库规范
@@ -775,7 +783,7 @@ LudoBurrow-vX.Y.Z/
 | 维度 | 要求 |
 |---|---|
 | 性能 | 拼图拖拽、迷宫移动交互流畅（目标 60fps）；50 关最高难度下切块计算 < 2s |
-| 包体积 | 核心 zip 合理可控：内置图库程序化生成体积恒定（M6.1 扩至 24 张实测约 870KB，实施口径见 §15.3）+ 迷宫瓦片/sprite 程序化生成（v1.0 验收返工高清化后 9 文件约 114KB，见 §12.3/§12.4）+ PWA 产物轻量（manifest/sw.js/程序化图标，M6.2）。「按需分专题包」调整为：图库目录专题化**全量随包**（zip 下载即玩、50 关全可玩，体积恒定），在线版以 SW 按需缓存等价实现（部署规范 §5.3） |
+| 包体积 | 核心 zip 合理可控：内置图库程序化生成体积恒定（M6.1 扩至 24 张实测约 870KB，实施口径见 §15.3）+ 迷宫瓦片/sprite 程序化生成（验收返工二轮 8 主题全量后 33 文件约 399KB，见 §12.3/§12.4）+ PWA 产物轻量（manifest/sw.js/程序化图标，M6.2）。「按需分专题包」调整为：图库目录专题化**全量随包**（zip 下载即玩、50 关全可玩，体积恒定），在线版以 SW 按需缓存等价实现（部署规范 §5.3） |
 | 可靠性 | 存档损坏可提示恢复；AI 失败自动降级；图片加载失败占位提示不崩溃 |
 | 可维护性 | engines 纯逻辑可单测；新游戏零侵入接入；文档与代码同步 |
 | 隐私 | 用户图片与 AI Key 仅存本机；除用户主动触发的 AI 请求外无任何网络传输 |
@@ -786,7 +794,7 @@ LudoBurrow-vX.Y.Z/
 |---|---|---|
 | R-01 | file:// 各浏览器行为差异 | M1 即建立浏览器矩阵冒烟（Chrome/Edge/Firefox），此后每里程碑回归 |
 | R-02 | 1K 图片本地包体积大 | 内置图库程序化生成（体积恒定可控，M3.9/M6.1 实施口径见 §15.3，24 张约 870KB 全量随包）+ 在线版 SW 按需缓存（部署规范 §5.3） |
-| R-03 | 切块算法产生歧义块 | 块唯一性评分（颜色方差/边缘特征）低于阈值自动调整切割线；AI 建议同样过此校验 |
+| R-03 | 切块算法产生歧义块 | 块唯一性评分（颜色方差/边缘特征）低于阈值的规格在优选/建议链路被抑制（验收返工二轮起切割恒均匀，不再挪线）；AI 建议同样过此校验 |
 | R-04 | 视觉 AI 返回不合法切割建议 | Provider 输出统一走本地规范化器（schema 校验 + 合法化），无效则降级 |
 | R-05 | localStorage 容量/清空 | 存档 < 1MB 设计；导出备份；损坏提示恢复不静默清空 |
 | R-06 | 拼图拖拽/迷宫渲染性能 | Canvas 分层渲染、rAF 节流、坐标计算纯函数化（可 profile 优化） |

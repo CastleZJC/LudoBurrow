@@ -1,5 +1,5 @@
 // SchemeManager 组件测试（验收返工「方案 = 关卡」：新建即入轨 / F-18 确认 / 3.11 上传闭环）
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, beforeAll, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import type { VueWrapper } from '@vue/test-utils'
 import SchemeManager from '@/components/SchemeManager.vue'
@@ -371,6 +371,39 @@ describe('SchemeManager 自动最优（验收返工「每图自动选最优切�
     expect(btn().disabled).toBe(false)
     await wrapper.find('[data-role="source-custom"]').trigger('click')
     expect(btn().disabled).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('SchemeManager 空态直达批量导入（验收返工三：选关空态 → 方案页自动开文件选择器）', () => {
+  let clickSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    saveImageMock.mockReset()
+    loadImageMock.mockReset()
+    // happy-dom 中 hidden input 的 click 无浏览器弹窗，mock 掉以断言触发链且无副作用
+    clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+  })
+  afterEach(() => clickSpy.mockRestore())
+
+  it('schemesAutoBatch 标志在：挂载即消费并自动点击文件选择器（标志清零，仅一次）', async () => {
+    const platform = usePlatformStore()
+    platform.openSchemes(true)
+    const wrapper = mountWithApp(SchemeManager)
+
+    expect(clickSpy).toHaveBeenCalledTimes(1) // batch-input 被自动点击
+    expect(platform.schemesAutoBatch).toBe(false) // 一次性标志已消费，不重复触发
+    wrapper.unmount()
+  })
+
+  it('无标志（常规进入方案页）：挂载不自动触发文件选择器', () => {
+    const platform = usePlatformStore()
+    platform.openSchemes()
+    const wrapper = mountWithApp(SchemeManager)
+    expect(platform.schemesAutoBatch).toBe(false)
+    expect(clickSpy).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

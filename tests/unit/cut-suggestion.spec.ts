@@ -8,7 +8,6 @@ import {
   createCutPlanFromSuggestion,
   normalizeSuggestion,
   parseSuggestionText,
-  weightsToLines,
 } from '@/engines/jigsaw-cutter/suggest'
 
 /** 纯色图（梯度全 0）：建议切块在无梯度信号下仍可工作 */
@@ -100,20 +99,6 @@ describe('normalizeSuggestion（schema 校验 + 合法化）', () => {
   })
 })
 
-describe('weightsToLines（权重 → 切割线，累计等分）', () => {
-  it('均匀权重 → 像素等分（含首尾边界）', () => {
-    expect(weightsToLines([1, 1, 1, 1], 100)).toEqual([0, 25, 50, 75, 100])
-  })
-
-  it('偏斜权重 [3,1] → 前段占 3/4（权重大 = 块大）', () => {
-    expect(weightsToLines([3, 1], 100)).toEqual([0, 75, 100])
-  })
-
-  it('单段 → 仅首尾', () => {
-    expect(weightsToLines([2], 50)).toEqual([0, 50])
-  })
-})
-
 describe('createCutPlanFromSuggestion（建议 → 切块方案，复用唯一性闭环）', () => {
   const SUGGESTION = normalizeSuggestion({
     rows: 3,
@@ -135,14 +120,12 @@ describe('createCutPlanFromSuggestion（建议 → 切块方案，复用唯一�
     expect(plan.colLines[3]).toBe(96)
   })
 
-  it('偏斜建议生效：rowWeights [3,1,1] → 第一行边界 > 中点（前段块大）', () => {
+  it('验收返工二轮：切块恒均匀——偏斜权重不再移动线位（权重仅随方案入档兼容）', () => {
     const img = flatImage(96)
     const plan = createCutPlanFromSuggestion(img, SUGGESTION.suggestion, { rows: 3, cols: 3 }, 42)
-    // [3,1,1]/5 → 边界 57.6 → 唯一性调整容差内仍应明显大于中点
-    expect(plan.rowLines[1]).toBeGreaterThan(48)
-    // colWeights [1,1,3] → 前两列紧凑（第二条内部线 < 中点）、第三列段宽 > 中点
-    expect(plan.colLines[2]).toBeLessThan(48)
-    expect(plan.colLines[3]! - plan.colLines[2]!).toBeGreaterThan(48)
+    // rowWeights [3,1,1] / colWeights [1,1,3] 均不生效：线位 = round(96×k/3)
+    expect(plan.rowLines).toEqual([0, 32, 64, 96])
+    expect(plan.colLines).toEqual([0, 32, 64, 96])
   })
 
   it('确定性：同图同建议同参同种子 → 完全相同方案', () => {
@@ -171,6 +154,6 @@ describe('createCutPlanFromSuggestion（建议 → 切块方案，复用唯一�
     const img = flatImage(96)
     const plan = createCutPlanFromSuggestion(img, SUGGESTION.suggestion, { rows: 3, cols: 3 }, 42)
     expect(Number.isFinite(plan.minScore)).toBe(true)
-    expect(plan.adjusted).toBeGreaterThanOrEqual(0)
+    expect(plan.adjusted).toBe(0) // 全均匀口径：线不再调整（验收返工二轮）
   })
 })

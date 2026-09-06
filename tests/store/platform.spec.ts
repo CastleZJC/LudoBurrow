@@ -32,6 +32,28 @@ describe('platform store', () => {
     expect(platform.currentLevelN).toBe(3)
   })
 
+  it('openLevel 每次自增 levelEpoch：同关重玩纪元变化 → GameContainer :key 变化重建实例（验收返工白屏修复）', () => {
+    const platform = usePlatformStore()
+    expect(platform.levelEpoch).toBe(0)
+    const config = { gameId: 'stub', n: 3, seed: 1 }
+    platform.openLevel(config)
+    const e1 = platform.levelEpoch
+    expect(e1).toBeGreaterThan(0)
+    platform.exitToSelect()
+    platform.openLevel(config) // 同关重玩：gameId/n 不变，仅纪元变化
+    expect(platform.levelEpoch).toBe(e1 + 1)
+  })
+
+  it('openSchemes(autoBatch) 一次性标志：写入后可消费自清零（选关空态直达批量导入）', () => {
+    const platform = usePlatformStore()
+    expect(platform.schemesAutoBatch).toBe(false)
+    platform.openSchemes(true)
+    expect(platform.view).toBe('schemes')
+    expect(platform.schemesAutoBatch).toBe(true)
+    platform.schemesAutoBatch = false // 方案页挂载时消费
+    expect(platform.schemesAutoBatch).toBe(false)
+  })
+
   it('changeLocale 写设置并立即生效 i18n locale', () => {
     const platform = usePlatformStore()
     platform.changeLocale('en-US')

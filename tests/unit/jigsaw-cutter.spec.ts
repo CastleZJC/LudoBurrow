@@ -1,11 +1,10 @@
-// 切块引擎单测（测试规范 §3.3 必测：确定性 / 非均匀性 / 互补性 / 唯一性兜底）
+// 切块引擎单测（测试规范 §3.3 必测：确定性 / 全均匀性 / 互补性 / 唯一性兜底；验收返工二轮：切割线恒均匀）
 import { describe, it, expect } from 'vitest'
 import { createRng } from '@/engines/rng'
 import type { ImageDataLike, TabSpec } from '@/engines/jigsaw-cutter/types'
 import {
   normalizeCutParams,
   createCutPlan,
-  gradientProfile,
   buildAxisLines,
   buildTabSpecs,
   sampleEdgePoints,
@@ -77,71 +76,22 @@ describe('normalizeCutParams', () => {
   })
 })
 
-describe('gradientProfile', () => {
-  it('上下双色图：行梯度集中在分界行，列梯度为 0', () => {
-    const img = makeImage(20, 20, (_x, y) => (y < 10 ? [0, 0, 0] : [255, 255, 255]))
-    const { rowGrad, colGrad } = gradientProfile(img)
-    expect(rowGrad[10]).toBeGreaterThan(200)
-    expect(rowGrad[5]).toBe(0)
-    expect(rowGrad[15]).toBe(0)
-    expect(Math.max(...colGrad)).toBe(0)
-  })
-})
-
-describe('buildAxisLines（非均匀切割）', () => {
-  it('平坦区段长（大块）、细节区段短（小块）', () => {
-    const img = threeBandImage(90)
-    const { rowGrad } = gradientProfile(img)
-    const lines = buildAxisLines(rowGrad, 90, 3, 3)
-    expect(lines).toHaveLength(4)
-    expect(lines[0]).toBe(0)
-    expect(lines[3]).toBe(90)
-    const heights = [lines[1], lines[2] - lines[1], 90 - lines[2]]
-    // 中段（条纹区）应获得最小的行高
-    expect(heights[1]).toBeLessThan(heights[0])
-    expect(heights[1]).toBeLessThan(heights[2])
+describe('buildAxisLines（全均匀切割，验收返工二轮口径）', () => {
+  it('线恒均匀：第 k 条内部线 = round(size×k/count)，与图片内容无关（签名不含图）', () => {
+    expect(buildAxisLines(90, 3)).toEqual([0, 30, 60, 90])
+    expect(buildAxisLines(100, 4)).toEqual([0, 25, 50, 75, 100])
+    expect(buildAxisLines(96, 3)).toEqual([0, 32, 64, 96])
   })
 
-  it('纯色图回退像素等分', () => {
-    const img = makeImage(30, 30, () => [10, 10, 10])
-    const { rowGrad } = gradientProfile(img)
-    expect(buildAxisLines(rowGrad, 30, 3, 3)).toEqual([0, 10, 20, 30])
+  it('非整除尺寸：round 线位微差 ≤ 1px，段宽差 ≤ 1px（内容分析只选块数不选线位）', () => {
+    const lines = buildAxisLines(95, 4)
+    expect(lines).toEqual([0, 24, 48, 71, 95])
+    const segs = [lines[1]!, lines[2]! - lines[1]!, lines[3]! - lines[2]!, 95 - lines[3]!]
+    for (const s of segs) expect(Math.abs(s - 95 / 4)).toBeLessThanOrEqual(1)
   })
 
-  it('均匀微差吸附：缓变梯度（梯度几乎均匀）的线全部恰在均匀位', () => {
-    // 梯度线性缓增 1→1.099：累计等分线 26/52/76 → 梯度吸附后 25/51/75 → 微差（1px ≤ 10%×25段）全部吸附到均匀位
-    const grad = new Float64Array(100)
-    for (let i = 0; i < 100; i++) grad[i] = 1 + i / 1000
-    expect(buildAxisLines(grad, 100, 4, 1)).toEqual([0, 25, 50, 75, 100])
-  })
-
-  it('不变式：每条内部线要么恰在均匀位、要么偏离 > 平均段长 10%（微差不残留）', () => {
-    const cases: Array<[grad: Float64Array, size: number, count: number]> = [
-      [gradientProfile(noiseImage(80)).rowGrad, 80, 4],
-      [gradientProfile(noiseImage(80)).colGrad, 80, 5],
-      [gradientProfile(checkerImage(60)).rowGrad, 60, 3],
-      [gradientProfile(threeBandImage(90)).rowGrad, 90, 3],
-    ]
-    for (const [grad, size, count] of cases) {
-      const lines = buildAxisLines(grad, size, count, 2)
-      const band = (size / count) * 0.1
-      for (let k = 1; k < lines.length - 1; k++) {
-        const dev = Math.abs(lines[k]! - Math.round((size * k) / count))
-        expect(dev === 0 || dev > band, `线 ${k} 偏差 ${dev} 落入微差带 (${band.toFixed(1)})`).toBe(true)
-      }
-    }
-  })
-
-  it('显著偏差保留：内容驱动的不均匀（平坦长细节短）不被均匀化吞掉', () => {
-    const { rowGrad } = gradientProfile(threeBandImage(90))
-    const lines = buildAxisLines(rowGrad, 90, 3, 3)
-    // 均匀位 30/60，实际线 37~40 / 50 附近：偏差远超 10%×30段=3，保留内容驱动设计
-    expect(Math.abs(lines[1]! - 30)).toBeGreaterThan(3)
-    expect(Math.abs(lines[2]! - 60)).toBeGreaterThan(3)
-  })
-
-  it.each([[1, 10], [0, 10], [2, 2]])('非法输入（段 %i / 尺寸 %i）抛 RangeError', (count, size) => {
-    expect(() => buildAxisLines(new Float64Array(size), size, count, 1)).toThrow(RangeError)
+  it.each([[1, 10], [0, 10], [2, 2], [4, 4]])('非法输入（段 %i / 尺寸 %i）抛 RangeError', (count, size) => {
+    expect(() => buildAxisLines(size, count)).toThrow(RangeError)
   })
 })
 
@@ -263,7 +213,8 @@ describe('ensureUniqueness（唯一性闭环）', () => {
     const { minScore, adjusted } = ensureUniqueness(flat, draft, 18)
     expect(minScore).toBeLessThan(18)
     expect(draft.pieces.every((p) => p.shapeBoost)).toBe(true)
-    expect(adjusted).toBeGreaterThanOrEqual(0)
+    // 全均匀口径（验收返工二轮）：线不再调整，adjusted 恒 0（字段保留 = CutPlan 契约兼容）
+    expect(adjusted).toBe(0)
   })
 })
 

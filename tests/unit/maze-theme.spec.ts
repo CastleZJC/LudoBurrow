@@ -2,7 +2,15 @@
 // happy-dom 无真实图片解码 → stub Image 控制加载成败，断言 TileSkin 绘制路径。
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { HERO_SPRITE_PATH, loadTileSkin, paletteSkin, tilePath } from '@/games/maze/theme'
+import {
+  HERO_SPRITE_PATH,
+  THEME_LABEL_KEY,
+  THEME_PALETTES,
+  loadTileSkin,
+  paletteSkin,
+  tilePath,
+} from '@/games/maze/theme'
+import { MAZE_THEMES } from '@/games/maze/level'
 
 type CtxLike = { __calls: { op: string; args: unknown[] }[] }
 
@@ -80,5 +88,55 @@ describe('资产路径口径（与 gen-maze-assets.mjs 产物一致）', () => {
     expect(tilePath('castle', 'wall')).toBe('assets/tiles/castle/wall.png')
     expect(tilePath('garden', 'goal')).toBe('assets/tiles/garden/goal.png')
     expect(HERO_SPRITE_PATH).toBe('assets/sprites/hero.png')
+  })
+})
+
+describe('八主题注册（验收返工：城堡/花园 + 6 推荐主题雪原/火山/海底/丛林/太空站/矿洞）', () => {
+  it('MAZE_THEMES 共 8 项且顺序稳定（主题选择器 = 此顺序）', () => {
+    expect([...MAZE_THEMES]).toEqual(['castle', 'garden', 'snow', 'volcano', 'ocean', 'jungle', 'station', 'mine'])
+  })
+
+  it('调色板与 i18n 标签键全键覆盖（无缺漏主题，色值全 #RRGGBB）', () => {
+    for (const t of MAZE_THEMES) {
+      expect(THEME_LABEL_KEY[t]).toMatch(/^maze\.theme/)
+      const palette = THEME_PALETTES[t]!
+      for (const color of Object.values(palette)) expect(color).toMatch(/^#[0-9a-f]{6}$/)
+    }
+  })
+
+  it('新主题瓦片路径与生成脚本产物一致（主题/类型分目录）', () => {
+    expect(tilePath('snow', 'wall')).toBe('assets/tiles/snow/wall.png')
+    expect(tilePath('volcano', 'goal')).toBe('assets/tiles/volcano/goal.png')
+    expect(tilePath('ocean', 'start')).toBe('assets/tiles/ocean/start.png')
+    expect(tilePath('jungle', 'floor')).toBe('assets/tiles/jungle/floor.png')
+    expect(tilePath('station', 'wall')).toBe('assets/tiles/station/wall.png')
+    expect(tilePath('mine', 'goal')).toBe('assets/tiles/mine/goal.png')
+  })
+
+  it('loadTileSkin 新主题：资源齐备走 PNG 分支 / 失败走色板兜底', async () => {
+    stubImage('load')
+    const okSkin = await loadTileSkin('snow')
+    const ctx = ctx2d()
+    okSkin.drawTile(ctx, 'wall', 0, 0, 16)
+    expect(ctx.__calls.some((c) => c.op === 'drawImage')).toBe(true)
+
+    stubImage('error')
+    const fallback = await loadTileSkin('mine')
+    const ctx2 = ctx2d()
+    fallback.drawTile(ctx2, 'floor', 0, 0, 16)
+    expect(ctx2.__calls.some((c) => c.op === 'fillRect')).toBe(true)
+    expect(ctx2.__calls.some((c) => c.op === 'drawImage')).toBe(false)
+  })
+
+  it('paletteSkin 八主题四类瓦片 + 角色全绘制不抛错（调色板字段完备）', () => {
+    for (const t of MAZE_THEMES) {
+      const skin = paletteSkin(t)
+      const ctx = ctx2d()
+      skin.drawTile(ctx, 'wall', 0, 0, 16)
+      skin.drawTile(ctx, 'floor', 0, 0, 16)
+      skin.drawTile(ctx, 'goal', 0, 0, 16)
+      skin.drawTile(ctx, 'start', 0, 0, 16)
+      skin.drawHero(ctx, 'down', 0, 0, 0, 16)
+    }
   })
 })

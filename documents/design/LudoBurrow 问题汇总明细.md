@@ -14,6 +14,7 @@
 > | V1.4 | 2026-09-06 05:30:00 | 开发累积 | M6 打磨期新增 2 条（新章「6. 开发环境与工具链」）：P6-01 跨工具 PowerShell 命令引号剥离与一元 -not 优先级陷阱 / P6-02 Read 工具对近期修改文件返回陈旧缓存 | castle |
 > | V1.5 | 2026-09-06 10:05:00 | 开发累积 | v1.0 验收返工期新增 1 条：P4-04 setup.ts 全局 RAF mock 在 happy-dom 下未生效（__flushRaf 空转，用例内局部 stub 规避） | castle |
 > | V1.6 | 2026-09-06 11:15:00 | 开发累积 | v1.0 验收返工期（拼图优选与本地素材实测）新增 5 条：P4-05 happy-dom 大 Blob/IDB 模拟层性能 / P4-06 模块级缓存跨 describe 泄漏 / P6-03 PowerShell 整数除法静默取整 / P6-04 PS5.1 UTF8 写入带 BOM / P6-05 SearchReplace「兑底」伪影 | castle |
+> | V1.7 | 2026-09-06 14:20:00 | 开发累积 | v1.1.0 验收返工二轮新增 2 条：P4-07 均匀化后「对比本地」类用例需构造确定性分差 / P6-06 生成脚本模板字符串内反引号必须转义；P6-05 补第三批拦截记录 | castle |
 >
 > **适用范围**：LudoBurrow 开发全周期踩坑记录（AI 会话与人工开发通用）
 
@@ -159,6 +160,16 @@
 
 **参考**：`src/games/jigsaw/optimize.ts`、`tests/unit/jigsaw-schemes.spec.ts`、`tests/unit/jigsaw-optimize.spec.ts`。
 
+### P4-07 均匀化后「对比本地」类用例需构造确定性分差（不同网格）
+
+**现象**：ai-suggest 质量门槛用例（半棋盘图 + 建议 2×2）在切块均匀化后失败——本地基准与建议同为均匀 2×2 网格，minScore 完全相等，「低于本地基准被拒」分支不再触发（实际 applied 而非 rejected）。
+
+**根因**：均匀化前本地网格非均匀、与建议网格天然有分差；均匀化后「同 rows/cols = 同网格 = 同 minScore」，对比语义只剩**不同块数网格之间**的比较。
+
+**解决**：用例改构造确定性分差图（stripeHalfImage：左半 32 周期黑白条纹、右半纯白）+ 建议 2×3——本地基准 2×2 右块贴条纹边 minScore=40，建议 2×3 最右块贴白边 minScore=0，40 > 0 数学确定成立。经验：重构「对比择优」类断言前，先验证两条路径在当前实现下是否仍天然不同。
+
+**参考**：`tests/unit/ai-suggest.spec.ts`（stripeHalfImage）、验收返工二轮（切块全均匀）。
+
 ---
 
 ## 5. 资产与图片
@@ -219,13 +230,23 @@
 
 ### P6-05 SearchReplace 输出「兑底」伪影：替换含「兜底」文本后需 grep 验证
 
-**现象**：多次对含「兜底」的原文执行 SearchReplace 后，new_text 中「兜底」偶发变成「兑底」（如 gen-maze-assets.mjs 注释、SchemeManager onAutoBest 注释）；本会话修错时 new_text 又连带写错一次（「兑底。→ 兜底」补箭头未换字）。
+**现象**：多次对含「兜底」的原文执行 SearchReplace 后，new_text 中「兜底」偶发变成「兑底」（如 gen-maze-assets.mjs 注释、SchemeManager onAutoBest 注释）；本会话修错时 new_text 又连带写错一次（「兑底。→ 兜底」补箭头未换字）。验收返工二轮再拦 3 次（jigsaw instance.ts onPointerDown 注释、maze-theme.spec 用例标题、技术架构文档表格行/开发计划返工行），高频复发。
 
 **根因**：工具链编辑含高频术语的长文本时的偶发字符替换伪影，无规律可预测；人肉复查 new_text 也难一眼识别。
 
-**解决**：纪律——任何替换后若文本含「兜底/退路/回落」类术语，立即 `grep_code '兑底'` 全仓验证（本会话已两次拦截）；提交前全仓扫描一次作为门禁步骤。
+**解决**：纪律——任何替换后若文本含「兜底/退路/回落」类术语，立即 `grep_code '兑底'` 全仓验证（已多次拦截）；提交前全仓扫描一次作为门禁步骤。
 
-**参考**：v1.0 验收返工多次实证（fb-jig-scheme / fb-maze-assets / gen-maze-assets 修复）。
+**参考**：v1.0 验收返工多次实证（fb-jig-scheme / fb-maze-assets / gen-maze-assets 修复）；验收返工二轮 3 次拦截（含新增文本也中招，写入与替换同样需验）。
+
+### P6-06 生成脚本模板字符串内反引号必须 \` 转义，裸写即截断报错
+
+**现象**：编辑 gen-maze-assets.mjs 的 CREDITS 模板字符串（含代码字体 `` `MAZE_THEMES` `` 标记）后运行报 `SyntaxError: Invalid regular expression flags`；修复时误写成 `\<\>`（反斜杠+尖括号，语法合法但输出无反引号包裹），二次修正为 `\`\`` 才对。
+
+**根因**：模板字符串内裸写反引号会提前终止字符串，其后内容被当作代码解析；修复时又把「反引号转义」误解为「尖括号替换」。
+
+**解决**：模板字符串内的反引号统一 `\`` 转义；编辑生成脚本后先跑一次 `node <script>` 验证语法再继续；与 P6-01 同属「编辑后先验证」纪律。
+
+**参考**：`scripts/gen-maze-assets.mjs`（CREDITS 段）、验收返工二轮八主题瓦片生成。
 
 ---
 

@@ -43,7 +43,7 @@ async function onImportBackup(event: Event): Promise<void> {
     <LevelSelect v-else-if="platform.view === 'select'" :key="platform.currentGameId ?? ''" :game-id="platform.currentGameId ?? ''" />
     <GameContainer
       v-else-if="platform.view === 'game' && platform.currentLevelConfig"
-      :key="`${platform.currentGameId}:${platform.currentLevelN}`"
+      :key="`${platform.currentGameId}:${platform.currentLevelN}:${platform.levelEpoch}`"
       :level="platform.currentLevelConfig"
     />
     <SettingsPanel v-else-if="platform.view === 'settings'" />

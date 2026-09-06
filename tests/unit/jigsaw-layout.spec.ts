@@ -4,6 +4,7 @@ import type { CutPlan } from '@/engines/jigsaw-cutter'
 import {
   boardContentRect,
   computeLayout,
+  fitRectAspect,
   hitTestSlot,
   pointInRect,
   slotRect,
@@ -59,6 +60,30 @@ describe('boardContentRect（contain 适配）', () => {
     expect(c.w).toBeCloseTo(300)
     expect(c.x).toBeCloseTo(250) // 居中
     expect(c.y).toBeCloseTo(0)
+  })
+})
+
+describe('fitRectAspect（等比 contain，验收返工「布局零失真」统一口径）', () => {
+  it('宽盒竖图（2:1 图）：高受限等比缩、水平居中、宽高比不变', () => {
+    const r = fitRectAspect({ x: 10, y: 20, w: 400, h: 200 }, 100, 200)
+    expect(r.w).toBeCloseTo(100) // k = min(4, 1) = 1 → 等比不放大也不拉伸
+    expect(r.h).toBeCloseTo(200)
+    expect(r.x).toBeCloseTo(10 + (400 - 100) / 2) // 居中
+    expect(r.y).toBeCloseTo(20)
+    expect(r.w / r.h).toBeCloseTo(100 / 200) // 宽高比严格保持
+  })
+
+  it('高盒横图（1:2 图）：宽受限等比缩、垂直居中', () => {
+    const r = fitRectAspect({ x: 0, y: 0, w: 100, h: 400 }, 200, 100)
+    expect(r.w).toBeCloseTo(100)
+    expect(r.h).toBeCloseTo(50)
+    expect(r.x).toBeCloseTo(0)
+    expect(r.y).toBeCloseTo((400 - 50) / 2)
+  })
+
+  it('内容尺寸非正 → 零尺寸矩形（不抛错）', () => {
+    expect(fitRectAspect({ x: 5, y: 6, w: 100, h: 100 }, 0, 50)).toEqual({ x: 5, y: 6, w: 0, h: 0 })
+    expect(fitRectAspect({ x: 5, y: 6, w: 100, h: 100 }, 50, -1)).toEqual({ x: 5, y: 6, w: 0, h: 0 })
   })
 })
 

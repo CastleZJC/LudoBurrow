@@ -3,7 +3,7 @@
 // 方案 = 专题轨内一个关卡：新建即在该专题末尾追加关卡（无需激活）；删除即收敛关卡数。
 // 重新切块确认（F-18）：同图已有方案在玩时保存需二次确认（新建平行关卡，历史成绩保留）。
 
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnvAdapter } from '@/services'
 import type { JigsawSchemeData, JigsawSchemeSource } from '@/core/save'
@@ -12,7 +12,7 @@ import { getLevelRecord, progressSlotKey } from '@/core/level-manager'
 import { usePlatformStore } from '@/stores/platform'
 import { suggestCutPlan } from '@/ai/suggest'
 import type { ImageDataLike } from '@/engines/jigsaw-cutter'
-import { weightsToLines, type NormalizedSuggestion } from '@/engines/jigsaw-cutter/suggest'
+import { type NormalizedSuggestion } from '@/engines/jigsaw-cutter/suggest'
 import {
   createScheme,
   deleteScheme,
@@ -182,11 +182,9 @@ function redrawPreview(): void {
   }
 }
 
-/** 线位置：有建议权重按累计等分（非均匀），否则均匀等分 */
-function linePositions(weights: number[] | undefined, count: number, size: number): number[] {
-  return weights
-    ? weightsToLines(weights, size)
-    : Array.from({ length: count + 1 }, (_, i) => (i * size) / count)
+/** 线位置：恒均匀等分（验收返工二轮：切块全均匀，建议只影响块数，权重仅入档兼容历史方案） */
+function linePositions(count: number, size: number): number[] {
+  return Array.from({ length: count + 1 }, (_, i) => Math.round((i * size) / count))
 }
 
 function segsOf(lines: number[]): number[] {
@@ -218,11 +216,11 @@ function paintPreview(img: HTMLImageElement | null): void {
       }
     }
   }
-  // 切割线示意（无建议 = 均匀直线；applied 后按建议权重累计等分；真实引擎保证同口径）
+  // 切割线示意（恒均匀直线，与引擎 buildAxisLines 同式；锯齿深度按最深块示意）
   ctx.strokeStyle = 'rgba(58,110,165,0.85)'
   ctx.lineWidth = 1.5
-  const rowLines = linePositions(appliedSuggestion.value?.rowWeights, rows.value, rect.h)
-  const colLines = linePositions(appliedSuggestion.value?.colWeights, cols.value, rect.w)
+  const rowLines = linePositions(rows.value, rect.h)
+  const colLines = linePositions(cols.value, rect.w)
   const minSeg = Math.min(...segsOf(rowLines), ...segsOf(colLines))
   const tabR = Math.min((tabDepth.value * minSeg) / 2, 10)
   for (let i = 1; i < rows.value; i++) {
@@ -479,6 +477,14 @@ async function onBatchImport(event: Event): Promise<void> {
     failed === 0 ? t('schemes.batchDone', { n: ok }) : t('schemes.batchPartial', { ok, failed })
   refresh()
 }
+
+// 选关页空态「导入本地图片」直达：进入即自动开文件选择器（标志一次性，自清零）
+onMounted(() => {
+  if (platform.schemesAutoBatch) {
+    platform.schemesAutoBatch = false
+    triggerBatchImport()
+  }
+})
 </script>
 
 <template>

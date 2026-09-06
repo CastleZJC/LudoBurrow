@@ -4,7 +4,7 @@
 // 结算（§12.5）：到出口 onComplete（步数相对解长星级；meta 携带 steps/size/theme）。
 // 皮肤（theme.ts）：paletteSkin 先行渲染（零等待），PNG 皮肤异步就绪后整体重画；
 //                  测试经 deps 注入固定迷宫与皮肤，完全绕开资源加载。
-// 主题切换（验收返工 F-20）：HUD 内按钮即时切换城堡/花园并写入设置（记住上次），
+// 主题切换（验收返工 F-20，二轮扩至 8 主题）：HUD 内按钮即时切换并写入设置（记住上次），
 //                  所有关卡共享单一进度，主题只影响观感（背景/瓦片配色）。
 // 轨迹随机（验收返工）：生产路径 seed 每局叠加随机扰动（cfg.seed 保留为基准种子）。
 
@@ -13,6 +13,7 @@ import { updateSettings } from '@/core/settings'
 import { generateMaze, type MazeData } from '@/engines/maze-generator'
 import { i18n } from '@/i18n'
 import type { MazeLevelConfig, MazeTheme } from './level'
+import { MAZE_THEMES } from './level'
 import { THEME_LABEL_KEY, THEME_PALETTES, loadTileSkin, paletteSkin, type TileSkin, type TileKind } from './theme'
 import { animFrameOf, calcMazeStars, createHero, isAtGoal, tryMove, type Facing, type HeroState } from './walk'
 import { cellCenter, computeView, type MazeView } from './view'
@@ -104,7 +105,7 @@ export function mountMaze(
   const themeEl = el('span', 'mz-theme')
   themeEl.dataset.mz = 'theme'
   const themeBtns = {} as Record<MazeTheme, HTMLButtonElement>
-  for (const t of ['castle', 'garden'] as const) {
+  for (const t of MAZE_THEMES) {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'mz-theme-btn'
@@ -146,7 +147,7 @@ export function mountMaze(
 
   function refreshHud(): void {
     sizeEl.textContent = `${cfg.size}×${cfg.size}`
-    for (const t of ['castle', 'garden'] as const) {
+    for (const t of MAZE_THEMES) {
       themeBtns[t].setAttribute('aria-pressed', String(theme === t))
     }
     stepsEl.textContent = `${i18n.global.t('settle.steps')} ${hero.steps}`

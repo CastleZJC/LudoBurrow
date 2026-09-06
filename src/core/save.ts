@@ -25,8 +25,8 @@ export interface SettingsData {
   locale: 'zh-CN' | 'en-US'
   timeLimit: TimeLimitData
   ai?: AiConfig
-  /** 迷宫瓦片主题（HUD 内切换写入；缺省 = 城堡。字面量与 games/maze/level.ts MazeTheme 同构，存档自持形状） */
-  mazeTheme?: 'castle' | 'garden'
+  /** 迷宫瓦片主题（HUD 内切换写入；缺省 = 城堡。字面量与 games/maze/level.ts MAZE_THEMES 同构，存档自持形状） */
+  mazeTheme?: 'castle' | 'garden' | 'snow' | 'volcano' | 'ocean' | 'jungle' | 'station' | 'mine'
 }
 
 /** 自定义拼音词条（结构同引擎 PinyinEntry；存档自持形状，不反向依赖 engines） */
@@ -232,6 +232,11 @@ function validateLevelRecord(v: unknown): v is LevelRecord {
   )
 }
 
+/** 迷宫主题合法值（与 games/maze/level.ts MAZE_THEMES 同构；验收返工二轮扩至 8 主题） */
+const MAZE_THEME_IDS = [
+  'castle', 'garden', 'snow', 'volcano', 'ocean', 'jungle', 'station', 'mine',
+] as const
+
 function validateGameSave(v: unknown): v is GameSaveData {
   if (!isRecord(v)) return false
   if (typeof v.unlockedCount !== 'number' || !Number.isFinite(v.unlockedCount)) return false
@@ -264,7 +269,7 @@ function validateSettings(v: unknown): v is SettingsData {
     (v.locale === 'zh-CN' || v.locale === 'en-US') &&
     validateTimeLimit(v.timeLimit) &&
     (v.ai === undefined || validateAi(v.ai)) &&
-    (v.mazeTheme === undefined || v.mazeTheme === 'castle' || v.mazeTheme === 'garden')
+    (v.mazeTheme === undefined || (typeof v.mazeTheme === 'string' && (MAZE_THEME_IDS as readonly string[]).includes(v.mazeTheme)))
   )
 }
 

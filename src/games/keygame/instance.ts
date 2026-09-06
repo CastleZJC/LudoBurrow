@@ -105,7 +105,8 @@ export function mountKeygame(
     const rowEl = el('div', 'kg-row')
     for (const key of row) {
       const node = buildKey(key)
-      node.style.flexGrow = String(key.w ?? 1)
+      // 固定键宽（基础 52px × 键宽权重）：键盘按实际尺寸居中呈现，不随容器拉伸失真
+      node.style.width = `${Math.round(52 * (key.w ?? 1))}px`
       rowEl.appendChild(node)
     }
     main.appendChild(rowEl)

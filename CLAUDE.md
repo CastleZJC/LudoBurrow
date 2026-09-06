@@ -77,7 +77,7 @@ src/
 - **AI 降级链**：AI 调用失败、超时、未配置时自动降级本地算法，功能不中断；AI 返回建议必须经本地规范化器（schema 校验 + 合法化）+ 块唯一性校验。
 - **运行环境适配层（Web 框架预留，防二期大改）**：登录态与自定义素材仓库**一律经 `services/` 适配接口访问**（LocalAdapter 一期全量实现：无登录匿名单用户 + IndexedDB 素材仓库；WebAdapter 二期对接服务端）；业务代码禁止绕过适配层直连 IndexedDB / 远端 API 实现这两类能力。本地端无登录、素材不隔离；Web 端除登录与素材隔离外与本地端完全一致
 - **多语言（i18n）**：UI 文案一律 i18n key（`t()`），禁止硬编码；zh-CN/en-US 键位 1:1；**同功能同描述同出处**（同一文案一个 key，跨页面复用置 `common` 段）；新增语言「仅加不改」；发布前翻译齐备校验强制（见发布原则 #4）
-- **资产合规**：内置图库仅 CC0/CC-BY（≥1K 分辨率）并按专题标注 LICENSE；自定义导入走 FileReader 本地读取，**不产生网络传输、不入仓库**。
+- **资产合规**：内置图库仅 CC0/CC-BY（≥1K 分辨率）并按专题标注 LICENSE；自定义导入走 FileReader 本地读取，**不产生网络传输、不入仓库**；本地图库（`documents/local/`，版权受限素材）及其生成物（主题方案、切片参数、分析报告、像素提取物）**仅限本机，禁止入库**。
 
 ## Development Commands
 
@@ -117,6 +117,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 - 禁止在 src 中硬编码任何 API Key / 密钥
 - 禁止引入后端、数据库或网络运行时依赖（违背「轻便/免安装」核心约束）
 - 禁止在内置图库混入非 CC0/CC-BY 素材（商业 IP 仅用户自定义导入）
+- 禁止提交本地图库及生成物（版权脱敏红线）：`documents/local/` 下的版权素材与其衍生的主题方案 / 切片参数 / 分析报告 / 像素提取物不得进入任何提交（`.gitignore` 已整目录忽略；**提交前必须核验暂存清单**：`git diff --cached --name-only` 无 `documents/local` 路径、无临时分析产物）
 - 禁止 UI 硬编码中英文文案（必须走 i18n key，纳入翻译齐备门禁）
 - 禁止保留"pre-existing issue"借口（发现的问题必须修复或显式决策后才能发布）
 
@@ -124,7 +125,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 
 ## Key Conventions
 
-- **Git commits**: `<type>: <description in Chinese> yyyymmdd by castle`（types: feat/fix/refactor/docs/test/chore）——详见代码规范 §八。
+- **Git commits**: `<type>: <description in Chinese> yyyymmdd by castle`（types: feat/fix/refactor/docs/test/chore）——详见代码规范 §八。**提交前脱敏检查（强制）**：本地图库及由其生成的主题方案等产物不入库，提交前核验暂存清单（见发布原则禁止行为）。
 - **命名与结构**、**Vue/TS 编码模式**、**Canvas 规范**、**资产规范** → 详见《LudoBurrow 代码规范》。
 - **多语言口径（同功能同描述同出处）**：同一功能、同一词义的文案必须使用同一个 i18n key（单一出处，跨页面复用置于 `common` 段），禁止多段重复定义同名同值键；守卫测试强制（见代码规范 §十一、测试规范 §3.4）。
 - **AI 辅助开发工作流**：需求澄清 → 计划 → TDD → 验证 → 审查的 Skill 工作流（superpowers + ecc，模型 glm 5.3）→ 详见《LudoBurrow 开发计划文档》§二；**声称完成前必须实际运行验证命令**（superpowers:verification-before-completion 纪律）。

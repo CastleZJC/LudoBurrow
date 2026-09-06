@@ -57,6 +57,29 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
     wrapper.unmount()
   })
 
+  it('custom 空态直达导入：按钮仅空态展示，点击进方案页并携带自动批量标志（验收返工三）', async () => {
+    const platform = usePlatformStore()
+    const wrapper = mountWithApp(LevelSelect, { props: { gameId: 'jigsaw' } })
+    await wrapper.find('[data-track="custom"]').trigger('click')
+    const btn = wrapper.find('[data-role="empty-import"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('导入')
+
+    await btn.trigger('click')
+    expect(platform.view).toBe('schemes')
+    expect(platform.schemesAutoBatch).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('custom 已有方案（非空态）：不展示直达导入按钮', async () => {
+    createScheme('我的本地图', { kind: 'custom', assetId: 'asset-x' }, PARAMS)
+    const wrapper = mountWithApp(LevelSelect, { props: { gameId: 'jigsaw' } })
+    await wrapper.find('[data-track="custom"]').trigger('click')
+    expect(wrapper.find('[data-role="empty-topic"]').exists()).toBe(false)
+    expect(wrapper.find('[data-role="empty-import"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('进关配置携带专题与内置方案标记（第 1 关 = bs-animals-01）', async () => {
     const platform = usePlatformStore()
     const wrapper = mountWithApp(LevelSelect, { props: { gameId: 'jigsaw' } })

@@ -5,7 +5,7 @@
 //         规格不是用户数据，不入档（存档 schema 零变更），每次启动重算 + 进程内缓存复用。
 // 兜底：无 Canvas 像素回读能力（异常环境 / 测试 mock）或单图分析失败 → 回落复杂度占位网格（schemes.ts）。
 
-import { buildAxisLines, gradientProfile, pieceScore } from '@/engines/jigsaw-cutter'
+import { buildAxisLines, pieceScore } from '@/engines/jigsaw-cutter'
 import type { ImageDataLike, PieceDef } from '@/engines/jigsaw-cutter'
 import { GALLERY, loadAnalysisImage } from './gallery'
 import type { GalleryEntry } from './gallery'
@@ -45,8 +45,6 @@ const W_UNIFORM = 0.2
 const ASPECT_WEIGHT = 0.35
 /** 单图分析超时（异常图源不至于让预热悬挂） */
 const WARM_TIMEOUT_MS = 4000
-
-type Profile = ReturnType<typeof gradientProfile>
 
 /** 单规格评分明细（可观测：调试与测试断言用） */
 export interface SpecScore extends GridSpec {
@@ -146,22 +144,17 @@ function neighboursOf(piece: PieceDef, all: PieceDef[]): PieceDef[] {
 }
 
 /**
- * 单规格评分（纯函数）：复用引擎的梯度建线与块区分度评分，保证「评估口径 = 实际切块口径」。
- * 吸附容差与 createCutPlan 同式，故评估出的线位与真正切块一致。
+ * 单规格评分（纯函数）：复用引擎的均匀建线与块区分度评分，保证「评估口径 = 实际切块口径」。
+ * 验收返工二轮：切割线恒均匀（与 createCutPlan 同式），内容分析只用于选块数（rows×cols）。
  */
 export function scoreSpec(
   image: ImageDataLike,
   spec: GridSpec,
-  opts: { threshold?: number; profile?: Profile } = {},
+  opts: { threshold?: number } = {},
 ): SpecScore {
   const threshold = opts.threshold ?? WEAK_THRESHOLD
-  const profile = opts.profile ?? gradientProfile(image)
-  const tolerance = Math.max(
-    2,
-    Math.round(Math.min(image.width, image.height) / (Math.max(spec.rows, spec.cols) * 8)),
-  )
-  const rowLines = buildAxisLines(profile.rowGrad, image.height, spec.rows, tolerance)
-  const colLines = buildAxisLines(profile.colGrad, image.width, spec.cols, tolerance)
+  const rowLines = buildAxisLines(image.height, spec.rows)
+  const colLines = buildAxisLines(image.width, spec.cols)
   const pieces = evalPieces(rowLines, colLines)
   const scores = pieces.map((p) => pieceScore(image, p, neighboursOf(p, pieces)))
 
@@ -195,15 +188,14 @@ export function scoreSpec(
 
 /**
  * 每图自动选最优规格：枚举难度档候选并评分，取综合分最高者（同分取候选序靠前 = 块数更贴近目标）。
- * 梯度剖面只算一次（与规格无关），全部候选复用。
+ * 验收返工二轮：切块全均匀，内容分析（色彩/线条区分度）仅决定块数选择。
  */
 export function pickBestSpec(
   image: ImageDataLike,
   complexity: 1 | 2 | 3,
   opts: { threshold?: number } = {},
 ): BestSpecResult {
-  const profile = gradientProfile(image)
-  const ranked = candidateSpecs(complexity).map((spec) => scoreSpec(image, spec, { ...opts, profile }))
+  const ranked = candidateSpecs(complexity).map((spec) => scoreSpec(image, spec, opts))
   let best = ranked[0]!
   for (const item of ranked) if (item.score > best.score) best = item
   return { spec: { rows: best.rows, cols: best.cols }, score: best, ranked }

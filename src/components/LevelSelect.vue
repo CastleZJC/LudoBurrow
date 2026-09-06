@@ -129,6 +129,15 @@ function enterLevel(n: number): void {
 
     <p v-if="total === 0" class="progress-line" data-role="empty-topic">{{ t('level.emptyTopic') }}</p>
 
+    <button
+      v-if="total === 0 && gameId === 'jigsaw'"
+      class="primary-btn empty-import-btn"
+      data-role="empty-import"
+      @click="platform.openSchemes(true)"
+    >
+      {{ t('level.emptyImport') }}
+    </button>
+
     <div v-if="total > 0" class="level-grid">
       <button
         v-for="n in levelNumbers"
@@ -203,6 +212,10 @@ function enterLevel(n: number): void {
   grid-template-columns: repeat(10, 1fr);
   gap: 10px;
   max-width: 960px;
+}
+.empty-import-btn {
+  align-self: flex-start;
+  margin-top: -8px;
 }
 .level-cell {
   position: relative;

@@ -174,14 +174,15 @@ body {
   display: flex;
   gap: 18px;
   align-items: flex-start;
+  justify-content: center; /* 按实际尺寸居中，不铺满拉伸 */
+  flex-wrap: wrap; /* 窗口过窄时数字小键盘区换行兜底 */
+  margin-top: 18px; /* 目标区与键盘适度留白（验收返工：全留白与零留白之间取中） */
 }
 
 .kg-kb-main {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
-  min-width: 0;
 }
 
 .kg-row {
@@ -195,8 +196,6 @@ body {
   align-items: center;
   justify-content: center;
   height: 46px;
-  flex-basis: 0;
-  min-width: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-bottom-width: 3px;

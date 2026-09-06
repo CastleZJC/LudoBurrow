@@ -30,12 +30,12 @@ function checkerImage(size = 96, cell = 8): ImageDataLike {
   return { width: size, height: size, data }
 }
 
-/** 半棋盘半白图：左半细节、右半平坦（均匀切分 → 纯白大块；本地算法把线推向细节区） */
-function halfCheckerImage(size = 96): ImageDataLike {
+/** 左半粗条纹（周期 32）、右半纯白：列数决定纯白块的邻边对比（cols=2 右块贴条纹边=255；cols=3 最右块只贴白边=0）。验收返工二轮：切块全均匀，质量门槛比较的是不同块数网格 */
+function stripeHalfImage(size = 96): ImageDataLike {
   const data = new Uint8ClampedArray(size * size * 4)
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const v = x < size / 2 && (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0 ? 0 : 255
+      const v = x < size / 2 && x % 32 < 16 ? 0 : 255
       const i = (y * size + x) * 4
       data[i] = v
       data[i + 1] = v
@@ -133,9 +133,10 @@ describe('suggestCutPlan 输出校验（rejected 分支）', () => {
     expect(outcome).toMatchObject({ kind: 'rejected', reason: 'invalid-schema' })
   })
 
-  it('质量门槛（对比择优）：均匀建议切出纯白大块（minScore 更低）→ rejected low-quality', async () => {
-    const img = halfCheckerImage()
-    const text = '{"rows":2,"cols":2,"rowWeights":[1,1],"colWeights":[1,1]}'
+  it('质量门槛（对比择优）：建议 3 列切出只贴白边的纯白块（minScore 更低）→ rejected low-quality', async () => {
+    const img = stripeHalfImage()
+    // 本地 2×2：右块贴条纹边界（对比 255）→ minScore ≥ 40；建议 2×3：最右纯白块只贴白边（对比 0）→ minScore = 0
+    const text = '{"rows":2,"cols":3,"rowWeights":[1,1],"colWeights":[1,1,1]}'
     const outcome = await suggestCutPlan(img, BASE, 42, 'data:x', AI, { provider: stubProvider(text) })
     expect(outcome).toMatchObject({ kind: 'rejected', reason: 'low-quality' })
     expect(outcome.kind === 'rejected' && outcome.plan).toEqual(createCutPlan(img, BASE, 42))

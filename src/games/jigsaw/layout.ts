@@ -1,6 +1,6 @@
 // 拼图五区布局与命中判定（纯函数，无 Canvas/DOM 依赖，技术架构 §11.1 / M3.4 坐标纯函数化）
 // 五区三列式（v1.0 验收返工）：左列（上效果图 + 下暂存区）| 中列拼图区（网格底座+吸附，全高）| 右列（上当前块 + 下剩余块）
-// 拼图区按源图宽高比 contain 适配；非均匀网格（rowLines/colLines 不等距）按比例映射到屏幕槽位。
+// 验收返工二轮（布局零失真）：图/块缩略统一走 fitRectAspect 等比 contain，不再拉伸变形。
 
 import type { CutPlan } from '@/engines/jigsaw-cutter'
 
@@ -45,12 +45,18 @@ export function computeLayout(width: number, height: number): ZoneRects {
   return { preview, board, staging, current, remaining }
 }
 
+/** 等比适配（contain）：内容按宽高比缩放至盒内最大并居中（图/块缩略零失真的统一口径） */
+export function fitRectAspect(box: Rect, contentW: number, contentH: number): Rect {
+  if (contentW <= 0 || contentH <= 0) return { x: box.x, y: box.y, w: 0, h: 0 }
+  const k = Math.min(box.w / contentW, box.h / contentH)
+  const w = contentW * k
+  const h = contentH * k
+  return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h }
+}
+
 /** 拼图区内容矩形：源图按宽高比 contain 适配后的实际网格区域 */
 export function boardContentRect(board: Rect, plan: CutPlan): Rect {
-  const scale = Math.min(board.w / plan.width, board.h / plan.height)
-  const w = plan.width * scale
-  const h = plan.height * scale
-  return { x: board.x + (board.w - w) / 2, y: board.y + (board.h - h) / 2, w, h }
+  return fitRectAspect(board, plan.width, plan.height)
 }
 
 /** 槽位（row, col）的屏幕矩形：非均匀网格按切割线比例映射 */

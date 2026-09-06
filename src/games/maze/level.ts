@@ -9,8 +9,11 @@ import type { BaseLevelConfig } from '@/core/types'
 import { getSettings } from '@/core/settings'
 import { levelSeed } from '@/engines/rng'
 
-/** 主题 id（§12.3 首期两主题；皮肤定义见 theme.ts 单一出处） */
-export type MazeTheme = 'castle' | 'garden'
+/** 主题 id 集合（§12.3；验收返工二轮扩至 8 主题：城堡/花园 + 雪原/火山/海底/丛林/太空站/矿洞；皮肤定义见 theme.ts 单一出处） */
+export const MAZE_THEMES = [
+  'castle', 'garden', 'snow', 'volcano', 'ocean', 'jungle', 'station', 'mine',
+] as const
+export type MazeTheme = (typeof MAZE_THEMES)[number]
 
 /** 默认主题（旧档无 mazeTheme 字段时的兜底，与存档校验口径一致） */
 export const DEFAULT_MAZE_THEME: MazeTheme = 'castle'
@@ -23,7 +26,7 @@ export interface MazeLevelConfig extends BaseLevelConfig {
   size: number
   /** 分支度 [0,1]：死胡同密度 */
   branching: number
-  /** 瓦片主题（城堡/花园） */
+  /** 瓦片主题（8 主题之一，MAZE_THEMES） */
   theme: MazeTheme
 }
 

@@ -1,13 +1,10 @@
-// AI 切块建议规范化与建线（技术架构 §14.5）
+// AI 切块建议规范化（技术架构 §14.5，v1.0 验收返工二轮口径：全均匀切块）
 // 任何 AI 输出不得直接应用：剥壳解析（parseSuggestionText）→ schema 校验与合法化
-// （normalizeSuggestion）→ 权重累计等分建线（weightsToLines），建议线替换本地梯度线后
-// 复用锯齿/组装/唯一性闭环（createCutPlanFromSuggestion，与本地算法同源下游）。
+// （normalizeSuggestion）→ 建议只贡献块数（rows/cols），线位恒均匀；
+// 权重仍随方案入档（历史方案兼容与再校验），但不再影响切割线。
 
-import { createRng } from '../rng'
-import { normalizeCutParams } from './index'
-import { buildTabSpecs } from './edge'
-import { assemblePieces, ensureUniqueness } from './uniqueness'
-import type { CutParams, CutPlan, ImageDataLike, RequiredCutParams } from './types'
+import { createCutPlan } from './index'
+import type { CutParams, CutPlan, ImageDataLike } from './types'
 
 /** 与本地算法同口径的网格界（index.ts normalizeCutParams）：越界即拒绝而非钳制（钳制会破坏权重对应） */
 const MIN_GRID = 2
@@ -96,27 +93,8 @@ function normalizeWeights(weights: readonly number[]): number[] {
 }
 
 /**
- * 权重累计等分 → 切割线坐标（含首尾 0/size；第 i 条内部线 = 前 i 段权重占比 × size）。
- * 网格对齐（§14.5 合法化）：round 到整数像素并保证严格递增——
- * 下游区分度采样/锯齿分段按整数像素索引，浮点线会产生 NaN 采样（与本地算法产出同口径）。
- */
-export function weightsToLines(weights: readonly number[], size: number): number[] {
-  const total = weights.reduce((a, b) => a + b, 0)
-  const lines: number[] = [0]
-  let acc = 0
-  for (let i = 0; i < weights.length - 1; i += 1) {
-    acc += weights[i]!
-    const next = Math.round((acc / total) * size)
-    // 抬升下限后极端权重（0.01）仍保证每段 ≥ 1px；n ≤ 12 且 size ≥ 96 时尾线恒大于末段
-    lines.push(Math.max(next, lines[lines.length - 1]! + 1))
-  }
-  lines.push(size)
-  return lines
-}
-
-/**
- * 建议 → 切块方案：rows/cols/权重来自建议，tabDepth/uniquenessThreshold 沿用调用方 base。
- * 建议线替换本地梯度线，锯齿规格/组装/唯一性闭环与 createCutPlan 完全同源。
+ * 建议 → 切块方案：rows/cols 来自建议，tabDepth/uniquenessThreshold 沿用调用方 base；
+ * 线位恒均匀（验收返工二轮）：与本地 createCutPlan 同链路，权重不再建线。
  */
 export function createCutPlanFromSuggestion(
   image: ImageDataLike,
@@ -124,38 +102,5 @@ export function createCutPlanFromSuggestion(
   base: CutParams,
   seed: number,
 ): CutPlan {
-  const p: RequiredCutParams = {
-    ...normalizeCutParams(base),
-    rows: suggestion.rows,
-    cols: suggestion.cols,
-  }
-  const rng = createRng(seed)
-  const rowLines = weightsToLines(suggestion.rowWeights, image.height)
-  const colLines = weightsToLines(suggestion.colWeights, image.width)
-
-  const hTabs = buildTabSpecs('h', rowLines, colLines, rng, p.tabDepth)
-  const vTabs = buildTabSpecs('v', colLines, rowLines, rng, p.tabDepth)
-
-  const draft = {
-    rowLines,
-    colLines,
-    hTabs,
-    vTabs,
-    pieces: assemblePieces(rowLines, colLines, hTabs, vTabs),
-  }
-  const { minScore, adjusted } = ensureUniqueness(image, draft, p.uniquenessThreshold)
-
-  return {
-    width: image.width,
-    height: image.height,
-    params: p,
-    seed,
-    rowLines: draft.rowLines,
-    colLines: draft.colLines,
-    hTabs: draft.hTabs,
-    vTabs: draft.vTabs,
-    pieces: draft.pieces,
-    minScore,
-    adjusted,
-  }
+  return createCutPlan(image, { ...base, rows: suggestion.rows, cols: suggestion.cols }, seed)
 }

@@ -5,6 +5,7 @@ import {
   exportJson, importJson, validateSaveData,
 } from '@/core/save'
 import type { SaveData, JigsawSchemeData } from '@/core/save'
+import { MAZE_THEMES } from '@/games/maze/level'
 
 function sampleScheme(id = 'js-test-1'): JigsawSchemeData {
   return {
@@ -419,6 +420,17 @@ describe('save v7 迷宫主题设置段（HUD 切换记住上次，验收返工 
     const settings = { ...sampleSave().settings, mazeTheme: 'garden' as const }
     persistSave({ ...sampleSave(), settings })
     expect(loadSave().settings.mazeTheme).toBe('garden')
+  })
+
+  it.each(MAZE_THEMES)('八主题全量合法（校验+持久化+导入导出往返）：%s', (theme) => {
+    const settings = { ...sampleSave().settings, mazeTheme: theme }
+    persistSave({ ...sampleSave(), settings })
+    expect(validateSaveData(loadSave())).toBe(true)
+    expect(loadSave().settings.mazeTheme).toBe(theme)
+    localStorage.clear()
+    const result = importJson(exportJson({ ...sampleSave(), settings }))
+    expect(result.ok).toBe(true)
+    expect(loadSave().settings.mazeTheme).toBe(theme)
   })
 
   it('mazeTheme 缺省合法（v6 及更早旧档迁移后的常态，读取方兜底城堡）', () => {

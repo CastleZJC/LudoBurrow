@@ -1,5 +1,6 @@
 // 拼图游戏实例（技术架构 §11.2-§11.4 / 开发计划 3.3-3.5）
 // Canvas 五区渲染 + Pointer Events 拖拽 + 网格级吸附 + 帮助/放弃分步演示。
+// 验收返工（布局零失真）：参考图/块缩略恒等比 contain；拖拽按拼板槽位原尺寸；参考图点击弹框放大。
 // 渲染坐标/布局/命中全部经 layout.ts 纯函数；盘面语义全部委托 board.ts（本层不含玩法规则）。
 // 图片解析双轨（gallery.ts）：分析缩略图（data URI，切块引擎输入）+ 源图（相对路径，仅绘制）。
 // 测试注入：deps { analysisImage, sourceImage } 完全绕开资源加载。
@@ -15,6 +16,7 @@ import { buildPieceOutline } from './pieces'
 import {
   boardContentRect,
   computeLayout,
+  fitRectAspect,
   hitTestSlot,
   pointInRect,
   slotRect,
@@ -112,6 +114,8 @@ export function mountJigsaw(
   let drag: { index: number; fromZone: string; x: number; y: number } | null = null
   let hoverSlot: { row: number; col: number } | null = null
   let misplacedFlashUntil = 0
+  /** 参考图放大弹框（点击左上缩略图开/关，验收返工「布局零失真」） */
+  let previewZoom = false
 
   function showError(msg: string): void {
     const err = el('div', 'jg-error')
@@ -182,7 +186,8 @@ export function mountJigsaw(
     if (s.zone === 'board' && s.slotRow !== null && s.slotCol !== null) {
       return slotRect(content, plan, s.slotRow, s.slotCol)
     }
-    if (s.zone === 'current') return fitInto(currentHome(), 0.86)
+    // 等比适配（验收返工：块缩略零失真——槽盒按块宽高比 contain，不再硬拉成正方形）
+    if (s.zone === 'current') return fitRectAspect(fitInto(currentHome(), 0.9), plan.pieces[index]!.w, plan.pieces[index]!.h)
     if (s.zone === 'staging') return stagingSlotRect(s.index)
     return remainingSlotRect(s.index)
   }
@@ -191,28 +196,29 @@ export function mountJigsaw(
     return rects.current
   }
 
-  /** 暂存区第 k 个槽（k = 暂存列表序） */
+  /** 暂存区第 k 个槽（k = 暂存列表序）：槽盒 58²，块按宽高比等比缩略居中 */
   function stagingSlotRect(index: number): Rect {
     const list = board!.stagingList
     const k = Math.max(0, list.indexOf(index))
     const cols = Math.max(1, Math.floor(rects.staging.w / 66))
-    const size = 58
     const cx = rects.staging.x + 6 + (k % cols) * 66
     const cy = rects.staging.y + 6 + Math.floor(k / cols) * 66
-    return { x: cx, y: cy, w: size, h: size }
+    const p = plan!.pieces[index]!
+    return fitRectAspect({ x: cx, y: cy, w: 58, h: 58 }, p.w, p.h)
   }
 
-  /** 剩余区缩略示意（剩余队列序；列数按剩余区宽度自适应——三列式右列窄，不再固定每行 24 个） */
+  /** 剩余区缩略示意（剩余队列序；列数按剩余区宽度自适应）：槽盒 34²，块按宽高比等比缩略居中 */
   function remainingSlotRect(index: number): Rect {
     const order = board!.remainingOrder
     const k = Math.max(0, order.indexOf(index))
-    const size = 34
     const cols = Math.max(1, Math.floor(rects.remaining.w / 40))
     const cx = rects.remaining.x + 6 + (k % cols) * 40
     const cy = rects.remaining.y + 6 + Math.floor(k / cols) * 40
-    return { x: cx, y: cy, w: size, h: size }
+    const p = plan!.pieces[index]!
+    return fitRectAspect({ x: cx, y: cy, w: 34, h: 34 }, p.w, p.h)
   }
 
+  /** 区盒内缩（ratio 比例；只缩盒不失真——图片绘制前还需 fitRectAspect 等比适配） */
   function fitInto(rect: Rect, ratio: number): Rect {
     const w = rect.w * ratio
     const h = rect.h * ratio
@@ -246,14 +252,21 @@ export function mountJigsaw(
     ctx.clearRect(0, 0, cssW, cssH)
     if (!board || !plan || !source) return
 
-    // 左上效果图（半透明完成参考）
-    const pv = fitInto(rects.preview, 0.94)
-    ctx.globalAlpha = 0.55
+    // 左上效果图（等比清晰缩略 + 点击放大弹框，验收返工「布局零失真」）
+    const pv = fitRectAspect(fitInto(rects.preview, 0.96), source.width, source.height)
     ctx.drawImage(source, 0, 0, source.width, source.height, pv.x, pv.y, pv.w, pv.h)
-    ctx.globalAlpha = 1
     ctx.strokeStyle = '#8a8f98'
     ctx.lineWidth = 1
     ctx.strokeRect(pv.x, pv.y, pv.w, pv.h)
+    ctx.fillStyle = 'rgba(90, 96, 108, 0.95)'
+    ctx.font = '12px system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(
+      i18n.global.t('jigsaw.previewHint'),
+      rects.preview.x + rects.preview.w / 2,
+      Math.min(rects.preview.y + rects.preview.h - 8, pv.y + pv.h + 16),
+    )
+    ctx.textAlign = 'left'
 
     // 中间拼图区：底座网格（非均匀切割线）
     const content = contentRect()
@@ -340,13 +353,44 @@ export function mountJigsaw(
       ctx.drawImage(pc, cx - w / 2, cy - h / 2, w, h)
     }
 
-    // 拖拽块（跟指针，放大 8%）
+    // 拖拽块：按拼板槽位原尺寸绘制（从缩略区拿起放大回实际大小，与吸附槽零缩放跳变）
     if (drag) {
       const pc = pieceCanvases.get(drag.index)
       if (pc) {
-        const bmp = pieceBitmapRect(drag.index, pieceHomeRect(drag.index))
-        ctx.drawImage(pc, drag.x - (bmp.w * 1.08) / 2, drag.y - (bmp.h * 1.08) / 2, bmp.w * 1.08, bmp.h * 1.08)
+        const piece = plan.pieces[drag.index]!
+        const dragContent = contentRect()
+        const bmp = pieceBitmapRect(drag.index, {
+          x: 0,
+          y: 0,
+          w: (piece.w / plan.width) * dragContent.w,
+          h: (piece.h / plan.height) * dragContent.h,
+        })
+        ctx.drawImage(pc, drag.x - bmp.w / 2, drag.y - bmp.h / 2, bmp.w, bmp.h)
       }
+    }
+
+    // 参考图放大弹框：遮罩 + 居中等比大图（点击任意处关闭）
+    if (previewZoom) {
+      ctx.fillStyle = 'rgba(15, 18, 24, 0.85)'
+      ctx.fillRect(0, 0, cssW, cssH)
+      const big = fitRectAspect(
+        { x: 56, y: 56, w: Math.max(40, cssW - 112), h: Math.max(40, cssH - 112) },
+        source.width,
+        source.height,
+      )
+      ctx.drawImage(source, 0, 0, source.width, source.height, big.x, big.y, big.w, big.h)
+      ctx.strokeStyle = '#8a8f98'
+      ctx.lineWidth = 2
+      ctx.strokeRect(big.x, big.y, big.w, big.h)
+      ctx.fillStyle = '#e8eaee'
+      ctx.font = '14px system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(
+        i18n.global.t('jigsaw.previewClose'),
+        cssW / 2,
+        Math.min(cssH - 20, big.y + big.h + 28),
+      )
+      ctx.textAlign = 'left'
     }
   }
 
@@ -483,18 +527,31 @@ export function mountJigsaw(
 
   // ---- 指针交互（window 级监听，Pointer Events 统一鼠标/触摸）----
   const onPointerDown = (event: PointerEvent): void => {
-    if (phase !== 'running' || !board || !plan) return
     if (event.target !== canvas) return
     const rect = canvas.getBoundingClientRect()
     const px = event.clientX - rect.left
     const py = event.clientY - rect.top
+    // 弹框开着：任意点击先关闭（不检查 phase，暂停/结算态也能关）
+    if (previewZoom) {
+      previewZoom = false
+      dirty = true
+      return
+    }
+    if (phase !== 'running' || !board || !plan) return
+    // 点击参考图 → 放大弹框
+    if (pointInRect(px, py, rects.preview, 4)) {
+      previewZoom = true
+      dirty = true
+      event.preventDefault()
+      return
+    }
     let index: number | null = null
-    if (cur_home_hit(px, py) && board.currentIndex !== null) {
+    if (board.currentIndex !== null && pointInRect(px, py, pieceHomeRect(board.currentIndex), 10)) {
       index = board.currentIndex
     } else {
-      // 暂存块 → 盘面块（重摆）→ 当前块放大热区
+      // 暂存块 → 盘面块（重摆）→ 当前块热区兜底（等比缩略后长条块可能偏小，区级兜底保证可点）
       index = hitStagingPiece(px, py) ?? hitBoardPiece(px, py)
-      if (index === null && board.currentIndex !== null && pointInRect(px, py, rects.current, 24)) {
+      if (index === null && board.currentIndex !== null && pointInRect(px, py, rects.current, 8)) {
         index = board.currentIndex
       }
     }
@@ -502,10 +559,6 @@ export function mountJigsaw(
     event.preventDefault()
     drag = { index, fromZone: board.pieceAt(index).zone, x: px, y: py }
     dirty = true
-  }
-
-  function cur_home_hit(px: number, py: number): boolean {
-    return pointInRect(px, py, fitInto(currentHome(), 0.9))
   }
 
   function hitStagingPiece(px: number, py: number): number | null {
@@ -687,6 +740,7 @@ export function mountJigsaw(
       if (phase !== 'running') return
       phase = 'paused'
       drag = null
+      previewZoom = false
       dirty = true
     },
     resume() {

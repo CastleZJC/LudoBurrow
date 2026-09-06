@@ -23,7 +23,12 @@ export const usePlatformStore = defineStore('platform', () => {
   const currentGameId = ref<string | null>(null)
   const currentLevelN = ref(1)
   const currentLevelConfig = ref<BaseLevelConfig | null>(null)
+  /** 关卡挂载纪元：每次 openLevel 自增（App.vue GameContainer :key 组成部分）。
+   *  同关重玩时 gameId/n 不变，无纪元则组件复用、onMounted 不重跑 → 游戏区空白（v1.0 验收返工回归修复）。 */
+  const levelEpoch = ref(0)
   const settleInfo = ref<SettleInfo | null>(null)
+  /** 方案页自动批量导入标志（选关页空态「导入本地图片」直达，进入后自动开文件选择器并自清零） */
+  const schemesAutoBatch = ref(false)
 
   // ---- 设置快照（响应式；写经 core/settings 持久化后同步刷新） ----
   const settings = ref<Settings>(getSettings())
@@ -61,8 +66,9 @@ export const usePlatformStore = defineStore('platform', () => {
     view.value = 'settings'
   }
 
-  /** 拼图方案管理页（§11.8；currentGameId 保留供返回选关） */
-  function openSchemes(): void {
+  /** 拼图方案管理页（§11.8；currentGameId 保留供返回选关；autoBatch = 进入后自动触发批量导入） */
+  function openSchemes(autoBatch = false): void {
+    schemesAutoBatch.value = autoBatch
     view.value = 'schemes'
   }
 
@@ -70,6 +76,7 @@ export const usePlatformStore = defineStore('platform', () => {
     currentGameId.value = config.gameId
     currentLevelN.value = config.n
     currentLevelConfig.value = config
+    levelEpoch.value += 1
     settleInfo.value = null
     view.value = 'game'
   }
@@ -86,8 +93,8 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   return {
-    view, currentGameId, currentLevelN, currentLevelConfig, settleInfo,
-    settings, timeLimit,
+    view, currentGameId, currentLevelN, currentLevelConfig, levelEpoch, settleInfo,
+    settings, timeLimit, schemesAutoBatch,
     refreshSettings, patchSettings, changeLocale,
     goMenu, openGameSelect, openSettings, openSchemes, openLevel, exitToSelect, setSettle,
   }

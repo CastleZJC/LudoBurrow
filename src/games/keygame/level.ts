@@ -4,7 +4,8 @@
 //   compact-random 紧凑键盘随机序列（长度 6→20）
 //   english        英文单词（词数 3→8、词长 3→8）
 //   pinyin         中文拼音（分级 1→3、词数 3→8）
-// 确定性：随机性经 levelSeed(`keygame:${mode}`, n) 派生 Rng，同(模式,关卡)内容恒定（§9 纪律）
+// 确定性：随机序列经 levelSeed(`keygame:${mode}`, n) 派生 Rng；词表模式不随机关联 ——
+//   按词表顺序滚动窗口取词（词表即由简到难的难度序，验收返工：首关从首词开始）。
 
 import type { BaseLevelConfig } from '@/core/types'
 import type { WordbankConfig } from '@/core/save'
@@ -62,6 +63,11 @@ function lerpStep(n: number, n0: number, n1: number, v0: number, v1: number): nu
   return v0 + Math.round(t * (v1 - v0))
 }
 
+/** 按词表顺序滚动取词（start 起始下标，环绕；词表顺序 = 由简到难难度序） */
+function pickInOrder<T>(pool: readonly T[], start: number, count: number): T[] {
+  return Array.from({ length: count }, (_, i) => pool[(start + i) % pool.length]!)
+}
+
 export function createKeygameLevel(
   n: number,
   mode: KeygameMode = 'full-random',
@@ -83,19 +89,24 @@ export function createKeygameLevel(
     const len = lerpStep(n, 1, 50, 6, 20)
     segments = [{ chars: randomCharSequence(rng, len).join(''), hint: '' }]
   } else if (mode === 'english') {
-    // 英文线：词数 3 → 8、词长 3 → 8（≥8 归长词桶），关内不重复；
-    // 自定义词表按词长桶覆盖（键与 getWordsByLength 分桶口径一致：≥8 归 '8'）
+    // 英文线：词数 3 → 8、词长 3 → 8（≥8 归长词桶）；
+    // 自定义词表按词长桶覆盖（键与 getWordsByLength 分桶口径一致：≥8 归 '8'）；
+    // 取词 = 桶内顺序滚动窗口（首关从桶首词开始，逐关向后推进）
     const count = lerpStep(n, 1, 50, 3, 8)
     const wordLen = lerpStep(n, 1, 50, 3, 8)
     const bucket = wordLen >= 8 ? '8' : String(wordLen)
-    const pool = rng.shuffle([...getWordsByLength(wordLen, wordbank?.english?.[bucket])])
-    segments = pool.slice(0, count).map((word) => ({ chars: word.toUpperCase(), hint: '' }))
+    const pool = getWordsByLength(wordLen, wordbank?.english?.[bucket])
+    const start = (n - 1) % pool.length
+    segments = pickInOrder(pool, start, count).map((word) => ({ chars: word.toUpperCase(), hint: '' }))
   } else {
-    // 拼音线：1-17 一级 / 18-34 二级 / 35-50 三级，词数 3 → 8；自定义词表按等级覆盖
+    // 拼音线：1-17 一级 / 18-34 二级 / 35-50 三级，词数 3 → 8；自定义词表按等级覆盖；
+    // 取词 = 等级内顺序滚动窗口（一级首关从首词「大」开始，换级从该级首词重新推进）
     const grade: 1 | 2 | 3 = n <= 17 ? 1 : n <= 34 ? 2 : 3
     const count = lerpStep(n, 1, 50, 3, 8)
-    const pool = rng.shuffle([...getPinyinByGrade(grade, wordbank?.pinyin?.[String(grade)])])
-    segments = pool.slice(0, count).map((entry) => ({
+    const pool = getPinyinByGrade(grade, wordbank?.pinyin?.[String(grade)])
+    const gradeStart = grade === 1 ? 1 : grade === 2 ? 18 : 35
+    const start = (n - gradeStart) % pool.length
+    segments = pickInOrder(pool, start, count).map((entry) => ({
       chars: pinyinToSequence(entry).join(''),
       hint: entry.word,
     }))
