@@ -161,12 +161,24 @@ describe('sampleEdgePoints（边几何）', () => {
     // 平顶消失：≥98% 全深的采样占比 < 40%（旧梯形平顶 ≈60%）
     const atFull = bump.filter((v) => v >= 0.196).length
     expect(atFull / bump.length).toBeLessThan(0.4)
-    // 颈缩存在：剖面内有「降-升」局部极小且落在颈带 (0.08, 0.15)（旧梯形单调升降无此形态）
-    let necked = false
+    // 真蘑菇颈（反馈 3 二轮）：颈局部极小 ∈ (0.065, 0.095)（0.40 全深 ± 样条欠冲带），
+    // 且颈外侧根肩（0.60 全深 ≈ 0.12）显著更高 —— undercut 高差 ≥ 0.02（一轮失败教训：8% 颈缩读作山峰）
+    let neckIdx = -1
     for (let i = 1; i < bump.length - 1; i++) {
-      if (bump[i]! < bump[i - 1]! && bump[i]! < bump[i + 1]! && bump[i]! > 0.08 && bump[i]! < 0.15) necked = true
+      if (
+        neckIdx < 0 &&
+        bump[i]! < bump[i - 1]! &&
+        bump[i]! < bump[i + 1]! &&
+        bump[i]! > 0.065 &&
+        bump[i]! < 0.095
+      ) {
+        neckIdx = i
+      }
     }
-    expect(necked).toBe(true)
+    expect(neckIdx).toBeGreaterThan(-1)
+    const rootShoulder = Math.max(...bump.slice(0, neckIdx))
+    expect(rootShoulder).toBeGreaterThan(0.1)
+    expect(rootShoulder - bump[neckIdx]!).toBeGreaterThanOrEqual(0.02)
   })
 })
 

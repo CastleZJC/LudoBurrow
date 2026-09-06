@@ -116,6 +116,8 @@ export function mountJigsaw(
   let drag: { index: number; fromZone: string; x: number; y: number } | null = null
   let hoverSlot: { row: number; col: number } | null = null
   let misplacedFlashUntil = 0
+  /** 飞行结束后强制续渲窗口（反馈 2.4 二轮：不依赖到期帧 dirty 记账的结构性兜底） */
+  let dirtyUntil = 0
   /** 参考图放大弹框（点击左上缩略图开/关，验收返工「布局零失真」） */
   let previewZoom = false
 
@@ -412,7 +414,7 @@ export function mountJigsaw(
 
   function tick(ts: number): void {
     if (phase === 'destroyed') return
-    if (dirty || flights.length > 0 || drag || ts < misplacedFlashUntil) {
+    if (dirty || flights.length > 0 || drag || ts < misplacedFlashUntil || ts < dirtyUntil) {
       dirty = false // 先清后画：render 内「飞行到期」补设的 dirty 保留到下一帧，触发一次补绘（A1 根治）
       render(ts)
     }
@@ -462,6 +464,9 @@ export function mountJigsaw(
 
   function pushFlight(index: number, from: Rect, to: Rect, dur: number): void {
     flights.push({ index, from: centerOf(pieceBitmapRect(index, from)), to: centerOf(pieceBitmapRect(index, to)), start: performance.now(), dur })
+    // 到期后仍强制续渲一个窗口：静态层补绘链即使被任何 rAF/dirty 时序吞掉，窗口内每帧重绘兜底（反馈 2.4）
+    const until = performance.now() + dur + 150
+    if (until > dirtyUntil) dirtyUntil = until
     dirty = true
   }
 
@@ -661,6 +666,9 @@ export function mountJigsaw(
     canvas.width = Math.round(cssW * dpr)
     canvas.height = Math.round(cssH * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    // 块位图为源图分辨率，屏幕绘制是下采样——浏览器默认低质插值发糊，显式高质量插值（反馈 2.5）
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     dirty = true
   }
   applySize()
