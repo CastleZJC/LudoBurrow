@@ -105,6 +105,8 @@ export default {
     recutConfirm: '同图已有方案，确认新建？',
     delete: '删除',
     deleteConfirm: '确认删除？',
+    edit: '调整',
+    editScheme: '调整方案',
     empty: '还没有自定义方案，新建一个试试',
     customImage: '自定义图片',
     invalidParams: '参数超出范围',

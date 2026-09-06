@@ -104,6 +104,8 @@ export default {
     recutConfirm: 'Same image in use. Create a parallel scheme?',
     delete: 'Delete',
     deleteConfirm: 'Confirm delete?',
+    edit: 'Edit',
+    editScheme: 'Edit Scheme',
     empty: 'No custom schemes yet. Create one!',
     customImage: 'Custom image',
     invalidParams: 'Parameters out of range',

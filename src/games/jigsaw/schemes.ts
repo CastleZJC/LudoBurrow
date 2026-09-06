@@ -48,17 +48,17 @@ export function topicOfSource(source: JigsawSchemeSource): JigsawTopicId {
 // ---- 内置方案（每图一个，确定性派生）----
 
 /**
- * 复杂度占位网格（验收四轮五：六档）：每档窗口内最接近正方形的规格，
- * 块数 9/12/16/25/30/36 严格递增；仅在「每图自动最优规格」（optimize.ts）尚未解析或分析失败时使用。
+ * 复杂度占位网格（验收四轮五：六档；反馈三轮窗口上移）：各档目标规格（与 optimize.ts COMPLEXITY_PIECES.target 对齐），
+ * 块数 12/20/30/42/56/72 严格递增；仅在「每图自动最优规格」（optimize.ts）尚未解析或分析失败时使用。
  */
 function builtinGrid(complexity: ComplexityLevel): { rows: number; cols: number } {
   const table: Record<ComplexityLevel, { rows: number; cols: number }> = {
-    1: { rows: 3, cols: 3 },
-    2: { rows: 3, cols: 4 },
-    3: { rows: 4, cols: 4 },
-    4: { rows: 5, cols: 5 },
-    5: { rows: 5, cols: 6 },
-    6: { rows: 6, cols: 6 },
+    1: { rows: 3, cols: 4 },
+    2: { rows: 4, cols: 5 },
+    3: { rows: 5, cols: 6 },
+    4: { rows: 6, cols: 7 },
+    5: { rows: 7, cols: 8 },
+    6: { rows: 8, cols: 9 },
   }
   return table[complexity]
 }
@@ -136,15 +136,47 @@ export function deleteScheme(schemeId: string): void {
   persistSave({ ...save, jigsawSchemes: rest })
 }
 
+/**
+ * 调整方案（反馈三轮：只删不改 → 支持原位编辑）：id / 创建时间 / 专题轨进度键全部不变，
+ * 仅更新给定字段（未传字段保持原值）；name 空串回落原名。返回更新后的方案数据。
+ */
+export function updateScheme(
+  schemeId: string,
+  patch: {
+    name?: string
+    source?: JigsawSchemeSource
+    params?: JigsawSchemeParams
+    mode?: JigsawSchemeMode
+  },
+): JigsawSchemeData {
+  const save = loadSave()
+  const idx = save.jigsawSchemes.findIndex((s) => s.id === schemeId)
+  if (idx < 0) throw new RangeError(`jigsaw: 未知方案 ${schemeId}`)
+  const cur = save.jigsawSchemes[idx]!
+  const next: JigsawSchemeData = {
+    ...cur,
+    ...(patch.name !== undefined ? { name: patch.name.trim() || cur.name } : {}),
+    ...(patch.source !== undefined ? { source: patch.source } : {}),
+    ...(patch.params !== undefined ? { params: patch.params } : {}),
+    ...(patch.mode !== undefined ? { mode: patch.mode } : {}),
+    updatedAt: Date.now(),
+  }
+  persistSave({ ...save, jigsawSchemes: save.jigsawSchemes.map((s) => (s.id === schemeId ? next : s)) })
+  return next
+}
+
 // ---- 专题关卡目录（动态：关卡数 = 该专题方案数）----
 
-/** 专题内有序方案列表：内置在前（图库顺序），用户方案按创建时间在后 */
+/**
+ * 专题内有序方案列表（反馈三轮：按块数升序——关卡从少到多）。
+ * 同块数保持稳定序：内置在前（图库顺序），用户方案按创建时间在后（Array.sort 稳定排序保证）。
+ */
 export function schemesForTopic(topic: JigsawTopicId): SchemeCatalogEntry[] {
   const user = listSchemes()
     .filter((s) => topicOfSource(s.source) === topic)
     .map((s) => ({ id: s.id, name: s.name, topic, source: s.source, params: s.params, builtin: false }))
   const builtin = builtinSchemes().filter((s) => s.topic === topic)
-  return [...builtin, ...user]
+  return [...builtin, ...user].sort((a, b) => a.params.rows * a.params.cols - b.params.rows * b.params.cols)
 }
 
 /** 专题关卡数（动态：新增方案 = 自动 +1；custom 专题可能为 0 = 空态） */

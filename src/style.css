@@ -171,23 +171,24 @@ body {
 }
 
 .kg-kb {
+  --kg-u: 52px; /* 键宽单位（反馈：键盘等比放大至 ×2=104px；keygame/instance.ts 按容器宽度实测自适应，窄容器收缩防溢出） */
   display: flex;
-  gap: 18px;
+  gap: calc(var(--kg-u) * 0.35);
   align-items: flex-start;
   justify-content: center; /* 按实际尺寸居中，不铺满拉伸 */
   flex-wrap: wrap; /* 窗口过窄时数字小键盘区换行兜底 */
-  margin-top: 18px; /* 目标区与键盘适度留白（验收返工：全留白与零留白之间取中） */
+  margin-top: calc(var(--kg-u) * 0.35); /* 目标区与键盘适度留白（验收返工：全留白与零留白之间取中） */
 }
 
 .kg-kb-main {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(var(--kg-u) * 0.115);
 }
 
 .kg-row {
   display: flex;
-  gap: 6px;
+  gap: calc(var(--kg-u) * 0.115);
 }
 
 .kg-key {
@@ -195,12 +196,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 46px;
+  height: calc(var(--kg-u) * 0.885);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-bottom-width: 3px;
-  border-radius: 6px;
-  font-size: 13px;
+  border-bottom-width: max(3px, calc(var(--kg-u) * 0.058));
+  border-radius: calc(var(--kg-u) * 0.115);
+  font-size: calc(var(--kg-u) * 0.25);
   color: var(--color-text-secondary);
   transition: background 0.1s, color 0.1s;
 }
@@ -211,9 +212,9 @@ body {
 
 .kg-key-sub {
   position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 9px;
+  top: calc(var(--kg-u) * 0.04);
+  left: calc(var(--kg-u) * 0.077);
+  font-size: calc(var(--kg-u) * 0.173);
   opacity: 0.6;
   pointer-events: none;
 }
@@ -239,9 +240,9 @@ body {
 
 .kg-kb-num {
   display: grid;
-  grid-template-columns: repeat(4, 52px);
-  grid-auto-rows: 46px;
-  gap: 6px;
+  grid-template-columns: repeat(4, var(--kg-u));
+  grid-auto-rows: calc(var(--kg-u) * 0.885);
+  gap: calc(var(--kg-u) * 0.115);
 }
 
 .kg-shake {

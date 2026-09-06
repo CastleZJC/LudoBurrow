@@ -62,7 +62,7 @@ afterAll(() => {
   ;(HTMLCanvasElement.prototype as unknown as { getContext: unknown }).getContext = originalGetContext
 })
 
-/** 90×90 纯色图：梯度全 0 → 切割线像素等分（3×3 → 每 30px），槽位可预测 */
+/** 90×90 纯色图：梯度全 0 → 切割线像素等分（3×4 → 行 30px / 列 22.5px），槽位可预测 */
 function flatImage(size = 90): ImageDataLike {
   const data = new Uint8ClampedArray(size * size * 4)
   for (let i = 0; i < data.length; i += 4) {
@@ -80,7 +80,7 @@ function makeDeps() {
     analysisImage: img,
     sourceImage: { width: 90, height: 90 } as unknown as CanvasImageSource & { width: number; height: number },
     // 顺序推出注入（验收四轮一：生产缺省为 seed 洗牌；交互用例按序放置依赖确定性推出序）
-    deck: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    deck: Array.from({ length: 12 }, (_, i) => i),
   }
 }
 
@@ -97,7 +97,7 @@ interface Harness {
   stagingCenter(): { x: number; y: number }
 }
 
-const LEVEL = createTopicLevel(1, 'animals') // 内置首关 3×3
+const LEVEL = createTopicLevel(1, 'animals') // 内置首关 3×4（反馈三轮窗口上移）= 12 块
 
 async function mountReady(): Promise<{ inst: ReturnType<typeof mountJigsaw>; h: Harness }> {
   const container = document.createElement('div')
@@ -115,7 +115,7 @@ async function mountReady(): Promise<{ inst: ReturnType<typeof mountJigsaw>; h: 
   await Promise.resolve() // async init 微任务冲刷（deps 注入路径无真 await）
   const canvas = container.querySelector('canvas.jg-canvas') as HTMLCanvasElement
   // 与实现同源重建方案（确定性：同图同参同种子）+ 同源布局，推算槽位屏幕坐标
-  const plan = createCutPlan(flatImage(), { rows: LEVEL.gridSize, cols: LEVEL.gridSize }, LEVEL.seed)
+  const plan = createCutPlan(flatImage(), { rows: LEVEL.rows ?? LEVEL.gridSize, cols: LEVEL.cols ?? LEVEL.gridSize }, LEVEL.seed)
   const rects = computeLayout(960, 600)
   const content = boardContentRect(rects.board, plan)
   const h: Harness = {
@@ -160,7 +160,7 @@ describe('mountJigsaw（挂载与初始化）', () => {
       expect(h.container.querySelector(`[data-jg="${key}"]`)).toBeTruthy()
     }
     expect(h.container.querySelector('[data-jg="error"]')).toBeNull()
-    expect(h.progress.at(-1)).toMatchObject({ gameId: 'jigsaw', n: 1, done: 0, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ gameId: 'jigsaw', n: 1, done: 0, total: 12 })
     inst.destroy()
   })
 
@@ -226,7 +226,7 @@ describe('拖拽吸附与三区校验（§11.2）', () => {
     pointer(h.canvas, 'pointerdown', from.x, from.y)
     pointer(h.canvas, 'pointermove', to.x, to.y)
     pointer(h.canvas, 'pointerup', to.x, to.y)
-    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 12 })
     expect(h.results).toHaveLength(0)
     inst.destroy()
   })
@@ -237,12 +237,12 @@ describe('拖拽吸附与三区校验（§11.2）', () => {
     const wrong = h.slotCenter(2, 2) // 块 0 放 (2,2) 错位
     pointer(h.canvas, 'pointerdown', from.x, from.y)
     pointer(h.canvas, 'pointerup', wrong.x, wrong.y)
-    expect(h.progress.at(-1)).toMatchObject({ done: 0, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 0, total: 12 })
     // 盘面块可重摆：从错误槽拖回正确槽
     const right = h.slotCenter(0, 0)
     pointer(h.canvas, 'pointerdown', wrong.x, wrong.y)
     pointer(h.canvas, 'pointerup', right.x, right.y)
-    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 12 })
     inst.destroy()
   })
 
@@ -252,13 +252,13 @@ describe('拖拽吸附与三区校验（§11.2）', () => {
     const staging = h.stagingCenter()
     pointer(h.canvas, 'pointerdown', from.x, from.y)
     pointer(h.canvas, 'pointerup', staging.x, staging.y)
-    expect(h.progress.at(-1)).toMatchObject({ done: 0, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 0, total: 12 })
     inst.destroy()
   })
 
   it('全部块正确归位 → onComplete（elapsedMs 0 / mistakes=帮助数 / 3 星 / meta.helps）', async () => {
     const { inst, h } = await mountReady()
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 12; i++) {
       const from = h.currentCenter()
       const piece = h.plan.pieces[i]
       const to = h.slotCenter(piece.row, piece.col)
@@ -275,14 +275,14 @@ describe('拖拽吸附与三区校验（§11.2）', () => {
       meta: { helps: 0 },
     })
     // 进度先于完成：最后一条 progress 为满进度
-    expect(h.progress.at(-1)).toMatchObject({ done: 9, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 12, total: 12 })
     inst.destroy()
   })
 
   it('三区全空但有错位 → 不结算（校验失败不误报完成）', async () => {
     const { inst, h } = await mountReady()
-    // 前 7 块正确，最后两块互换错位（块 7→(2,2)、块 8→(2,1)）：全部进盘面但互不对
-    for (let i = 0; i < 7; i++) {
+    // 前 10 块正确，末两块互换错位（块 10→(2,3)、块 11→(2,2)）：全部进盘面但互不对
+    for (let i = 0; i < 10; i++) {
       const piece = h.plan.pieces[i]
       const from = h.currentCenter()
       const to = h.slotCenter(piece.row, piece.col)
@@ -291,12 +291,12 @@ describe('拖拽吸附与三区校验（§11.2）', () => {
     }
     let from = h.currentCenter()
     pointer(h.canvas, 'pointerdown', from.x, from.y)
-    pointer(h.canvas, 'pointerup', h.slotCenter(2, 2).x, h.slotCenter(2, 2).y) // 块 7 错位
+    pointer(h.canvas, 'pointerup', h.slotCenter(2, 3).x, h.slotCenter(2, 3).y) // 块 10 错位（正确位 (2,2)）
     from = h.currentCenter()
     pointer(h.canvas, 'pointerdown', from.x, from.y)
-    pointer(h.canvas, 'pointerup', h.slotCenter(2, 1).x, h.slotCenter(2, 1).y) // 块 8 错位
+    pointer(h.canvas, 'pointerup', h.slotCenter(2, 2).x, h.slotCenter(2, 2).y) // 块 11 错位（正确位 (2,3)）
     expect(h.results).toHaveLength(0)
-    expect(h.progress.at(-1)).toMatchObject({ done: 7, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 10, total: 12 })
     inst.destroy()
   })
 })
@@ -305,38 +305,38 @@ describe('帮助按钮（§11.4）', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('当前块自动归位，帮助计数入 mistakes 口径（星级降为 1：9 块盘 1 次帮助）', async () => {
+  it('当前块自动归位，帮助计数入 mistakes 口径（星级降为 1：12 块盘全帮助）', async () => {
     const { inst, h } = await mountReady()
     click(h.container.querySelector('[data-jg="help"]')!)
-    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 9 })
-    // 全部用帮助完成 → 9 次帮助
-    for (let i = 0; i < 8; i++) {
+    expect(h.progress.at(-1)).toMatchObject({ done: 1, total: 12 })
+    // 全部用帮助完成 → 12 次帮助
+    for (let i = 0; i < 11; i++) {
       vi.advanceTimersByTime(300)
       click(h.container.querySelector('[data-jg="help"]')!)
     }
     vi.advanceTimersByTime(300)
     expect(h.results).toHaveLength(1)
-    expect(h.results[0]).toMatchObject({ mistakes: 9, stars: 1, meta: { helps: 9 } })
+    expect(h.results[0]).toMatchObject({ mistakes: 12, stars: 1, meta: { helps: 12 } })
     inst.destroy()
   })
 
   it('正确位被错块占用 → 占用块先移暂存（board 让位语义经界面路径触达）', async () => {
     const { inst, h } = await mountReady()
-    // 块 0 错放 (1,1)（块 4 的正确位）
+    // 块 0 错放 (1,1)（3×4 下为块 5 的正确位）
     const from = h.currentCenter()
     const wrong = h.slotCenter(1, 1)
     pointer(h.canvas, 'pointerdown', from.x, from.y)
     pointer(h.canvas, 'pointerup', wrong.x, wrong.y)
     expect(h.progress.at(-1)).toMatchObject({ done: 0 })
-    // 连点帮助 5 次：第 1 次归位块 1，第 2 次块 2，第 3 次块 3，第 4 次块 4（其槽被块 0 占 → 块 0 让位暂存），第 5 次直接帮暂存的块 0？——board.help 只帮当前块（从 remaining 推）
+    // 连点帮助 5 次：第 1-4 次归位块 1-4（槽均空闲），第 5 次帮块 5（其槽 (1,1) 被块 0 占 → 块 0 让位暂存）
     const helpBtn = h.container.querySelector('[data-jg="help"]')!
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       vi.advanceTimersByTime(300)
       click(helpBtn)
     }
     vi.advanceTimersByTime(300)
-    // 块 0 已被挤入暂存（done = 块1/2/3/4 正确 = 4，块 0 在暂存）
-    expect(h.progress.at(-1)).toMatchObject({ done: 4, total: 9 })
+    // 块 0 已被挤入暂存（done = 块1-5 正确 = 5，块 0 在暂存）
+    expect(h.progress.at(-1)).toMatchObject({ done: 5, total: 12 })
     inst.destroy()
   })
 
@@ -349,7 +349,7 @@ describe('帮助按钮（§11.4）', () => {
     const from = h.currentCenter()
     pointer(h.canvas, 'pointerdown', from.x, from.y)
     pointer(h.canvas, 'pointerup', h.slotCenter(piece.row, piece.col).x, h.slotCenter(piece.row, piece.col).y)
-    expect(h.progress.at(-1)).toMatchObject({ done: 2, total: 9 })
+    expect(h.progress.at(-1)).toMatchObject({ done: 2, total: 12 })
     inst.destroy()
   })
 })
@@ -376,8 +376,8 @@ describe('放弃按钮（§11.3 四阶段演示）', () => {
     const helpBtn = h.container.querySelector('[data-jg="help"]') as HTMLButtonElement
     const abandonBtn = h.container.querySelector('[data-jg="abandon"]') as HTMLButtonElement
     expect(helpBtn.disabled).toBe(true)
-    // 9 步演示：每步 DEMO_STEP_MS+40 = 1040ms
-    vi.advanceTimersByTime(1040 * 9 + 100)
+    // 12 步演示：每步 DEMO_STEP_MS+40 = 1040ms
+    vi.advanceTimersByTime(1040 * 12 + 100)
     // 复用正常完成结算链（GameContainer → SettlePanel：真实用时/重玩/下一关），不再 onAbandon 直退
     expect(h.abandoned).toHaveLength(0)
     expect(h.results).toHaveLength(1)

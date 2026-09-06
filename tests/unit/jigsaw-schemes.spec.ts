@@ -1,7 +1,7 @@
 // 拼图方案与专题关卡目录单测（验收返工「方案 = 关卡」：动态关数 / 新增方案=新增关卡 / 成绩挂方案id）
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  listSchemes, getScheme, createScheme, deleteScheme,
+  listSchemes, getScheme, createScheme, deleteScheme, updateScheme,
   builtinSchemes, schemesForTopic, topicLevelCount,
   createTopicLevel, schemeLevelNumber, JIGSAW_TOPICS, BUILTIN_SCHEME_PREFIX,
 } from '@/games/jigsaw/schemes'
@@ -35,10 +35,10 @@ describe('内置方案目录（每图一个，确定性派生）', () => {
     }
   })
 
-  it('占位网格按六档复杂度分档（1→3×3 / 2→3×4 / 3→4×4 / 4→5×5 / 5→5×6 / 6→6×6），seed 确定性派生', () => {
+  it('占位网格按六档复杂度分档（反馈三轮窗口上移：1→3×4 / 2→4×5 / 3→5×6 / 4→6×7 / 5→7×8 / 6→8×9），seed 确定性派生', () => {
     const table: Record<number, { rows: number; cols: number }> = {
-      1: { rows: 3, cols: 3 }, 2: { rows: 3, cols: 4 }, 3: { rows: 4, cols: 4 },
-      4: { rows: 5, cols: 5 }, 5: { rows: 5, cols: 6 }, 6: { rows: 6, cols: 6 },
+      1: { rows: 3, cols: 4 }, 2: { rows: 4, cols: 5 }, 3: { rows: 5, cols: 6 },
+      4: { rows: 6, cols: 7 }, 5: { rows: 7, cols: 8 }, 6: { rows: 8, cols: 9 },
     }
     for (const scheme of builtinSchemes()) {
       const complexity = GALLERY.find((e) => `${BUILTIN_SCHEME_PREFIX}${e.id}` === scheme.id)!.complexity
@@ -63,8 +63,8 @@ describe('内置方案规格自动优选联动（验收返工：每图自动选�
 
   it('缓存未预热：回落复杂度占位网格（六档阶梯保持）', () => {
     const s = builtinSchemes().find((x) => x.id === 'bs-animals-05')! // 复杂度 5
-    expect(s.params.rows).toBe(5)
-    expect(s.params.cols).toBe(6)
+    expect(s.params.rows).toBe(7)
+    expect(s.params.cols).toBe(8)
   })
 
   it('预热后：内置方案 rows/cols 跟随最优规格，seed/锯齿口径不变', () => {
@@ -88,9 +88,9 @@ describe('内置方案规格自动优选联动（验收返工：每图自动选�
   it('单图预热不影响其他图（各自独立回落，难度档不串）', () => {
     rememberSpec('animals-01', { rows: 6, cols: 3 })
     expect(createTopicLevel(1, 'animals').rows).toBe(6)
-    // animals-02 复杂度 2 但未预热 → 占位 3×4
-    expect(createTopicLevel(2, 'animals').rows).toBe(3)
-    expect(createTopicLevel(2, 'animals').cols).toBe(4)
+    // animals-02 复杂度 2 但未预热 → 占位 4×5（反馈三轮窗口上移）
+    expect(createTopicLevel(2, 'animals').rows).toBe(4)
+    expect(createTopicLevel(2, 'animals').cols).toBe(5)
   })
 })
 
@@ -104,13 +104,14 @@ describe('专题目录与动态关数（新增方案 = 自动新增关卡）', (
     expect(JIGSAW_TOPICS.map((t) => t.id)).toEqual(['animals', 'space', 'scenery', 'cartoon', 'custom'])
   })
 
-  it('内置在前（图库顺序）、用户方案按创建时间在后；同图二次切片追加同专题', () => {
-    const a = createScheme('小狗再切', BUILTIN, PARAMS)
+  it('块数升序（反馈三轮「从少到多」）：用户方案按块数插入、同数内置在前；同图二次切片追加同专题', () => {
+    const a = createScheme('小狗再切', BUILTIN, PARAMS) // 4×4=16 块 → 插到 12 与 20 之间
     const b = createScheme('太空加切', { kind: 'builtin', imageId: 'space-03' }, PARAMS)
     const list = schemesForTopic('animals')
     expect(list).toHaveLength(7)
-    expect(list.slice(0, 6).map((s) => s.builtin)).toEqual([true, true, true, true, true, true])
-    expect(list[6]).toMatchObject({ id: a.id, name: '小狗再切', builtin: false })
+    expect(list.map((s) => s.params.rows * s.params.cols)).toEqual([12, 16, 20, 30, 42, 56, 72])
+    expect(list[1]).toMatchObject({ id: a.id, name: '小狗再切', builtin: false })
+    expect(list.filter((s) => s.builtin)).toHaveLength(6)
     // 其他专题互不混入
     expect(schemesForTopic('space').some((s) => s.id === a.id)).toBe(false)
     expect(schemesForTopic('space').some((s) => s.id === b.id)).toBe(true)
@@ -150,7 +151,7 @@ describe('createTopicLevel（专题第 n 关 = 第 n 个方案）', () => {
     expect(cfg.track).toBe('animals')
     expect(cfg.imageId).toBe('animals-01')
     expect(cfg.schemeId).toBe('bs-animals-01')
-    expect(cfg.rows).toBe(3) // animals-01 复杂度 1 → 3×3
+    expect(cfg.rows).toBe(3) // animals-01 复杂度 1 → 3×4
     expect(cfg.gridSize).toBe(3)
     expect(cfg.assetId).toBeUndefined()
     // 同方案内容恒定（seed 不随重排变化）
@@ -158,13 +159,13 @@ describe('createTopicLevel（专题第 n 关 = 第 n 个方案）', () => {
   })
 
   it('用户方案追加为专题末关：自定义参数与 custom 素材引用透传', () => {
-    const scheme = createScheme('我的 4×6', BUILTIN, { ...PARAMS, rows: 4, cols: 6, tabDepth: 0.2, uniquenessThreshold: 30 })
+    const scheme = createScheme('我的 9×9', BUILTIN, { ...PARAMS, rows: 9, cols: 9, tabDepth: 0.2, uniquenessThreshold: 30 })
     const custom = createScheme('我的猫', CUSTOM, { ...PARAMS, suggestion: { rowWeights: [1, 1, 1, 1], colWeights: [1, 1, 1, 1] } })
 
     const cfg = createTopicLevel(7, 'animals')
     expect(cfg.schemeId).toBe(scheme.id)
-    expect(cfg.rows).toBe(4)
-    expect(cfg.cols).toBe(6)
+    expect(cfg.rows).toBe(9)
+    expect(cfg.cols).toBe(9)
     expect(cfg.tabDepth).toBe(0.2)
     expect(cfg.uniquenessThreshold).toBe(30)
     expect(cfg.imageId).toBe('animals-01')
@@ -184,9 +185,9 @@ describe('createTopicLevel（专题第 n 关 = 第 n 个方案）', () => {
   })
 
   it('schemeLevelNumber：方案 id → 当前专题内序号；已删/未知返回 null', () => {
-    const a = createScheme('A', BUILTIN, PARAMS) // animals 第 7 关
+    const a = createScheme('A', BUILTIN, PARAMS) // 4×4=16 块 → animals 第 2 关（块数升序插入）
     expect(schemeLevelNumber('bs-animals-01')).toEqual({ topic: 'animals', n: 1 })
-    expect(schemeLevelNumber(a.id)).toEqual({ topic: 'animals', n: 7 })
+    expect(schemeLevelNumber(a.id)).toEqual({ topic: 'animals', n: 2 })
     deleteScheme(a.id)
     expect(schemeLevelNumber(a.id)).toBeNull()
     expect(schemeLevelNumber('js-missing')).toBeNull()
@@ -247,5 +248,39 @@ describe('用户方案 CRUD', () => {
 
   it('getScheme 未知 id 返回 undefined（UI 兜底用）', () => {
     expect(getScheme('js-missing')).toBeUndefined()
+  })
+})
+
+describe('updateScheme（反馈三轮：方案原位调整，id/进度键不变）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    resetSpecCache()
+  })
+
+  it('更新名称/参数/模式：id 与 createdAt 不变、成绩仍挂原 id 可读', () => {
+    const a = createScheme('A', BUILTIN, PARAMS)
+    recordResult('jigsaw:animals', result(2, 2), { total: 7, recordKey: a.id })
+    const next = updateScheme(a.id, { name: 'A2', params: { ...PARAMS, rows: 6, cols: 5 }, mode: 'auto' })
+    expect(next.id).toBe(a.id)
+    expect(next.name).toBe('A2')
+    expect(next.params.rows).toBe(6)
+    expect(next.params.cols).toBe(5)
+    expect(next.mode).toBe('auto')
+    expect(next.createdAt).toBe(a.createdAt)
+    // 成绩挂方案 id：原位调整不丢进度
+    expect(getLevelRecord('jigsaw:animals', a.id)?.stars).toBe(2)
+    expect(listSchemes().find((s) => s.id === a.id)?.params.rows).toBe(6)
+  })
+
+  it('空名回落原名；仅传 name 时其余字段原样保持', () => {
+    const a = createScheme('A', BUILTIN, PARAMS)
+    const next = updateScheme(a.id, { name: '   ' })
+    expect(next.name).toBe('A')
+    expect(next.params).toEqual(PARAMS)
+    expect(next.source).toEqual(BUILTIN)
+  })
+
+  it('未知 id 抛 RangeError', () => {
+    expect(() => updateScheme('js-missing', { name: 'x' })).toThrow(RangeError)
   })
 })

@@ -4,29 +4,26 @@
 import type { Rng } from '../rng'
 import type { TabSpec } from './types'
 
-/** 每块边沿的锯齿段数（奇数，中段为主凸） */
-const SEGMENTS_PER_PIECE_EDGE = 3
+/** 每块边沿的旋钮数（反馈 4.3 三轮：3 → 1，经典拼图每边单旋钮；三连凸起拥挤读作「山峰状」） */
+const SEGMENTS_PER_PIECE_EDGE = 1
 /** 平坦段概率（约 12% 的段不带凸凹，增加形态多样性） */
 const FLAT_CHANCE = 0.12
 /**
- * 蘑菇颈归一化剖面（反馈 3 二轮：真蘑菇形态）：[x, 高度比]，x∈[-1,1]（肩到肩），1 = 全深。
- * 形态：肩 0 → 陡根升到根肩 0.60（x=±0.62）→ 深 undercut 颈局部极小 0.40（x=±0.46，颈比根肩低 33%）
- * → 盖沿悬崖外扩 0.82（x=±0.30）→ 宽半圆盖（|x|≤0.30 弧顶至 1.0）→ 对称回收 → 肩 0。
- * 一轮失败教训：颈缩仅 8%（0.60→0.52）视觉读作山峰；undercut 深度以「根肩-颈」高差 ≥0.2 为硬约束。
+ * 半圆旋钮归一化剖面（反馈 4.3 三轮）：[x, 高度比]，x∈[-1,1]（肩到肩），1 = 全深。
+ * 形态：sqrt(1-x²) 圆弧控制点（步长 0.2）——根起圆滑爬升、段中心弧顶全深、对称回收；无颈缩、无平顶。
+ * 二轮蘑菇颈（根肩 0.60 / undercut 颈 0.40）仍被读作山峰，三轮按用户授权弃蘑菇改纯半圆。
  */
-const MUSHROOM_PROFILE: readonly (readonly [number, number])[] = [
+const KNOB_PROFILE: readonly (readonly [number, number])[] = [
   [-1, 0],
-  [-0.8, 0.42],
-  [-0.62, 0.6],
-  [-0.46, 0.4],
-  [-0.3, 0.82],
-  [-0.16, 0.97],
+  [-0.8, 0.6],
+  [-0.6, 0.8],
+  [-0.4, 0.917],
+  [-0.2, 0.98],
   [0, 1],
-  [0.16, 0.97],
-  [0.3, 0.82],
-  [0.46, 0.4],
-  [0.62, 0.6],
-  [0.8, 0.42],
+  [0.2, 0.98],
+  [0.4, 0.917],
+  [0.6, 0.8],
+  [0.8, 0.6],
   [1, 0],
 ]
 /** 锯齿骨架每段样条插点数（蘑菇颈 11 控制点 + 每段 4 插点，头弧足够密） */
@@ -129,11 +126,11 @@ export function sampleEdgePoints(
       points.push({ along: end, offset: 0 })
       continue
     }
-    // 段内锯齿骨架：蘑菇颈剖面沿段中 50% 宽度展开（肩 = 段 25%/75% 处，与旧骨架占宽一致）；
+    // 段内锯齿骨架：半圆旋钮沿段中 50% 宽度展开（肩 = 段 25%/75% 处，与旧骨架占宽一致）；
     // 骨架经 Catmull-Rom 细分，肩部零点与段尾零点精确保留，两侧互补不变
     const mid = (start + end) / 2
     const half = segWidth * 0.25
-    const skeleton: EdgePoint[] = MUSHROOM_PROFILE.map(([x, height]) => ({
+    const skeleton: EdgePoint[] = KNOB_PROFILE.map(([x, height]) => ({
       along: mid + x * half,
       offset: height * depth * shape,
     }))

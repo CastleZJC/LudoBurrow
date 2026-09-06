@@ -105,7 +105,8 @@ describe('buildTabSpecs（锯齿规格）', () => {
     expect(a).toHaveLength(2)
     expect(a[0].at).toBe(30)
     expect(a[1].at).toBe(60)
-    expect(a[0].segments).toBe((spans.length - 1) * 3)
+    // 每边单旋钮（反馈 4.3）：segments = 沿线块数 × 1
+    expect(a[0].segments).toBe(spans.length - 1)
     expect(a).toEqual(b)
     for (const spec of a) {
       expect(spec.pattern.every((v) => v === -1 || v === 0 || v === 1)).toBe(true)
@@ -149,36 +150,34 @@ describe('sampleEdgePoints（边几何）', () => {
     for (let i = 1; i < pts.length; i++) expect(pts[i].along).toBeGreaterThanOrEqual(pts[i - 1].along)
   })
 
-  it('蘑菇颈剖面（反馈 3）：峰≈全深、平顶消失、颈缩存在、肩部/段尾精确保零', () => {
-    const pts = sampleEdgePoints(bumped, 40, 'after', 0.2) // 段宽 20、深度 0.2；凸起区 along∈[5,15]
+  it('半圆旋钮剖面（反馈 4.3 三轮）：峰≈全深、无颈缩、半高宽≈86% 圆弧、左右对称、端点归零', () => {
+    const pts = sampleEdgePoints(bumped, 40, 'after', 0.2) // 段宽 20、深度 0.2；段0 旋钮区 along∈[5,15]
     expect(pts[0]).toEqual({ along: 0, offset: 0 })
     expect(pts[pts.length - 1]).toEqual({ along: 40, offset: 0 })
-    const bump = pts.filter((p) => p.along >= 4 && p.along <= 16).map((p) => Math.abs(p.offset))
-    expect(bump.length).toBeGreaterThan(10)
-    const peak = Math.max(...bump)
+    const knob = pts.filter((p) => p.along >= 5 && p.along <= 15)
+    expect(knob.length).toBeGreaterThan(10)
+    const peak = Math.max(...knob.map((p) => Math.abs(p.offset)))
     expect(peak).toBeGreaterThan(0.19) // 峰 ≈ 全深 0.2
     expect(peak).toBeLessThan(0.22) // 样条过冲有界
-    // 平顶消失：≥98% 全深的采样占比 < 40%（旧梯形平顶 ≈60%）
-    const atFull = bump.filter((v) => v >= 0.196).length
-    expect(atFull / bump.length).toBeLessThan(0.4)
-    // 真蘑菇颈（反馈 3 二轮）：颈局部极小 ∈ (0.065, 0.095)（0.40 全深 ± 样条欠冲带），
-    // 且颈外侧根肩（0.60 全深 ≈ 0.12）显著更高 —— undercut 高差 ≥ 0.02（一轮失败教训：8% 颈缩读作山峰）
-    let neckIdx = -1
-    for (let i = 1; i < bump.length - 1; i++) {
-      if (
-        neckIdx < 0 &&
-        bump[i]! < bump[i - 1]! &&
-        bump[i]! < bump[i + 1]! &&
-        bump[i]! > 0.065 &&
-        bump[i]! < 0.095
-      ) {
-        neckIdx = i
-      }
+    // 无颈缩（三轮核心）：左半单调升、右半单调降——不存在 undercut 局部极小（山峰/蘑菇读感来源）
+    const rise = knob.filter((p) => p.along <= 10).map((p) => Math.abs(p.offset))
+    const fall = knob.filter((p) => p.along >= 10).map((p) => Math.abs(p.offset))
+    for (let i = 1; i < rise.length; i++) expect(rise[i]).toBeGreaterThanOrEqual(rise[i - 1]! - 0.01)
+    for (let i = 1; i < fall.length; i++) expect(fall[i]).toBeLessThanOrEqual(fall[i - 1]! + 0.01)
+    // 半圆判定：半高（≥0.099）宽 ≈ 旋钮宽 10 × 86.6% = 8.66（带颈/尖峰剖面显著更窄）
+    const above = knob.filter((p) => Math.abs(p.offset) >= 0.099)
+    const width = Math.max(...above.map((p) => p.along)) - Math.min(...above.map((p) => p.along))
+    expect(width).toBeGreaterThan(7.8)
+    expect(width).toBeLessThan(9.4)
+    // 左右对称（段中心 10 为轴）
+    let maxAsym = 0
+    for (const p of knob) {
+      const mirrored = knob.reduce((b, q) =>
+        Math.abs(q.along - (20 - p.along)) < Math.abs(b.along - (20 - p.along)) ? q : b,
+      )
+      maxAsym = Math.max(maxAsym, Math.abs(Math.abs(p.offset) - Math.abs(mirrored.offset)))
     }
-    expect(neckIdx).toBeGreaterThan(-1)
-    const rootShoulder = Math.max(...bump.slice(0, neckIdx))
-    expect(rootShoulder).toBeGreaterThan(0.1)
-    expect(rootShoulder - bump[neckIdx]!).toBeGreaterThanOrEqual(0.02)
+    expect(maxAsym).toBeLessThan(0.01)
   })
 })
 

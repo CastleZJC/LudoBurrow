@@ -161,17 +161,19 @@ export function mountJigsaw(
       outline.points.forEach((p, i) => (i === 0 ? pctx.moveTo(p.x, p.y) : pctx.lineTo(p.x, p.y)))
       pctx.closePath()
       pctx.clip()
+      pctx.imageSmoothingEnabled = true
+      pctx.imageSmoothingQuality = 'high'
       pctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, plan.width, plan.height)
       pctx.restore()
-      // 轮廓描边（拼合线索：块边界深色描边）
+      // 轮廓描边（拼合线索：细线轻描——反馈 4.2：1.2/0.45 粗线致边缘糊且失真）
       pctx.save()
       pctx.scale(hiScale, hiScale)
       pctx.translate(1 / hiScale - outline.bounds.x, 1 / hiScale - outline.bounds.y)
       pctx.beginPath()
       outline.points.forEach((p, i) => (i === 0 ? pctx.moveTo(p.x, p.y) : pctx.lineTo(p.x, p.y)))
       pctx.closePath()
-      pctx.lineWidth = 1.2
-      pctx.strokeStyle = 'rgba(0,0,0,0.45)'
+      pctx.lineWidth = 0.7
+      pctx.strokeStyle = 'rgba(0,0,0,0.35)'
       pctx.stroke()
       pctx.restore()
       pieceCanvases.set(piece.index, pc)
@@ -726,7 +728,10 @@ export function mountJigsaw(
         ? createCutPlanFromSuggestion(analysis, normalized.suggestion, cutBase, cfg.seed)
         : createCutPlan(analysis, cutBase, cfg.seed)
       source = src
-      hiScale = src.width / plan.width
+      // 反馈 4.1：位图分辨率取「源图比例」与「设备像素盘面比例」较大者——
+      // 源图低于屏幕显示分辨率时（块位图被放大绘制）按盘面设备像素下限重建，切块不再糊于原图
+      const boardPx = boardContentRect(rects.board, plan).w * dpr
+      hiScale = Math.max(src.width / plan.width, boardPx / plan.width)
       board = new JigsawBoard(plan, deps.deck)
       buildPieceBitmaps()
       board.pushNext()

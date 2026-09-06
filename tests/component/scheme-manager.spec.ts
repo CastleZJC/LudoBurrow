@@ -71,7 +71,7 @@ describe('SchemeManager 渲染与新建', () => {
     wrapper.unmount()
   })
 
-  it('新建内置方案全流程：填名保存 → 卡片出现，方案追加为 animals 专题第 7 关', async () => {
+  it('新建内置方案全流程：填名保存 → 卡片出现，8×8=64 块按块数插入 animals 专题', async () => {
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
     await wrapper.find('[data-field="name"]').setValue('小狗 6×6')
@@ -229,6 +229,42 @@ describe('SchemeManager 确认与隔离（F-18 / 方案 = 关卡）', () => {
   })
 })
 
+describe('SchemeManager 方案调整（反馈三轮：原位编辑，id/进度键不变）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    saveImageMock.mockReset()
+  })
+
+  it('调整按钮 → 面板预填 → 改行数保存：同 id 更新、进度保留', async () => {
+    const a = createScheme('小狗 4×4', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    recordResult('jigsaw:animals', result(2), { total: 7, recordKey: a.id })
+
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find(`[data-scheme="${a.id}"] [data-role="edit-scheme"]`).trigger('click')
+
+    // 面板预填：标题「调整方案」+ 名称与行数回显
+    expect(wrapper.find('[data-role="scheme-editor"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('调整方案')
+    expect((wrapper.find('[data-field="name"]').element as HTMLInputElement).value).toBe('小狗 4×4')
+    expect((wrapper.find('[data-field="rows"]').element as HTMLInputElement).value).toBe('4')
+
+    await wrapper.find('[data-field="rows"]').setValue(6)
+    await wrapper.find('[data-role="save-scheme"]').trigger('click')
+
+    // 原位更新：不新建、同 id、参数已改、面板关闭
+    const all = listSchemes()
+    expect(all).toHaveLength(1)
+    expect(all[0]!.id).toBe(a.id)
+    expect(all[0]!.params.rows).toBe(6)
+    expect(all[0]!.params.cols).toBe(4)
+    expect(wrapper.find('[data-role="scheme-editor"]').exists()).toBe(false)
+    // 进度键不变：成绩仍可读
+    expect(getLevelRecord('jigsaw:animals', a.id)?.stars).toBe(3)
+    wrapper.unmount()
+  })
+})
+
 describe('SchemeManager 导航', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -267,8 +303,8 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
     for (let i = 0; i < tries && !done(); i += 1) await new Promise((r) => setTimeout(r, 0))
   }
 
-  it('多图一次导入：难度档随导入序轮转（档 1 → 4×2、档 2 → 5×2），文件名去扩展名为方案名', async () => {
-    downscaleMock.mockReturnValue(flatImage(96, 192)) // 竖长图：档 1 唯一正方形候选 4×2；档 2 无正方形候选 → 块形最接近的 5×2
+  it('多图一次导入：难度档随导入序轮转（档 1 → 5×3、档 2 → 6×3），文件名去扩展名为方案名', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192)) // 竖长图：c1 窗口 9-16 → 5×3（96 整除 3 列，均匀度+块形胜 5×2）；c2 窗口 17-24 → 6×3
     let seq = 0
     saveImageMock.mockImplementation(async () => ({ id: `asset-${(seq += 1)}` }))
     loadImageMock.mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }))
@@ -289,13 +325,13 @@ describe('SchemeManager 批量导入（本地图片 → 解析像素 → 最优�
     for (const s of all) {
       expect(s.source.kind).toBe('custom')
     }
-    // 第 1 张档 1（导入序轮转）→ 4×2；第 2 张档 2 → 5×2（同图不同档 = 难度阶梯的批量入口）
+    // 第 1 张档 1（导入序轮转）→ 5×3；第 2 张档 2 → 6×3（同图不同档 = 难度阶梯的批量入口）
     expect(all[0]).toMatchObject({ name: '汪汪队1' })
-    expect(all[0]!.params.rows).toBe(4)
-    expect(all[0]!.params.cols).toBe(2)
+    expect(all[0]!.params.rows).toBe(5)
+    expect(all[0]!.params.cols).toBe(3)
     expect(all[1]).toMatchObject({ name: '奥特曼1' })
-    expect(all[1]!.params.rows).toBe(5)
-    expect(all[1]!.params.cols).toBe(2)
+    expect(all[1]!.params.rows).toBe(6)
+    expect(all[1]!.params.cols).toBe(3)
     expect(wrapper.find('[data-role="batch-feedback"]').text()).toContain('2')
     wrapper.unmount()
   })
@@ -346,8 +382,8 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     downscaleMock.mockReset().mockReturnValue(flatImage(96, 96))
   })
 
-  it('切到自动模式即按图选规格：竖长图 + 简单档 → 5×2，卡片入档 mode=auto', async () => {
-    downscaleMock.mockReturnValue(flatImage(96, 192)) // 简单档(c2)窗口内块形最接近 = 5×2（与批量导入档 2 同口径）
+  it('切到自动模式即按图选规格：竖长图 + 简单档 → 6×3，卡片入档 mode=auto', async () => {
+    downscaleMock.mockReturnValue(flatImage(96, 192)) // 简单档(c2=复杂度2)窗口 17-24 综合最优 = 6×3（与批量导入档 2 同口径）
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
     await wrapper.find('[data-role="mode-auto"]').trigger('click')
@@ -355,16 +391,16 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     await wrapper.find('[data-role="difficulty-easy"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
     await new Promise((r) => setTimeout(r, 0))
-    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('6×3')
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
-    expect(scheme.params.rows).toBe(5)
-    expect(scheme.params.cols).toBe(2)
+    expect(scheme.params.rows).toBe(6)
+    expect(scheme.params.cols).toBe(3)
     expect(scheme.mode).toBe('auto')
     wrapper.unmount()
   })
 
-  it('分析失败：回落难度占位网格（中等 5×5）仍可保存', async () => {
+  it('分析失败：回落难度占位网格（中等 6×7）仍可保存', async () => {
     loadSourceImageMock.mockRejectedValue(new Error('boom'))
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
@@ -374,8 +410,8 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('无法分析')
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
-    expect(scheme.params.rows).toBe(5)
-    expect(scheme.params.cols).toBe(5)
+    expect(scheme.params.rows).toBe(6)
+    expect(scheme.params.cols).toBe(7)
     expect(scheme.mode).toBe('auto')
     wrapper.unmount()
   })
@@ -384,7 +420,7 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     let releaseFirst!: (img: { width: number; height: number }) => void
     const first = new Promise<{ width: number; height: number }>((res) => (releaseFirst = res))
     loadSourceImageMock.mockImplementationOnce(() => first) // run#1（medium）挂起
-    downscaleMock.mockImplementationOnce(() => flatImage(96, 192)) // run#2（easy）先完成 → 5×2
+    downscaleMock.mockImplementationOnce(() => flatImage(96, 192)) // run#2（easy）先完成 → 6×3
     const wrapper = mountWithApp(SchemeManager)
     await wrapper.find('[data-role="new-scheme"]').trigger('click')
     await wrapper.find('[data-role="mode-auto"]').trigger('click')
@@ -392,11 +428,11 @@ describe('SchemeManager 自动最优模式（三分类，反馈 2）', () => {
     await wrapper.find('[data-role="difficulty-easy"]').trigger('click')
     await new Promise((r) => setTimeout(r, 0))
     await new Promise((r) => setTimeout(r, 0))
-    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('6×3')
     releaseFirst({ width: 96, height: 96 }) // 迟到的 run#1（medium + 96×96 分析）应被作废
     await new Promise((r) => setTimeout(r, 0))
     await new Promise((r) => setTimeout(r, 0))
-    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('5×2')
+    expect(wrapper.find('[data-role="auto-feedback"]').text()).toContain('6×3')
     wrapper.unmount()
   })
 
@@ -491,9 +527,9 @@ describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 appli
     await new Promise((r) => setTimeout(r, 0))
     await new Promise((r) => setTimeout(r, 0))
 
-    // 请求参数：base 来自表单默认 4×4、图 = 内置缩略 data URI、ai 未配置（未开启）
+    // 请求参数：base 来自表单默认 8×8、图 = 内置缩略 data URI、ai 未配置（未开启）
     const call = suggestMock.mock.calls[0] as unknown[]
-    expect(call[1]).toMatchObject({ rows: 4, cols: 4, uniquenessThreshold: 18 })
+    expect(call[1]).toMatchObject({ rows: 8, cols: 8, uniquenessThreshold: 18 })
     const img = String(call[3])
     expect(img.startsWith('data:image/jpeg;base64,') || img.startsWith('data:image/png;base64,')).toBe(true)
     expect(call[4]).toBeUndefined()
@@ -563,7 +599,7 @@ describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 appli
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
     expect(scheme.params.suggestion).toBeUndefined()
-    expect(scheme.params.rows).toBe(4) // 表单未被过期建议改写
+    expect(scheme.params.rows).toBe(8) // 表单未被过期建议改写
     expect(scheme.mode).toBe('custom')
     wrapper.unmount()
   })
@@ -574,7 +610,7 @@ describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 appli
     await wrapper.find('[data-role="save-scheme"]').trigger('click')
     const scheme = listSchemes()[0]!
     expect(scheme.mode).toBe('custom')
-    expect(scheme.params.rows).toBe(4) // 表单参数原样入档
+    expect(scheme.params.rows).toBe(8) // 表单参数原样入档（默认 8×8 = 64 块，反馈三轮）
     wrapper.unmount()
   })
 

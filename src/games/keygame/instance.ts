@@ -105,8 +105,8 @@ export function mountKeygame(
     const rowEl = el('div', 'kg-row')
     for (const key of row) {
       const node = buildKey(key)
-      // 固定键宽（基础 52px × 键宽权重）：键盘按实际尺寸居中呈现，不随容器拉伸失真
-      node.style.width = `${Math.round(52 * (key.w ?? 1))}px`
+      // 键宽 = 单位 × 键宽权重（单位由 applyKbScale 自适应 52-104px）：键盘按实际尺寸居中呈现，不随容器拉伸失真
+      node.style.width = `calc(var(--kg-u, 52px) * ${key.w ?? 1})`
       rowEl.appendChild(node)
     }
     main.appendChild(rowEl)
@@ -129,6 +129,19 @@ export function mountKeygame(
   refreshHud()
   refreshChars()
   container.appendChild(root)
+
+  // ---- 键盘等比缩放（反馈：放大 1 倍填补上下空白）----
+  // 基准 52px 实测主键盘区自然宽度 → 容器可用宽度等比放大（上限 ×2 = 104px，下限原尺寸防溢出）；
+  // 数字小键盘区 flex 可换行，不参与宽度约束。须在挂载后调用（scrollWidth 需布局）。
+  const applyKbScale = (): void => {
+    keyboard.style.setProperty('--kg-u', '52px')
+    const natural = main.scrollWidth
+    const cw = container.clientWidth || 960
+    const scale = Math.min(2, Math.max(1, (cw - 24) / Math.max(1, natural)))
+    keyboard.style.setProperty('--kg-u', `${Math.round(52 * scale)}px`)
+  }
+  applyKbScale()
+  window.addEventListener('resize', applyKbScale)
 
   // ---- 高亮 / 反馈 ----
   const keysOf = (expected: string): HTMLElement[] => keyEls.get(expected) ?? []
@@ -210,6 +223,7 @@ export function mountKeygame(
     destroy() {
       state = 'destroyed'
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', applyKbScale)
       for (const timer of pendingTimers) clearTimeout(timer)
       pendingTimers.length = 0
       root.remove()

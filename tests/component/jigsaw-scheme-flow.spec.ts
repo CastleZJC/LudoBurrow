@@ -93,7 +93,8 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
   })
 
   it('新建用户方案追加为专题末关：第 7 格出现且可进关（config = 方案规格）', async () => {
-    const scheme = createScheme('我的 4×6', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    // 9×9=81 块 > 内置最大 72 块 → 块数升序排在末位（第 7 关）
+    const scheme = createScheme('我的 9×9', { kind: 'builtin', imageId: 'animals-01' }, { ...PARAMS, rows: 9, cols: 9 })
     // 通第 6 关（成绩键 = 内置方案 id）解锁第 7 关
     recordResult('jigsaw:animals', { gameId: 'jigsaw', n: 6, elapsedMs: 60_000, mistakes: 0, stars: 3 }, { total: 7, recordKey: 'bs-animals-06' })
     const platform = usePlatformStore()
@@ -106,8 +107,8 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
     const cfg = platform.currentLevelConfig as { track?: string; schemeId?: string; rows?: number; cols?: number }
     expect(cfg.track).toBe('animals')
     expect(cfg.schemeId).toBe(scheme.id)
-    expect(cfg.rows).toBe(4)
-    expect(cfg.cols).toBe(6)
+    expect(cfg.rows).toBe(9)
+    expect(cfg.cols).toBe(9)
     wrapper.unmount()
   })
 
@@ -130,7 +131,8 @@ describe('GameContainer 方案成绩分流（方案 id 键写专题轨）', () =
   afterEach(() => unregisterGame('stub'))
 
   it('schemeId 关卡过关 → 成绩写 track 专题轨的方案 id 键，单轨槽零影响', async () => {
-    const scheme = createScheme('S', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    // 81 块 = animals 末关（第 7 关）：验证「下一关」从末关回选关页
+    const scheme = createScheme('S', { kind: 'builtin', imageId: 'animals-01' }, { ...PARAMS, rows: 9, cols: 9 })
     const platform = usePlatformStore()
     const level = { ...createStubLevel(1), track: 'animals', schemeId: scheme.id }
     platform.openLevel(level)

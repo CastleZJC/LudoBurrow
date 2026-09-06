@@ -18,6 +18,7 @@ import {
   deleteScheme,
   listSchemes,
   topicOfSource,
+  updateScheme,
 } from '@/games/jigsaw/schemes'
 import { pickBestSpec } from '@/games/jigsaw/optimize'
 import { createRng, levelSeed } from '@/engines/rng'
@@ -47,28 +48,31 @@ function refresh(): void {
 
 refresh()
 
-// ---- 新建面板状态 ----
+// ---- 新建/编辑面板状态 ----
 const panelOpen = ref(false)
+/** 编辑中的方案 id（null = 新建；反馈三轮：方案支持原位调整，id/进度不变） */
+const editingId = ref<string | null>(null)
 const name = ref('')
 const sourceKind = ref<'builtin' | 'custom'>('builtin')
 const imageId = ref(GALLERY[0]!.id)
 const customAssetId = ref('')
 const customName = ref('')
 const customPreviewUrl = ref('')
-const rows = ref(4)
-const cols = ref(4)
+// 默认 8×8 = 64 块（反馈三轮：默认切块量级 ≈60，旧 4×4 偏少）
+const rows = ref(8)
+const cols = ref(8)
 const tabDepth = ref(0.16)
 const seed = ref(Math.floor(Math.random() * 0x1_0000_0000))
 // ---- 三分类模式（反馈 2）：custom 手动 / auto 自动最优 / ai AI 切块 ----
 const mode = ref<JigsawSchemeMode>('custom')
 const difficulty = ref<'easy' | 'medium' | 'hard'>('medium')
-/** 难度三档 → 复杂度档（块数窗口：简单 10-14 / 中等 21-26 / 困难 35-49） */
+/** 难度三档 → 复杂度档（块数窗口：简单 17-24 / 中等 36-48 / 困难 64-81） */
 const DIFFICULTY_COMPLEXITY = { easy: 2, medium: 4, hard: 6 } as const
 /** 分析失败回落：难度占位网格（与 schemes.ts builtinGrid 同档口径） */
 const DIFFICULTY_FALLBACK = {
-  easy: { rows: 3, cols: 4 },
-  medium: { rows: 5, cols: 5 },
-  hard: { rows: 6, cols: 6 },
+  easy: { rows: 4, cols: 5 },
+  medium: { rows: 6, cols: 7 },
+  hard: { rows: 8, cols: 9 },
 } as const
 /** 唯一性阈值固定值（反馈 2：不再 UI 外露；保存/AI 请求/批量导入统一口径） */
 const DEFAULT_UNIQUENESS_THRESHOLD = 18
@@ -102,6 +106,7 @@ const topicGroups = GALLERY_TOPICS.map((topic) => ({
 }))
 
 function openPanel(): void {
+  editingId.value = null
   panelOpen.value = true
   seed.value = Math.floor(Math.random() * 0x1_0000_0000) // 内部花样：不外露不可编辑（反馈 2）
   mode.value = 'custom'
@@ -114,8 +119,50 @@ function openPanel(): void {
   autoDerived.value = false
 }
 
+/** 编辑方案（反馈三轮）：面板预填该方案全部字段，保存走 updateScheme 原位更新（id/进度键不变） */
+function openEditPanel(s: JigsawSchemeData): void {
+  editingId.value = s.id
+  panelOpen.value = true
+  name.value = s.name
+  if (s.source.kind === 'builtin') {
+    sourceKind.value = 'builtin'
+    imageId.value = s.source.imageId
+  } else {
+    sourceKind.value = 'custom'
+    customAssetId.value = s.source.assetId
+    // 自定义图源预览：经素材仓库取 blob 转 dataUrl（异步；失败留空不阻断编辑）
+    void getEnvAdapter()
+      .assetRepo.loadImage({ id: s.source.assetId })
+      .then((blob) => blobToDataUrl(blob))
+      .then((url) => {
+        if (editingId.value === s.id && sourceKind.value === 'custom') customPreviewUrl.value = url
+      })
+      .catch(() => {})
+  }
+  rows.value = s.params.rows
+  cols.value = s.params.cols
+  tabDepth.value = s.params.tabDepth
+  seed.value = s.params.seed
+  mode.value = s.mode ?? 'custom'
+  difficulty.value = 'medium'
+  formError.value = ''
+  saveConfirm.value = false
+  aiFeedback.value = ''
+  autoFeedback.value = ''
+  appliedSuggestion.value = s.params.suggestion
+    ? {
+        rows: s.params.rows,
+        cols: s.params.cols,
+        rowWeights: [...s.params.suggestion.rowWeights],
+        colWeights: [...s.params.suggestion.colWeights],
+      }
+    : null
+  autoDerived.value = (s.mode ?? 'custom') === 'auto'
+}
+
 function closePanel(): void {
   panelOpen.value = false
+  editingId.value = null
   formError.value = ''
   saveConfirm.value = false
   aiFeedback.value = ''
@@ -329,12 +376,13 @@ function saveScheme(): void {
     return
   }
   formError.value = ''
-  // F-18：同图已有方案在玩（专题轨有该方案成绩）→ 二次确认后才新建（历史方案与成绩不受影响）
+  // F-18：同图已有方案在玩（专题轨有该方案成绩）→ 二次确认后才新建（历史方案与成绩不受影响）；
+  // 编辑本就是在玩方案，不适用此门（反馈三轮：调整不改 id/进度）
   const existing = sameSourceScheme()
   const inPlay =
     existing !== undefined &&
     getLevelRecord(progressSlotKey('jigsaw', topicOfSource(existing.source)), existing.id) !== undefined
-  if (inPlay && !saveConfirm.value) {
+  if (!editingId.value && inPlay && !saveConfirm.value) {
     saveConfirm.value = true
     if (saveConfirmTimer) clearTimeout(saveConfirmTimer)
     saveConfirmTimer = setTimeout(() => (saveConfirm.value = false), 3000)
@@ -359,19 +407,19 @@ function saveScheme(): void {
   const finalName = name.value.trim() || t('schemes.defaultName', { n: listSchemes().length + 1 })
   const savedMode: JigsawSchemeMode =
     suggestion && mode.value === 'ai' ? 'ai' : autoDerived.value ? 'auto' : 'custom'
-  createScheme(
-    finalName,
-    currentSource(),
-    {
-      rows: rows.value,
-      cols: cols.value,
-      tabDepth: tabDepth.value,
-      uniquenessThreshold: DEFAULT_UNIQUENESS_THRESHOLD,
-      seed: seed.value,
-      ...(suggestion ? { suggestion } : {}),
-    },
-    savedMode,
-  )
+  const params = {
+    rows: rows.value,
+    cols: cols.value,
+    tabDepth: tabDepth.value,
+    uniquenessThreshold: DEFAULT_UNIQUENESS_THRESHOLD,
+    seed: seed.value,
+    ...(suggestion ? { suggestion } : {}),
+  }
+  if (editingId.value) {
+    updateScheme(editingId.value, { name: finalName, source: currentSource(), params, mode: savedMode })
+  } else {
+    createScheme(finalName, currentSource(), params, savedMode)
+  }
   closePanel()
   refresh()
 }
@@ -584,6 +632,13 @@ onMounted(() => {
         </p>
         <div class="sm-actions">
           <button
+            class="secondary-btn"
+            data-role="edit-scheme"
+            @click="openEditPanel(s)"
+          >
+            {{ t('schemes.edit') }}
+          </button>
+          <button
             class="secondary-btn sm-danger"
             :data-role="confirmDeleteId === s.id ? 'delete-confirm' : 'delete-scheme'"
             @click="askDelete(s.id)"
@@ -595,7 +650,7 @@ onMounted(() => {
     </section>
 
     <section v-if="panelOpen" class="sm-editor" data-role="scheme-editor">
-      <h3>{{ t('schemes.newScheme') }}</h3>
+      <h3>{{ editingId ? t('schemes.editScheme') : t('schemes.newScheme') }}</h3>
 
       <label class="sm-field">
         <span>{{ t('schemes.name') }}</span>
