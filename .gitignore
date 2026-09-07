@@ -26,6 +26,9 @@ coverage/
 # 本地版权受限素材（用户个人导入测试用：不入库不分发，仅限本机）
 documents/local/
 
+# 内部规划及执行目录（superpowers 规格/计划：仅限本机，不入库不上传）
+docs/
+
 # OS
 .DS_Store
 Thumbs.db
