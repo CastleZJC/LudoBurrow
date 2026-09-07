@@ -1,6 +1,7 @@
 // 迷宫游戏实例（技术架构 §12 / 开发计划 4.2-4.4）
 // 分层渲染：tilemap 全图一次性画入离屏画布缓存，主画布每帧只贴缓存 + 绘角色（§12.3 分层绘制）。
-// 输入：方向键 / WASD（keydown 归一化，箭头 preventDefault 防滚动）。
+// 输入：方向键 / WASD（keydown 归一化，箭头 preventDefault 防滚动）+ 鼠标点击
+// （pointerdown → clickFacing 相对小人主轴方向单步，与键盘共用移动管线，撞墙/结算同口径）。
 // 结算（§12.5）：到出口 onComplete（步数相对解长星级；meta 携带 steps/size/theme）。
 // 皮肤（theme.ts）：paletteSkin 先行渲染（零等待），PNG 皮肤异步就绪后整体重画；
 //                  测试经 deps 注入固定迷宫与皮肤，完全绕开资源加载。
@@ -16,7 +17,7 @@ import type { MazeLevelConfig, MazeTheme } from './level'
 import { MAZE_THEMES } from './level'
 import { THEME_LABEL_KEY, THEME_PALETTES, loadTileSkin, paletteSkin, type TileSkin, type TileKind } from './theme'
 import { animFrameOf, calcMazeStars, createHero, isAtGoal, tryMove, type Facing, type HeroState } from './walk'
-import { cellCenter, computeView, type MazeView } from './view'
+import { cellCenter, clickFacing, computeView, type MazeView } from './view'
 
 /** 挂载依赖注入（测试用；生产缺省 = 种子生成迷宫 + 皮肤加载） */
 export interface MazeMountDeps {
@@ -241,11 +242,8 @@ export function mountMaze(
     })
   }
 
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (phase !== 'running') return
-    const dir = KEY_FACING[event.code]
-    if (!dir) return
-    event.preventDefault()
+  /** 键盘/鼠标共用移动管线：tryMove → HUD → 进度 → 到出口结算（口径唯一） */
+  function move(dir: Facing): void {
     const next = tryMove(maze, hero, dir)
     hero = next.hero
     refreshHud()
@@ -266,6 +264,27 @@ export function mountMaze(
     requestPaint()
   }
 
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (phase !== 'running') return
+    const dir = KEY_FACING[event.code]
+    if (!dir) return
+    event.preventDefault()
+    move(dir)
+  }
+
+  /** 鼠标：点击相对小人某侧 → 朝该方向单步（死区内点击忽略；与键盘同管线同口径） */
+  const onPointerDown = (event: PointerEvent): void => {
+    if (phase !== 'running') return
+    const rect = canvas.getBoundingClientRect()
+    const dir = clickFacing(
+      cellCenter(hero.cx, hero.cy, view),
+      { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      view.tile / 2,
+    )
+    if (!dir) return
+    move(dir)
+  }
+
   const onResize = (): void => {
     if (phase === 'destroyed') return
     rebuildBoard()
@@ -273,6 +292,7 @@ export function mountMaze(
   }
 
   window.addEventListener('keydown', onKeyDown)
+  canvas.addEventListener('pointerdown', onPointerDown)
   window.addEventListener('resize', onResize)
 
   rebuildBoard()
@@ -306,6 +326,7 @@ export function mountMaze(
       if (phase === 'destroyed') return
       phase = 'destroyed'
       window.removeEventListener('keydown', onKeyDown)
+      canvas.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('resize', onResize)
       if (rafId !== 0) cancelAnimationFrame(rafId)
       rafId = 0

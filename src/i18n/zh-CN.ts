@@ -54,7 +54,7 @@ export default {
     topicCustom: '我的拼图',
   },
   maze: {
-    hint: '方向键 / WASD 移动，抵达出口过关',
+    hint: '方向键 / WASD 或点击画面方向移动，抵达出口过关',
     themeCastle: '城堡',
     themeGarden: '花园',
     themeSnow: '雪原',

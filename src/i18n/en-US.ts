@@ -53,7 +53,7 @@ export default {
     topicCustom: 'My Puzzles',
   },
   maze: {
-    hint: 'Arrow keys / WASD to move. Reach the exit to win',
+    hint: 'Arrow keys / WASD or click a direction to move. Reach the exit to win',
     themeCastle: 'Castle',
     themeGarden: 'Garden',
     themeSnow: 'Snowfield',

@@ -9,6 +9,7 @@ import { levelSeed } from '@/engines/rng'
 import { getSettings } from '@/core/settings'
 import { mountMaze } from '@/games/maze/instance'
 import type { MazeLevelConfig } from '@/games/maze/level'
+import { cellCenter, computeView } from '@/games/maze/view'
 import { THEME_PALETTES, paletteSkin, type TileSkin } from '@/games/maze/theme'
 import { i18n } from '@/i18n'
 
@@ -290,6 +291,63 @@ describe('过关结算（§12.5）', () => {
     key('ArrowLeft')
     expect(h.results).toHaveLength(1)
     expect(h.progress).toHaveLength(progressCount)
+    inst.destroy()
+  })
+})
+
+describe('鼠标控制（相对方向单步：点击小人某侧走一步）', () => {
+  /** happy-dom clientWidth=0 → rebuildBoard 回落 480×360 → 视图度量确定可复算 */
+  const TINY_VIEW = computeView(480, 360, 5)
+
+  /** 相对 (cx,cy) 小人中心偏移 (dx,dy) 像素处点击画布（getBoundingClientRect 恒 0 → clientX 即画布坐标） */
+  function clickDir(h: Harness, cx: number, cy: number, dx: number, dy: number): void {
+    const c = cellCenter(cx, cy, TINY_VIEW)
+    h.canvas.dispatchEvent(new MouseEvent('pointerdown', { clientX: c.x + dx, clientY: c.y + dy, bubbles: true }))
+  }
+
+  it('点小人右侧 → 右移一步，步数/进度与键盘同口径', () => {
+    const { inst, h } = mountReady()
+    clickDir(h, 0, 0, 100, 0)
+    expect(h.progress).toHaveLength(1)
+    expect(h.progress[0]!).toMatchObject({ gameId: 'maze', n: 1, done: 1, total: 2 })
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 1`)
+    inst.destroy()
+  })
+
+  it('点小人自身（死区）→ 不动不失误不上报', () => {
+    const { inst, h } = mountReady()
+    clickDir(h, 0, 0, 10, 10) // 两轴位移均 < 半瓦片 36px
+    expect(h.progress).toHaveLength(0)
+    expect(h.container.querySelector('[data-mz="mistakes"]')!.textContent).toBe(`${t('common.mistakes')} 0`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 0`)
+    inst.destroy()
+  })
+
+  it('点墙方向 → 失误+1 位置不动（bumps 口径同键盘）', () => {
+    const { inst, h } = mountReady()
+    clickDir(h, 0, 0, 0, -100) // (0,0) 上方外墙
+    expect(h.container.querySelector('[data-mz="mistakes"]')!.textContent).toBe(`${t('common.mistakes')} 1`)
+    expect(h.progress).toHaveLength(0)
+    inst.destroy()
+  })
+
+  it('点击沿解路至出口 → onComplete（星级/步数与键盘路径一致）', () => {
+    const { inst, h } = mountReady()
+    clickDir(h, 0, 0, 100, 0)
+    clickDir(h, 1, 0, 0, 100)
+    expect(h.results).toHaveLength(1)
+    expect(h.results[0]!).toMatchObject({ mistakes: 0, stars: 3, meta: { steps: 2 } })
+    inst.destroy()
+  })
+
+  it('pause 阶段点击不响应；resume 后恢复', () => {
+    const { inst, h } = mountReady()
+    inst.pause()
+    clickDir(h, 0, 0, 100, 0)
+    expect(h.progress).toHaveLength(0)
+    inst.resume()
+    clickDir(h, 0, 0, 100, 0)
+    expect(h.progress.at(-1)).toMatchObject({ done: 1 })
     inst.destroy()
   })
 })
