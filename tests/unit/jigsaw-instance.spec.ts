@@ -97,7 +97,8 @@ interface Harness {
   stagingCenter(): { x: number; y: number }
 }
 
-const LEVEL = createTopicLevel(1, 'animals') // 内置首关 3×4（反馈三轮窗口上移）= 12 块
+// 玩法机制 12 块小盘：内置切片调整后各主题首关均非 3×4，取 cartoon 首关显式覆盖行×列保持 3×4 拓扑
+const LEVEL = { ...createTopicLevel(1, 'cartoon'), rows: 3, cols: 4 }
 
 async function mountReady(): Promise<{ inst: ReturnType<typeof mountJigsaw>; h: Harness }> {
   const container = document.createElement('div')

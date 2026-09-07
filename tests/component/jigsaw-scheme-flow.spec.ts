@@ -80,15 +80,15 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
     wrapper.unmount()
   })
 
-  it('进关配置携带专题与内置方案标记（第 1 关 = bs-animals-01）', async () => {
+  it('进关配置携带专题与内置方案标记（第 1 关 = bs-animals-05，内置切片调整后块数最少居首）', async () => {
     const platform = usePlatformStore()
     const wrapper = mountWithApp(LevelSelect, { props: { gameId: 'jigsaw' } })
     await wrapper.find('[data-level="1"]').trigger('click')
     expect(platform.view).toBe('game')
     const cfg = platform.currentLevelConfig as { track?: string; schemeId?: string; imageId?: string }
     expect(cfg.track).toBe('animals')
-    expect(cfg.schemeId).toBe('bs-animals-01')
-    expect(cfg.imageId).toBe('animals-01')
+    expect(cfg.schemeId).toBe('bs-animals-05')
+    expect(cfg.imageId).toBe('animals-05')
     wrapper.unmount()
   })
 
@@ -112,8 +112,8 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
     wrapper.unmount()
   })
 
-  it('方案成绩按方案 id 键渲染星标（第 1 关 = bs-animals-01 的成绩）', () => {
-    recordResult('jigsaw:animals', { gameId: 'jigsaw', n: 1, elapsedMs: 30_000, mistakes: 0, stars: 3 }, { total: 6, recordKey: 'bs-animals-01' })
+  it('方案成绩按方案 id 键渲染星标（第 1 关 = bs-animals-05 的成绩）', () => {
+    recordResult('jigsaw:animals', { gameId: 'jigsaw', n: 1, elapsedMs: 30_000, mistakes: 0, stars: 3 }, { total: 6, recordKey: 'bs-animals-05' })
     const wrapper = mountWithApp(LevelSelect, { props: { gameId: 'jigsaw' } })
     const stars = wrapper.find('[data-level="1"] .level-stars')
     expect(stars.exists()).toBe(true)

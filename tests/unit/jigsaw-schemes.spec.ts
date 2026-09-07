@@ -16,6 +16,34 @@ const PARAMS: JigsawSchemeParams = { rows: 4, cols: 4, tabDepth: 0.16, uniquenes
 const BUILTIN: JigsawSchemeSource = { kind: 'builtin', imageId: 'animals-01' }
 const CUSTOM: JigsawSchemeSource = { kind: 'custom', assetId: 'asset-9' }
 
+/** 内置切片调整（人工覆盖表镜像）：四主题 24 图行×列，锯齿深度统一 0.25 */
+const SPEC_OVERRIDES: Record<string, { rows: number; cols: number }> = {
+  'animals-01': { rows: 6, cols: 8 },
+  'animals-02': { rows: 5, cols: 6 },
+  'animals-03': { rows: 5, cols: 6 },
+  'animals-04': { rows: 6, cols: 6 },
+  'animals-05': { rows: 4, cols: 6 },
+  'animals-06': { rows: 5, cols: 5 },
+  'space-01': { rows: 7, cols: 6 },
+  'space-02': { rows: 6, cols: 5 },
+  'space-03': { rows: 3, cols: 5 },
+  'space-04': { rows: 6, cols: 5 },
+  'space-05': { rows: 5, cols: 5 },
+  'space-06': { rows: 5, cols: 5 },
+  'scenery-01': { rows: 5, cols: 6 },
+  'scenery-02': { rows: 5, cols: 5 },
+  'scenery-03': { rows: 4, cols: 5 },
+  'scenery-04': { rows: 4, cols: 5 },
+  'scenery-05': { rows: 4, cols: 5 },
+  'scenery-06': { rows: 4, cols: 5 },
+  'cartoon-01': { rows: 4, cols: 3 },
+  'cartoon-02': { rows: 5, cols: 4 },
+  'cartoon-03': { rows: 5, cols: 4 },
+  'cartoon-04': { rows: 5, cols: 4 },
+  'cartoon-05': { rows: 4, cols: 4 },
+  'cartoon-06': { rows: 4, cols: 4 },
+}
+
 function result(n: number, stars: 1 | 2 | 3 = 3): LevelResult {
   return { gameId: 'jigsaw', n, elapsedMs: 60_000, mistakes: 1, stars, meta: {} }
 }
@@ -35,16 +63,15 @@ describe('内置方案目录（每图一个，确定性派生）', () => {
     }
   })
 
-  it('占位网格按六档复杂度分档（反馈三轮窗口上移：1→3×4 / 2→4×5 / 3→5×6 / 4→6×7 / 5→7×8 / 6→8×9），seed 确定性派生', () => {
-    const table: Record<number, { rows: number; cols: number }> = {
-      1: { rows: 3, cols: 4 }, 2: { rows: 4, cols: 5 }, 3: { rows: 5, cols: 6 },
-      4: { rows: 6, cols: 7 }, 5: { rows: 7, cols: 8 }, 6: { rows: 8, cols: 9 },
-    }
-    for (const scheme of builtinSchemes()) {
-      const complexity = GALLERY.find((e) => `${BUILTIN_SCHEME_PREFIX}${e.id}` === scheme.id)!.complexity
-      expect(scheme.params.rows).toBe(table[complexity]!.rows)
-      expect(scheme.params.cols).toBe(table[complexity]!.cols)
-      expect(scheme.params.seed).toBe(levelSeed(`jigsaw-builtin:${scheme.name}`, 1))
+  it('全部 24 图人工覆盖规格（内置切片调整：四主题逐图行×列 + 锯齿深度 0.25），seed 口径不变', () => {
+    for (const entry of GALLERY) {
+      const spec = SPEC_OVERRIDES[entry.id]
+      expect(spec, `${entry.id} 缺人工覆盖条目`).toBeTruthy() // 图库扩图须补表（或显式决策回落自动优选）
+      const scheme = builtinSchemes().find((x) => x.id === `${BUILTIN_SCHEME_PREFIX}${entry.id}`)!
+      expect(scheme.params.rows, `${entry.id} rows`).toBe(spec!.rows)
+      expect(scheme.params.cols, `${entry.id} cols`).toBe(spec!.cols)
+      expect(scheme.params.tabDepth, `${entry.id} tabDepth`).toBe(0.25)
+      expect(scheme.params.seed).toBe(levelSeed(`jigsaw-builtin:${entry.id}`, 1))
     }
   })
 
@@ -55,42 +82,31 @@ describe('内置方案目录（每图一个，确定性派生）', () => {
   })
 })
 
-describe('内置方案规格自动优选联动（验收返工：每图自动选最优切块）', () => {
+describe('内置方案规格人工覆盖（内置切片调整：覆盖表 > 内容分析 > 占位兜底）', () => {
   beforeEach(() => {
     localStorage.clear()
     resetSpecCache()
   })
 
-  it('缓存未预热：回落复杂度占位网格（六档阶梯保持）', () => {
-    const s = builtinSchemes().find((x) => x.id === 'bs-animals-05')! // 复杂度 5
-    expect(s.params.rows).toBe(7)
-    expect(s.params.cols).toBe(8)
-  })
-
-  it('预热后：内置方案 rows/cols 跟随最优规格，seed/锯齿口径不变', () => {
+  it('人工覆盖优先于内容分析：预热缓存不改变覆盖图的行×列与锯齿深度', () => {
     rememberSpec('animals-01', { rows: 5, cols: 4 })
-    const s = builtinSchemes().find((x) => x.id === 'bs-animals-01')!
-    expect(s.params.rows).toBe(5)
-    expect(s.params.cols).toBe(4)
-    expect(s.params.tabDepth).toBe(0.16)
-    expect(s.params.uniquenessThreshold).toBe(18)
-    expect(s.params.seed).toBe(levelSeed('jigsaw-builtin:animals-01', 1))
+    rememberSpec('space-01', { rows: 5, cols: 4 })
+    const a = builtinSchemes().find((x) => x.id === 'bs-animals-01')!
+    const s = builtinSchemes().find((x) => x.id === 'bs-space-01')!
+    expect(a.params.rows).toBe(SPEC_OVERRIDES['animals-01']!.rows)
+    expect(a.params.cols).toBe(SPEC_OVERRIDES['animals-01']!.cols)
+    expect(a.params.tabDepth).toBe(0.25)
+    expect(s.params.rows).toBe(SPEC_OVERRIDES['space-01']!.rows)
+    expect(s.params.cols).toBe(SPEC_OVERRIDES['space-01']!.cols)
+    expect(s.params.tabDepth).toBe(0.25)
   })
 
-  it('createTopicLevel 透传最优规格（gridSize 兼容字段跟 rows）', () => {
-    rememberSpec('animals-01', { rows: 5, cols: 4 })
-    const cfg = createTopicLevel(1, 'animals')
-    expect(cfg.rows).toBe(5)
-    expect(cfg.cols).toBe(4)
-    expect(cfg.gridSize).toBe(5)
-  })
-
-  it('单图预热不影响其他图（各自独立回落，难度档不串）', () => {
-    rememberSpec('animals-01', { rows: 6, cols: 3 })
-    expect(createTopicLevel(1, 'animals').rows).toBe(6)
-    // animals-02 复杂度 2 但未预热 → 占位 4×5（反馈三轮窗口上移）
-    expect(createTopicLevel(2, 'animals').rows).toBe(4)
-    expect(createTopicLevel(2, 'animals').cols).toBe(5)
+  it('createTopicLevel 透传覆盖规格（gridSize 兼容字段跟 rows）', () => {
+    const cfg = createTopicLevel(1, 'cartoon') // cartoon-01 = 4×3 = 12 块全库最少
+    expect(cfg.rows).toBe(4)
+    expect(cfg.cols).toBe(3)
+    expect(cfg.gridSize).toBe(4)
+    expect(cfg.tabDepth).toBe(0.25)
   })
 })
 
@@ -105,16 +121,32 @@ describe('专题目录与动态关数（新增方案 = 自动新增关卡）', (
   })
 
   it('块数升序（反馈三轮「从少到多」）：用户方案按块数插入、同数内置在前；同图二次切片追加同专题', () => {
-    const a = createScheme('小狗再切', BUILTIN, PARAMS) // 4×4=16 块 → 插到 12 与 20 之间
+    const a = createScheme('小狗再切', BUILTIN, PARAMS) // 4×4=16 块 → 少于动物覆盖最小 24 → 居首
     const b = createScheme('太空加切', { kind: 'builtin', imageId: 'space-03' }, PARAMS)
     const list = schemesForTopic('animals')
     expect(list).toHaveLength(7)
-    expect(list.map((s) => s.params.rows * s.params.cols)).toEqual([12, 16, 20, 30, 42, 56, 72])
-    expect(list[1]).toMatchObject({ id: a.id, name: '小狗再切', builtin: false })
+    expect(list.map((s) => s.params.rows * s.params.cols)).toEqual([16, 24, 25, 30, 30, 36, 48])
+    expect(list[0]).toMatchObject({ id: a.id, name: '小狗再切', builtin: false })
     expect(list.filter((s) => s.builtin)).toHaveLength(6)
     // 其他专题互不混入
     expect(schemesForTopic('space').some((s) => s.id === a.id)).toBe(false)
     expect(schemesForTopic('space').some((s) => s.id === b.id)).toBe(true)
+  })
+
+  it('四主题按难易度重排（内置切片调整：块数升序，同块数保持图库稳定序）', () => {
+    // animals 24/25/30/30/36/48；space 15/25/25/30/30/42；scenery 20/20/20/20/25/30；cartoon 12/16/16/20/20/20
+    expect(schemesForTopic('animals').map((s) => s.name)).toEqual([
+      'animals-05', 'animals-06', 'animals-02', 'animals-03', 'animals-04', 'animals-01',
+    ])
+    expect(schemesForTopic('space').map((s) => s.name)).toEqual([
+      'space-03', 'space-05', 'space-06', 'space-02', 'space-04', 'space-01',
+    ])
+    expect(schemesForTopic('scenery').map((s) => s.name)).toEqual([
+      'scenery-03', 'scenery-04', 'scenery-05', 'scenery-06', 'scenery-02', 'scenery-01',
+    ])
+    expect(schemesForTopic('cartoon').map((s) => s.name)).toEqual([
+      'cartoon-01', 'cartoon-05', 'cartoon-06', 'cartoon-02', 'cartoon-03', 'cartoon-04',
+    ])
   })
 
   it('custom 上传图方案归 custom 专题（初始 0 关 = 空态）', () => {
@@ -149,10 +181,12 @@ describe('createTopicLevel（专题第 n 关 = 第 n 个方案）', () => {
     expect(cfg.gameId).toBe('jigsaw')
     expect(cfg.n).toBe(1)
     expect(cfg.track).toBe('animals')
-    expect(cfg.imageId).toBe('animals-01')
-    expect(cfg.schemeId).toBe('bs-animals-01')
-    expect(cfg.rows).toBe(3) // animals-01 复杂度 1 → 3×4
-    expect(cfg.gridSize).toBe(3)
+    expect(cfg.imageId).toBe('animals-05')
+    expect(cfg.schemeId).toBe('bs-animals-05')
+    expect(cfg.rows).toBe(4) // 人工覆盖 4×6=24 全专题最少 → 重排为第 1 关
+    expect(cfg.cols).toBe(6)
+    expect(cfg.gridSize).toBe(4)
+    expect(cfg.tabDepth).toBe(0.25)
     expect(cfg.assetId).toBeUndefined()
     // 同方案内容恒定（seed 不随重排变化）
     expect(createTopicLevel(1, 'animals').seed).toBe(cfg.seed)
@@ -185,9 +219,9 @@ describe('createTopicLevel（专题第 n 关 = 第 n 个方案）', () => {
   })
 
   it('schemeLevelNumber：方案 id → 当前专题内序号；已删/未知返回 null', () => {
-    const a = createScheme('A', BUILTIN, PARAMS) // 4×4=16 块 → animals 第 2 关（块数升序插入）
-    expect(schemeLevelNumber('bs-animals-01')).toEqual({ topic: 'animals', n: 1 })
-    expect(schemeLevelNumber(a.id)).toEqual({ topic: 'animals', n: 2 })
+    const a = createScheme('A', BUILTIN, PARAMS) // 4×4=16 块 → animals 第 1 关（块数升序居首）
+    expect(schemeLevelNumber('bs-animals-01')).toEqual({ topic: 'animals', n: 7 }) // 48 块最多 → 末关（含 a 共 7 关）
+    expect(schemeLevelNumber(a.id)).toEqual({ topic: 'animals', n: 1 })
     deleteScheme(a.id)
     expect(schemeLevelNumber(a.id)).toBeNull()
     expect(schemeLevelNumber('js-missing')).toBeNull()

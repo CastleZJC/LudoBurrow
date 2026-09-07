@@ -1,6 +1,7 @@
 // 拼图切块方案与关卡目录（验收返工「方案 = 关卡」模型）
 // 方案 = 一个关卡：内置图库每图派生一个内置方案（bs-<imageId>，不入档，新增图片 = 自动新增关卡），
-// 内置方案规格 = 每图自动优选的 rows×cols（optimize.ts，按图内容评分；未解析时回落复杂度兜底网格）。
+// 内置方案规格 = 人工覆盖表（BUILTIN_SPEC_OVERRIDES，四主题 24 图逐图行×列+锯齿深度）优先，
+// 未入表图片回落每图自动优选（optimize.ts）→ 复杂度兜底网格。
 // 用户方案（js-*，存档 jigsawSchemes 段）= 对内置图再次切片 / 自定义上传图，创建即追加为专题轨新关卡。
 // 进度 = 专题轨（games['jigsaw:<topic>']）：levels 键 = 方案 id（删除重排不错位），经 core/level-manager 读写。
 // 旧「激活方案 / 方案 50 关阶梯 / 独立进度槽」模型已随存档 v6 迁移退役。
@@ -64,11 +65,45 @@ function builtinGrid(complexity: ComplexityLevel): { rows: number; cols: number 
 }
 
 /**
+ * 内置规格人工覆盖表（内置切片调整：四主题全部 24 图，锯齿深度统一 0.25）。优先级最高——
+ * 覆盖表 > 内容优选（optimize.ts 预热缓存）> 复杂度占位网格；块数可不落在难度档窗口内。
+ * 后两级是兜底：图库新增图片未入表时仍可用（fetch-gallery.mjs 扩图后按需补表）。
+ * 排序不在此表：schemesForTopic 恒按块数升序重排（同块数保持图库稳定序）。
+ */
+const BUILTIN_SPEC_OVERRIDES: Record<string, { rows: number; cols: number; tabDepth: number }> = {
+  'animals-01': { rows: 6, cols: 8, tabDepth: 0.25 },
+  'animals-02': { rows: 5, cols: 6, tabDepth: 0.25 },
+  'animals-03': { rows: 5, cols: 6, tabDepth: 0.25 },
+  'animals-04': { rows: 6, cols: 6, tabDepth: 0.25 },
+  'animals-05': { rows: 4, cols: 6, tabDepth: 0.25 },
+  'animals-06': { rows: 5, cols: 5, tabDepth: 0.25 },
+  'space-01': { rows: 7, cols: 6, tabDepth: 0.25 },
+  'space-02': { rows: 6, cols: 5, tabDepth: 0.25 },
+  'space-03': { rows: 3, cols: 5, tabDepth: 0.25 },
+  'space-04': { rows: 6, cols: 5, tabDepth: 0.25 },
+  'space-05': { rows: 5, cols: 5, tabDepth: 0.25 },
+  'space-06': { rows: 5, cols: 5, tabDepth: 0.25 },
+  'scenery-01': { rows: 5, cols: 6, tabDepth: 0.25 },
+  'scenery-02': { rows: 5, cols: 5, tabDepth: 0.25 },
+  'scenery-03': { rows: 4, cols: 5, tabDepth: 0.25 },
+  'scenery-04': { rows: 4, cols: 5, tabDepth: 0.25 },
+  'scenery-05': { rows: 4, cols: 5, tabDepth: 0.25 },
+  'scenery-06': { rows: 4, cols: 5, tabDepth: 0.25 },
+  'cartoon-01': { rows: 4, cols: 3, tabDepth: 0.25 },
+  'cartoon-02': { rows: 5, cols: 4, tabDepth: 0.25 },
+  'cartoon-03': { rows: 5, cols: 4, tabDepth: 0.25 },
+  'cartoon-04': { rows: 5, cols: 4, tabDepth: 0.25 },
+  'cartoon-05': { rows: 4, cols: 4, tabDepth: 0.25 },
+  'cartoon-06': { rows: 4, cols: 4, tabDepth: 0.25 },
+}
+
+/**
  * 内置方案目录（GALLERY 顺序 = 专题内关卡顺序，确定性）。
  * rows/cols = 该图内容优选规格（预热后）；seed 与规格无关，恒由 imageId 派生 → 同图内容恒定。
  */
 export function builtinSchemes(): SchemeCatalogEntry[] {
   return GALLERY.map((entry) => {
+    const override = BUILTIN_SPEC_OVERRIDES[entry.id]
     const fallback = builtinGrid(entry.complexity)
     const spec = bestSpecFor(entry.id)
     return {
@@ -77,9 +112,9 @@ export function builtinSchemes(): SchemeCatalogEntry[] {
       topic: entry.topic,
       source: { kind: 'builtin' as const, imageId: entry.id },
       params: {
-        rows: spec?.rows ?? fallback.rows,
-        cols: spec?.cols ?? fallback.cols,
-        tabDepth: 0.16,
+        rows: override?.rows ?? spec?.rows ?? fallback.rows,
+        cols: override?.cols ?? spec?.cols ?? fallback.cols,
+        tabDepth: override?.tabDepth ?? 0.16,
         uniquenessThreshold: 18,
         seed: levelSeed(`jigsaw-builtin:${entry.id}`, 1),
       },
