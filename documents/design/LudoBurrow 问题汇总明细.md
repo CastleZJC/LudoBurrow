@@ -26,7 +26,7 @@
 - **条目格式**：每条问题固定四段式——**现象 / 根因 / 解决 / 参考**
 - **编号规则**：`P<章节号>-<序号>`（如 P1-02 = 第一章第 2 条），跨文档引用使用此编号
 - **收录标准**：开发/测试/发布过程中实际踩到的坑（含 AI 辅助开发产生的），重复踩同一坑更新原条目不新开
-- **写入时机**：superpowers:systematic-debugging 定位根因并修复后，随修复提交一并入档（《开发计划文档》§2.4）
+- **写入时机**：superpowers:systematic-debugging 定位根因并修复后，随修复提交一并入档（《开发计划文档》§2.4；该文档为内部文档，不入库）
 - **章节组织**：按领域分章，与《技术架构说明文档》章节无强绑定，随条目增长可加章
 
 **条目模板**：
@@ -79,7 +79,7 @@
 
 **解决**：双轨分发——192 分析缩略以 PNG data URI 内嵌 `thumbs.ts`（data URI 不触发 taint，切块引擎可 `getImageData`）；1024 源图走 `assets/` 相对路径仅绘制不读像素。自定义上传图走 IndexedDB blob → `URL.createObjectURL`（blob URL 同源，可读像素）。
 
-**参考**：`src/games/jigsaw/thumbs.ts`、`src/games/jigsaw/gallery.ts`（downscaleToAnalysis）、`scripts/gen-gallery.mjs`；技术架构 §15.3。
+**参考**：`src/games/jigsaw/thumbs.ts`、`src/games/jigsaw/gallery.ts`（downscaleToAnalysis）、`scripts/fetch-gallery.mjs`（现行缩略/源图生成脚本；M3 期曾为 gen-gallery.mjs，已随图库换源移除）；技术架构 §15.3。
 
 ---
 
@@ -193,7 +193,7 @@
 
 **解决**：改用 `scripts/gen-gallery.mjs` 确定性程序化生成 PNG（node:zlib deflate + 手写 CRC32/PNG 编码，1024 源图与 192 缩略同配方渲染，输出恒定可复现），零第三方素材零版权风险；`CREDITS.md` 标注许可随项目 MIT 发布。验收等价满足（每专题 ≥5 张 + 许可标注）；文档口径已同步（技术架构 §15.1/§15.3/§21/R-02、开发计划 3.9/F-27/NF-04）。
 
-**参考**：`scripts/gen-gallery.mjs`、`public/assets/images/CREDITS.md`、开发计划 M3 表 3.9 调整说明。
+**参考**：`scripts/gen-gallery.mjs`（M3 期决策记录；v1.1.0 起图库换源为 Commons/Openclipart 真实照片，改由 `scripts/fetch-gallery.mjs` 生成，gen-gallery.mjs 已移除）、`public/assets/images/CREDITS.md`、开发计划 M3 表 3.9 调整说明。
 
 ---
 

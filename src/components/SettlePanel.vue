@@ -23,6 +23,12 @@ const bestRecord = computed(() =>
   getLevelRecord(props.slotKey ?? props.gameId, props.recordKey ?? String(props.levelN)),
 )
 const isLastLevel = computed(() => props.levelN >= (props.total ?? TOTAL_LEVELS))
+// 成绩行标签按游戏口径区分（LevelResult.mistakes 语义各游戏自定）；未知游戏缺省「失误」
+const scoreLabelKey = computed(() => {
+  if (props.gameId === 'jigsaw') return 'settle.helps'
+  if (props.gameId === 'maze') return 'settle.steps'
+  return 'common.mistakes'
+})
 </script>
 
 <template>
@@ -36,7 +42,7 @@ const isLastLevel = computed(() => props.levelN >= (props.total ?? TOTAL_LEVELS)
 
       <dl class="settle-stats">
         <div class="stat-row"><dt>{{ t('common.time') }}</dt><dd data-stat="elapsed">{{ formatElapsed(info.result.elapsedMs) }}</dd></div>
-        <div class="stat-row"><dt>{{ t('common.mistakes') }}</dt><dd data-stat="mistakes">{{ info.result.mistakes }}</dd></div>
+        <div class="stat-row"><dt>{{ t(scoreLabelKey) }}</dt><dd data-stat="mistakes">{{ info.result.mistakes }}</dd></div>
         <div v-if="bestRecord" class="stat-row">
           <dt>{{ t('settle.best') }}</dt>
           <dd data-stat="best">{{ formatElapsed(bestRecord.bestMs) }}</dd>

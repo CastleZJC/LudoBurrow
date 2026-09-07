@@ -4,6 +4,7 @@ import { usePlatformStore } from '@/stores/platform'
 import { registerGame, unregisterGame } from '@/core/game-registry'
 import { stubModule, createStubLevel } from '@/games/stub'
 import GameContainer from '@/components/GameContainer.vue'
+import SettlePanel from '@/components/SettlePanel.vue'
 import { getUnlockedCount, getLevelRecord } from '@/core/level-manager'
 import { mountWithApp } from './helpers'
 import { applyLocale, i18n } from '@/i18n'
@@ -141,5 +142,34 @@ describe('MainMenu', () => {
     expect(credit.text()).toBe(i18n.global.t('app.credit'))
 
     wrapper.unmount()
+  })
+})
+
+describe('SettlePanel 成绩行标签按游戏区分（键盘=失误/拼图=帮助次数/迷宫=步数）', () => {
+  const makeInfo = () => ({
+    result: { gameId: 'keygame', n: 1, elapsedMs: 1000, mistakes: 2, stars: 2 as const },
+    isNewBest: false,
+    isFail: false,
+  })
+  const scoreLabel = (gameId: string) => {
+    const wrapper = mountWithApp(SettlePanel, {
+      props: { info: makeInfo(), gameId, levelN: 1 },
+    })
+    const label = wrapper.findAll('.stat-row')[1].find('dt').text()
+    wrapper.unmount()
+    return label
+  }
+
+  it('键盘游戏成绩行标签为「失误」', () => {
+    expect(scoreLabel('keygame')).toBe('失误')
+  })
+  it('拼图游戏成绩行标签为「帮助次数」', () => {
+    expect(scoreLabel('jigsaw')).toBe('帮助次数')
+  })
+  it('迷宫游戏成绩行标签为「步数」', () => {
+    expect(scoreLabel('maze')).toBe('步数')
+  })
+  it('未知游戏（stub 等新插件）缺省「失误」', () => {
+    expect(scoreLabel('stub')).toBe('失误')
   })
 })

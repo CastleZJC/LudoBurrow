@@ -40,7 +40,7 @@ let rafId = 0
 let settled = false
 
 const gameNameKey = computed(() => getGame(props.level.gameId)?.name ?? '')
-const timeLimit = computed(() => platform.settings.timeLimit)
+const timeLimit = computed(() => platform.timeLimit)
 
 function tickLoop(): void {
   if (!timer || settled || paused.value) return

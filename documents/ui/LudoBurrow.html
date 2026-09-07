@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LudoBurrow 原型</title>
+<!--
+  LudoBurrow 单份交互式原型（与 v1.1.0 实现对齐，双击即开）
+  结构口径：src/components/*.vue + src/games/*（真实 DOM 结构 / class / data-* 锚点）
+  token 口径：src/style.css :root 单一出处同源副本
+  文案口径：src/i18n/zh-CN.ts / en-US.ts 真值（键名同源）
+  边界：原型内假状态不落存储；图库以色块占位；游戏内界面为示意布局（非逐像素实现基准）
+-->
+<style>
+/* ===== 设计 token（src/style.css :root 同源副本） ===== */
+:root{
+  --color-primary:#4f7cff; --color-primary-dark:#3a63d9; --color-accent:#ffb020;
+  --color-danger:#d64545; --color-surface:#ffffff; --color-bg:#f5f7fb;
+  --color-border:#d8dee9; --color-text:#24292f; --color-text-secondary:#6b7280;
+  --radius-md:10px; --radius-lg:16px;
+  --shadow-md:0 4px 12px rgb(36 41 47 / 12%); --shadow-lg:0 8px 28px rgb(36 41 47 / 18%);
+  --color-primary-soft:#eef2ff; --color-accent-soft:#fff4dc; --color-success:#3fb950;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--color-bg);color:var(--color-text);font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif}
+button{font:inherit}
+/* 平台通用按钮（style.css 同源） */
+.primary-btn,.secondary-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 20px;border-radius:var(--radius-md);font-size:15px;font-weight:600;cursor:pointer;border:2px solid transparent;transition:filter .15s}
+.primary-btn{background:var(--color-primary);color:#fff}
+.secondary-btn{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border)}
+.primary-btn:hover,.secondary-btn:hover{filter:brightness(1.05)}
+.primary-btn:disabled,.secondary-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ===== 主菜单（MainMenu.vue 同构） ===== */
+.main-menu{display:flex;flex-direction:column;align-items:center;gap:24px;padding:48px 24px;min-height:100vh}
+.app-title{font-size:40px;margin:0;color:var(--color-primary)}
+.app-subtitle{margin:0;color:var(--color-text-secondary)}
+.game-list{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.game-entry{display:flex;flex-direction:column;align-items:center;gap:12px;width:180px;padding:24px 16px;border-radius:var(--radius-lg);border:2px solid var(--color-border);background:var(--color-surface);cursor:pointer;transition:transform .15s,box-shadow .15s}
+.game-entry:hover{transform:translateY(-4px);box-shadow:var(--shadow-md)}
+.game-icon{width:72px;height:72px;display:flex;align-items:center;justify-content:center;font-size:44px;object-fit:contain}
+.game-name{font-size:20px;font-weight:600}
+.app-credit{color:var(--color-text-secondary);font-size:13px}
+
+/* ===== 选关（LevelSelect.vue 同构） ===== */
+.level-select{padding:24px 32px;display:flex;flex-direction:column;gap:16px}
+.select-header,.sm-header,.settings-header{display:flex;align-items:center;gap:16px}
+.select-title,.sm-title,.settings-header h2{margin:0;font-size:24px}
+.track-tabs{display:flex;flex-wrap:wrap;gap:10px}
+.track-tab{padding:8px 18px;border-radius:var(--radius-md);border:2px solid var(--color-border);background:var(--color-surface);cursor:pointer;font-size:15px;font-weight:600}
+.track-tab:hover{border-color:var(--color-primary)}
+.track-tab.is-active{border-color:var(--color-primary);background:var(--color-primary);color:#fff}
+.progress-line{margin:0;color:var(--color-text-secondary)}
+.level-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:10px;max-width:960px}
+.empty-import-btn{align-self:flex-start;margin-top:-8px}
+.level-cell{position:relative;aspect-ratio:1;border-radius:var(--radius-md);border:2px solid var(--color-border);background:var(--color-surface);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:18px;font-weight:600;color:var(--color-text)}
+.level-cell:hover:not(:disabled){border-color:var(--color-primary)}
+.level-cell.is-locked{opacity:.45;cursor:not-allowed}
+.level-stars{font-size:12px;color:var(--color-accent);line-height:1}
+.level-best{font-size:10px;color:var(--color-text-secondary);line-height:1.2}
+.level-lock{position:absolute;top:4px;right:6px;font-size:12px}
+
+/* ===== 游戏页（GameContainer.vue 同构） ===== */
+.game-container{display:flex;flex-direction:column;height:100vh}
+.game-header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--color-border)}
+.game-title{margin:0;font-size:20px}
+.hud{display:flex;align-items:center;gap:16px}
+.hud-time{font-variant-numeric:tabular-nums;font-weight:600}
+.game-host{flex:1;min-height:0;position:relative;overflow:hidden}
+
+/* 键盘游戏（style.css kg-* 同源） */
+.kg-root{display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:100%;user-select:none;padding:12px}
+.kg-hud{display:flex;align-items:center;gap:16px;font-size:14px;color:var(--color-text-secondary)}
+.kg-mode{padding:2px 10px;border-radius:999px;background:var(--color-primary);color:var(--color-surface);font-weight:600}
+.kg-mistakes{color:var(--color-danger);font-weight:600}
+.kg-progress{margin-left:auto;font-variant-numeric:tabular-nums}
+.kg-prompt{font-size:13px;color:var(--color-text-secondary)}
+.kg-targets{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:center;padding:18px 16px;background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md)}
+.kg-seg{display:flex;align-items:center;gap:3px}
+.kg-hint{font-size:24px;font-weight:600;margin-right:8px;color:var(--color-text)}
+.kg-ch{min-width:28px;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;border:1px solid var(--color-border);border-radius:6px;font-size:18px;font-family:Consolas,'Courier New',monospace;color:var(--color-text-secondary);background:var(--color-surface)}
+.kg-ch.done{border-color:var(--color-primary);color:var(--color-primary-dark);background:var(--color-primary-soft)}
+.kg-ch.cur{border-color:var(--color-accent);color:var(--color-text);background:var(--color-accent-soft);box-shadow:0 0 0 2px var(--color-accent)}
+.kg-kb{--kg-u:52px;display:flex;gap:calc(var(--kg-u)*.35);align-items:flex-start;justify-content:center;flex-wrap:wrap;margin-top:calc(var(--kg-u)*.35)}
+.kg-kb-main{display:flex;flex-direction:column;gap:calc(var(--kg-u)*.115)}
+.kg-row{display:flex;gap:calc(var(--kg-u)*.115)}
+.kg-key{position:relative;display:flex;align-items:center;justify-content:center;height:calc(var(--kg-u)*.885);background:var(--color-surface);border:1px solid var(--color-border);border-bottom-width:max(3px,calc(var(--kg-u)*.058));border-radius:calc(var(--kg-u)*.115);font-size:calc(var(--kg-u)*.25);color:var(--color-text-secondary);transition:background .1s,color .1s;cursor:pointer}
+.kg-key-label{pointer-events:none}
+.kg-key-sub{position:absolute;top:calc(var(--kg-u)*.04);left:calc(var(--kg-u)*.077);font-size:calc(var(--kg-u)*.173);opacity:.6;pointer-events:none}
+.kg-key-next{background:var(--color-primary);border-color:var(--color-primary-dark);color:var(--color-surface);animation:kg-pulse 1.1s ease-in-out infinite}
+.kg-key-hit{background:var(--color-success);border-color:var(--color-success);color:var(--color-surface)}
+.kg-key-err{background:var(--color-danger);border-color:var(--color-danger);color:var(--color-surface)}
+.kg-kb-num{display:grid;grid-template-columns:repeat(4,var(--kg-u));grid-auto-rows:calc(var(--kg-u)*.885);gap:calc(var(--kg-u)*.115)}
+.kg-shake{animation:kg-shake .32s ease-in-out}
+@keyframes kg-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
+@keyframes kg-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+/* 拼图（jg-*：五区三列 DOM 示意 + HUD） */
+.jg-root{display:flex;flex-direction:column;height:100%;min-height:0}
+.jg-hud{display:flex;align-items:center;gap:14px;padding:8px 12px;font-size:14px}
+.jg-hud .jg-progress{color:var(--color-text-secondary)}
+.jg-btn{border:1px solid var(--color-primary);background:var(--color-primary-soft);color:var(--color-primary);border-radius:6px;padding:4px 14px;font-size:13px;cursor:pointer}
+.jg-btn:hover:not(:disabled){filter:brightness(.95)}
+.jg-btn:disabled{opacity:.45;cursor:not-allowed}
+.jg-btn-warn{border-color:var(--color-danger);background:#f9e9e7;color:var(--color-danger)}
+.jg-stage{flex:1;min-height:0;display:grid;grid-template-columns:24% 1fr 24%;gap:10px;padding:10px}
+.jg-zone{border:2px dashed var(--color-border);border-radius:var(--radius-md);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.jg-zone.filled-zone{border-style:solid}
+.jg-preview{cursor:zoom-in;background:var(--color-primary-soft)}
+.jg-zoom{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgb(0 0 0 / 60%);z-index:10;color:#fff;font-size:15px;cursor:pointer}
+.jg-zoom.on{display:flex}
+.jg-board-grid{display:grid;gap:4px;width:88%;align-self:center}
+.jg-cell{aspect-ratio:1;border:2px dashed var(--color-border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-secondary);cursor:pointer;background:var(--color-surface)}
+.jg-cell.placed{border-style:solid;color:#fff;font-weight:700;cursor:default}
+.jg-cell.misplaced{border-color:var(--color-danger)}
+.jg-cell.help-target{border-color:var(--color-accent);box-shadow:0 0 0 3px var(--color-accent)}
+.jg-stack{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-content:flex-start;padding:8px;width:100%}
+.jg-thumb{width:34px;height:34px;border-radius:6px;color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md);cursor:pointer;border:none}
+.jg-thumb-cur{outline:3px solid var(--color-accent)}
+.jg-current{width:56px;height:56px;border-radius:8px;color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md)}
+
+/* 迷宫（mz-*：HUD + 主题胶囊 + 画布示意） */
+.mz-root{display:flex;flex-direction:column;height:100%;min-height:0}
+.mz-hud{display:flex;align-items:center;gap:14px;padding:8px 12px;font-size:14px}
+.mz-theme{display:inline-flex;gap:2px;padding:2px;border-radius:999px;background:var(--color-primary)}
+.mz-theme-btn{border:none;border-radius:999px;padding:2px 10px;background:transparent;color:var(--color-surface);font-size:13px;font-weight:600;cursor:pointer;opacity:.6}
+.mz-theme-btn:hover{opacity:.85}
+.mz-theme-btn[aria-pressed='true']{background:rgb(255 255 255 / 28%);opacity:1}
+.mz-steps,.mz-mistakes{font-variant-numeric:tabular-nums;color:var(--color-text-secondary)}
+.mz-mistakes{color:var(--color-danger);font-weight:600}
+.mz-hint{margin-left:auto;font-size:13px;color:var(--color-text-secondary)}
+.mz-canvas-host{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px}
+.mz-grid{display:grid;gap:2px;background:var(--color-border);border:2px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden}
+.mz-cell{width:38px;height:38px;background:#fbf9f4;position:relative;cursor:pointer}
+.mz-cell.wall{background:#8a7f70;cursor:default}
+.mz-cell.goal{background:var(--color-success)}
+.mz-hero{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px}
+
+/* 防沉迷锁定（GameContainer rest-lock 同构） */
+.rest-lock{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgb(0 0 0 / 55%);color:#fff;font-size:22px;z-index:30}
+.rest-countdown{font-variant-numeric:tabular-nums}
+
+/* ===== 设置（SettingsPanel.vue 同构） ===== */
+.settings-panel{padding:24px 32px;display:flex;flex-direction:column;gap:16px;max-width:860px}
+.settings-section{border:2px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);padding:16px 22px;display:flex;flex-direction:column;gap:10px}
+.settings-section h3{margin:0;font-size:16px}
+.radio-group{display:flex;flex-direction:column;gap:8px}
+.radio-row{display:flex;align-items:center;gap:8px}
+.number-row{display:flex;gap:24px;flex-wrap:wrap}
+.number-row label{display:flex;align-items:center;gap:8px}
+.switch-row,.select-row,.text-row{display:flex;align-items:center;gap:12px}
+.select-row span,.text-row span{min-width:200px}
+.select-row select,.text-row input,.settings-section>select{padding:7px 10px;border:1px solid var(--color-border);border-radius:var(--radius-md);font:inherit;flex:1;min-width:200px}
+.wb-text{width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--color-border);border-radius:var(--radius-md);font:inherit;font-family:Consolas,monospace;resize:vertical}
+.wb-actions{display:flex;gap:10px}
+.hint{color:var(--color-text-secondary);font-size:13px;margin:0}
+.feedback{color:var(--color-text-secondary);font-size:14px;margin:0;min-height:1em}
+.save-actions{display:flex;gap:10px}
+.file-label input[type=file]{display:none}
+
+/* ===== 方案管理（SchemeManager.vue 同构） ===== */
+.scheme-manager{padding:24px 32px;display:flex;flex-direction:column;gap:16px}
+.sm-header-actions{display:flex;gap:10px}
+.sm-batch-feedback{margin:0;color:var(--color-text-secondary);font-size:14px}
+.sm-title{margin:0;font-size:24px;flex:1}
+.sm-list{display:flex;flex-direction:column;gap:10px;max-width:720px}
+.sm-card{padding:12px 16px;border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);display:flex;flex-direction:column;gap:8px}
+.sm-name{font-weight:600;font-size:15px}
+.sm-meta{margin:0;color:var(--color-text-secondary);font-size:13px}
+.sm-actions{display:flex;gap:10px}
+.sm-empty{margin:0;color:var(--color-text-secondary)}
+.sm-editor{border:2px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);padding:18px 22px;display:flex;flex-direction:column;gap:12px;max-width:720px}
+.sm-editor h3{margin:0;font-size:18px}
+.sm-field{display:flex;flex-direction:column;gap:6px}
+.sm-field>span{font-size:14px;font-weight:600}
+.sm-field select,.sm-field input[type=text]{padding:7px 10px;border:1px solid var(--color-border);border-radius:var(--radius-md);font:inherit}
+.sm-seg{display:inline-flex;gap:2px;padding:2px;border-radius:999px;background:var(--color-primary);align-self:flex-start}
+.sm-seg button{border:none;border-radius:999px;padding:5px 16px;background:transparent;color:#fff;font-size:14px;font-weight:600;cursor:pointer;opacity:.6}
+.sm-seg button.is-on{background:rgb(255 255 255 / 28%);opacity:1}
+.sm-params{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
+.sm-params label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.sm-params input[type=number]{width:80px;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font:inherit}
+.sm-preview{display:flex;align-items:center;gap:12px}
+.sm-canvas{border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface)}
+.sm-error{color:var(--color-danger);margin:0}
+.sm-ai-feedback{color:var(--color-text-secondary);font-size:13px}
+.sm-editor-actions{display:flex;gap:10px}
+.sm-danger{color:var(--color-danger)}
+
+/* ===== 浮层（PauseOverlay / SettlePanel 同构） ===== */
+.pause-overlay,.settle-panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(0 0 0 / 45%);z-index:20}
+.pause-card,.settle-card{background:var(--color-surface);border-radius:var(--radius-lg);padding:32px 48px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:var(--shadow-lg);min-width:320px}
+.pause-card h3,.settle-card h3{margin:0;font-size:24px}
+.pause-actions{display:flex;flex-direction:column;gap:10px;min-width:200px}
+.settle-card h3{font-size:28px}
+.is-success{color:var(--color-primary)}
+.stars{font-size:40px;color:var(--color-accent);letter-spacing:4px}
+.settle-stats{margin:0;display:flex;flex-direction:column;gap:6px;min-width:220px}
+.stat-row{display:flex;justify-content:space-between;gap:24px}
+.stat-row dt{color:var(--color-text-secondary)}
+.stat-row dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.new-best{color:var(--color-accent);font-weight:700;margin:0}
+.settle-actions{display:flex;gap:12px;margin-top:8px}
+</style>
+</head>
+<body>
+
+<!-- ============ 主菜单（MainMenu.vue 同构） ============ -->
+<div class="main-menu" id="view-menu" data-view="menu">
+  <h1 class="app-title" data-i18n="app.title">LudoBurrow 玩趣洞</h1>
+  <p class="app-subtitle" data-i18n="app.subtitle">免安装的益智游戏小窝</p>
+  <div class="game-list" id="game-list">
+    <button class="game-entry" data-game="keygame"><span class="game-icon">⌨️</span><span class="game-name" data-i18n="game.keygame">键盘按键</span></button>
+    <button class="game-entry" data-game="jigsaw"><span class="game-icon">🧩</span><span class="game-name" data-i18n="game.jigsaw">拼图</span></button>
+    <button class="game-entry" data-game="maze"><span class="game-icon">🌀</span><span class="game-name" data-i18n="game.maze">迷宫</span></button>
+  </div>
+  <button class="secondary-btn" data-nav="settings" data-i18n="common.settings">设置</button>
+  <footer class="app-credit" data-menu="credit" data-i18n="app.credit">© 2026 castle.zhang</footer>
+</div>
+
+<!-- ============ 选关（LevelSelect.vue 同构） ============ -->
+<div class="level-select" id="view-select" data-view="select" hidden>
+  <header class="select-header">
+    <button class="secondary-btn" data-nav="back" data-i18n="common.back">返回</button>
+    <h2 class="select-title" id="sel-title">选择关卡</h2>
+    <button v-if="jigsaw" class="secondary-btn" data-nav="schemes" data-i18n="schemes.title">拼图方案</button>
+  </header>
+  <div class="track-tabs" id="sel-tabs" data-role="track-tabs"></div>
+  <p class="progress-line" id="sel-progress"></p>
+  <p class="progress-line" id="sel-analyzing" data-role="analyzing" hidden data-i18n="level.analyzing"></p>
+  <p class="progress-line" id="sel-empty" data-role="empty-topic" hidden data-i18n="level.emptyTopic"></p>
+  <button class="primary-btn empty-import-btn" id="sel-empty-import" data-role="empty-import" hidden data-i18n="level.emptyImport">导入本地图片并自动最优切块</button>
+  <div class="level-grid" id="sel-grid"></div>
+</div>
+
+<!-- ============ 游戏（GameContainer.vue 同构） ============ -->
+<div class="game-container" id="view-game" data-view="game" hidden>
+  <header class="game-header">
+    <h2 class="game-title" id="game-title">键盘按键 · 第 1 关</h2>
+    <div class="hud">
+      <span class="hud-time" data-hud="time"><span data-i18n="common.time">用时</span> <span id="hud-time">00:00</span></span>
+      <span class="hud-time" id="hud-progress" data-hud="progress" hidden></span>
+      <button class="secondary-btn" data-nav="pause" data-i18n="container.pause">暂停</button>
+    </div>
+  </header>
+  <div class="game-host" data-role="mount-host" id="mount-host"></div>
+
+  <!-- 暂停浮层（PauseOverlay.vue 同构：按钮竖排） -->
+  <div class="pause-overlay" data-role="pause" id="ov-pause" hidden>
+    <div class="pause-card">
+      <h3 data-i18n="pause.title">暂停中</h3>
+      <div class="pause-actions">
+        <button class="primary-btn" data-nav="resume" data-i18n="pause.resume">继续</button>
+        <button class="secondary-btn" data-nav="retry" data-i18n="pause.retry">重玩本关</button>
+        <button class="secondary-btn" data-nav="exit" data-i18n="pause.exit">退出关卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结算浮层（SettlePanel.vue 同构） -->
+  <div class="settle-panel" data-role="settle" id="ov-settle" hidden>
+    <div class="settle-card">
+      <h3 class="is-success" id="st-title" data-i18n="settle.success">过关！</h3>
+      <div class="stars" data-role="stars" id="st-stars">★★★</div>
+      <dl class="settle-stats">
+        <div class="stat-row"><dt data-i18n="common.time">用时</dt><dd data-stat="elapsed" id="st-time">00:00</dd></div>
+        <div class="stat-row"><dt id="st-score-label" data-i18n="common.mistakes">失误</dt><dd data-stat="mistakes" id="st-score">0</dd></div>
+        <div class="stat-row" id="st-best-row"><dt data-i18n="settle.best">历史最佳</dt><dd data-stat="best" id="st-best">00:00</dd></div>
+      </dl>
+      <p class="new-best" id="st-newbest" data-i18n="settle.newBest">新纪录！</p>
+      <div class="settle-actions">
+        <button class="secondary-btn" data-nav="retry" data-i18n="common.retry">重玩</button>
+        <button class="primary-btn" data-nav="next" id="st-next" data-i18n="common.next">下一关</button>
+        <button class="secondary-btn" data-nav="exit" data-i18n="pause.exit">退出关卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 防沉迷锁定（GameContainer rest-lock 同构） -->
+  <div class="rest-lock" data-role="rest-lock" id="rest-lock" hidden>
+    <p data-i18n="timeLimit.reachedAntiAddiction">该休息一下啦，眼睛看一看远处吧</p>
+    <p class="rest-countdown" data-i18n="timeLimit.lockRemaining">休息锁定中，还剩 {minutes} 分钟</p>
+  </div>
+</div>
+
+<!-- ============ 设置（SettingsPanel.vue 同构） ============ -->
+<div class="settings-panel" id="view-settings" data-view="settings" hidden>
+  <header class="settings-header">
+    <button class="secondary-btn" data-nav="back" data-i18n="common.back">返回</button>
+    <h2 data-i18n="common.settings">设置</h2>
+  </header>
+
+  <section class="settings-section" data-section="language">
+    <h3 data-i18n="settings.language">语言（切换立即生效）</h3>
+    <select id="set-locale" data-role="locale-select">
+      <option value="zh-CN" data-i18n="locale.zh-CN">简体中文</option>
+      <option value="en-US" data-i18n="locale.en-US">English</option>
+    </select>
+  </section>
+
+  <section class="settings-section" data-section="timelimit">
+    <h3 data-i18n="settings.timeLimitSection">限时策略</h3>
+    <div class="radio-group">
+      <label class="radio-row"><input type="radio" name="tl-mode" value="off" checked data-role="tl-off"><span data-i18n="settings.timeLimitOff">不限时</span></label>
+      <label class="radio-row"><input type="radio" name="tl-mode" value="competition" data-role="tl-competition"><span data-i18n="settings.timeLimitCompetition">竞赛模式（到时立即结算）</span></label>
+      <label class="radio-row"><input type="radio" name="tl-mode" value="antiAddiction" data-role="tl-anti"><span data-i18n="settings.timeLimitAntiAddiction">防沉迷模式（到时提醒休息）</span></label>
+    </div>
+    <div class="number-row" id="tl-numbers" hidden>
+      <label><span data-i18n="settings.limitMinutes">每关上限（分钟）</span> <input type="number" min="1" max="60" value="30" data-role="limit-minutes"></label>
+      <label id="tl-lock-row" hidden><span data-i18n="settings.lockMinutes">休息锁定（分钟）</span> <input type="number" min="1" max="60" value="10" data-role="lock-minutes"></label>
+    </div>
+  </section>
+
+  <section class="settings-section" data-section="ai">
+    <h3 data-i18n="settings.aiSection">AI 增强（可选）</h3>
+    <label class="radio-row"><input type="checkbox" id="ai-toggle" data-role="ai-toggle"><span data-i18n="settings.aiEnabled">启用 AI 切块建议</span></label>
+    <div id="ai-fields" hidden style="display:flex;flex-direction:column;gap:10px">
+      <label class="select-row"><span data-i18n="settings.aiProvider">服务商</span>
+        <select data-role="ai-provider">
+          <option value="qwen" data-i18n="settings.aiProviderQwen">Qwen（DashScope）</option>
+          <option value="glm" data-i18n="settings.aiProviderGlm">GLM（智谱）</option>
+          <option value="custom" data-i18n="settings.aiCustom">自定义（OpenAI 兼容端点）</option>
+        </select>
+      </label>
+      <label class="text-row"><span data-i18n="settings.aiBaseUrl">接口地址（Base URL）</span><input type="text" data-i18n-ph="settings.aiPresetHint" placeholder="留空使用预设" data-role="ai-baseurl"></label>
+      <label class="text-row"><span data-i18n="settings.aiModel">模型名</span><input type="text" data-i18n-ph="settings.aiPresetHint" placeholder="留空使用预设" data-role="ai-model"></label>
+      <label class="text-row"><span data-i18n="settings.aiKey">API Key（仅存本机）</span><input type="password" autocomplete="off" data-role="ai-apikey"></label>
+      <p class="hint" data-i18n="settings.aiHint">未配置或调用失败时自动使用本地算法，功能不受影响</p>
+    </div>
+  </section>
+
+  <section class="settings-section" data-section="wordbank">
+    <h3 data-i18n="settings.wordbankSection">词汇表配置</h3>
+    <p class="hint" data-i18n="settings.wordbankHint">自定义键盘游戏「英文单词 / 中文拼音」模式词表；本地单机共享一份配置（服务器版按用户隔离，二期）</p>
+    <label class="select-row"><span data-i18n="settings.wordbankCategory">词表类别</span>
+      <select id="wb-category" data-role="wb-category"></select>
+    </label>
+    <textarea rows="8" data-role="wb-text" id="wb-text"></textarea>
+    <p class="hint" id="wb-hint"></p>
+    <div class="wb-actions">
+      <button class="secondary-btn" data-role="wb-reset-category" data-i18n="settings.wbResetCategory">恢复本类默认</button>
+      <button class="secondary-btn" data-role="wb-reset-all" data-i18n="settings.wbResetAll">全部恢复默认</button>
+    </div>
+  </section>
+
+  <section class="settings-section" data-section="save">
+    <h3 data-i18n="settings.saveSection">存档备份</h3>
+    <div class="save-actions">
+      <button class="secondary-btn" data-role="save-export" data-i18n="settings.saveExport">导出存档</button>
+      <label class="secondary-btn file-label"><span data-i18n="settings.saveImport">导入存档</span><input type="file" accept="application/json" data-role="save-import"></label>
+    </div>
+    <p class="feedback" id="set-feedback"></p>
+  </section>
+</div>
+
+<!-- ============ 方案管理（SchemeManager.vue 同构） ============ -->
+<div class="scheme-manager" id="view-schemes" data-view="schemes" hidden>
+  <header class="sm-header">
+    <button class="secondary-btn" data-nav="back" data-i18n="common.back">返回</button>
+    <h2 class="sm-title" data-i18n="schemes.title">拼图方案</h2>
+    <div class="sm-header-actions" id="sm-header-actions">
+      <button class="primary-btn" data-role="batch-import" data-i18n="schemes.batchImport">批量导入并自动建档</button>
+      <button class="primary-btn" data-role="new-scheme" data-i18n="schemes.newScheme">新建方案</button>
+    </div>
+  </header>
+  <p class="sm-batch-feedback" data-role="batch-feedback" id="sm-batch-feedback" hidden></p>
+
+  <section class="sm-list" id="sm-list"></section>
+  <p class="sm-empty" id="sm-empty" data-i18n="schemes.empty" hidden>还没有自定义方案，新建一个试试</p>
+
+  <!-- 新建/编辑面板（sm-editor） -->
+  <section class="sm-editor" data-role="scheme-editor" id="sm-editor" hidden>
+    <h3 id="sm-editor-title" data-i18n="schemes.newScheme">新建方案</h3>
+
+    <label class="sm-field"><span data-i18n="schemes.name">方案名称</span>
+      <input type="text" data-field="name" data-i18n-ph="schemes.namePlaceholder" placeholder="例如：小狗 6×6">
+    </label>
+
+    <div class="sm-field"><span data-i18n="schemes.mode">切片方式</span>
+      <div class="sm-seg" id="sm-mode">
+        <button type="button" data-role="mode-custom" class="is-on" data-i18n="schemes.modeCustom">自定义</button>
+        <button type="button" data-role="mode-auto" data-i18n="schemes.modeAuto">自动最优</button>
+        <button type="button" data-role="mode-ai" data-i18n="schemes.modeAi">AI 切块</button>
+      </div>
+    </div>
+
+    <div class="sm-field"><span data-i18n="schemes.source">图片来源</span>
+      <div class="sm-seg" id="sm-source">
+        <button type="button" data-role="source-builtin" class="is-on" data-i18n="schemes.sourceBuiltin">内置图库</button>
+        <button type="button" data-role="source-custom" data-i18n="schemes.sourceCustom">本地上传</button>
+      </div>
+    </div>
+
+    <div class="sm-field" id="sm-pick-field"><span data-i18n="schemes.pickImage">选择图片</span>
+      <select id="sm-image"></select>
+    </div>
+
+    <div class="sm-field" id="sm-upload-field" hidden><span data-i18n="schemes.upload">上传图片</span>
+      <label class="primary-btn" style="align-self:flex-start;cursor:pointer"><span data-i18n="schemes.upload">上传图片</span><input type="file" accept="image/*" hidden></label>
+    </div>
+
+    <div class="sm-params" id="sm-custom-params">
+      <label><span data-i18n="schemes.rows">行数</span><input type="number" min="2" max="12" value="8" id="sm-rows"></label>
+      <label><span data-i18n="schemes.cols">列数</span><input type="number" min="2" max="12" value="8" id="sm-cols"></label>
+      <label style="flex:1"><span><span data-i18n="schemes.tabDepth">锯齿深度</span>（<span id="sm-tabv">0.16</span>）</span>
+        <input type="range" min="0.08" max="0.25" step="0.01" value="0.16" id="sm-tab" style="width:200px">
+      </label>
+    </div>
+
+    <div class="sm-field" id="sm-auto-field" hidden><span data-i18n="schemes.difficulty">难度</span>
+      <div class="sm-seg" id="sm-dz">
+        <button type="button" data-role="difficulty-easy" data-i18n="schemes.difficultyEasy">简单</button>
+        <button type="button" data-role="difficulty-medium" class="is-on" data-i18n="schemes.difficultyMedium">中等</button>
+        <button type="button" data-role="difficulty-hard" data-i18n="schemes.difficultyHard">困难</button>
+      </div>
+      <span class="sm-ai-feedback" data-role="auto-feedback" id="sm-auto-feedback"></span>
+    </div>
+
+    <div class="sm-field" id="sm-ai-field" hidden>
+      <button type="button" class="secondary-btn" data-role="ai-suggest" style="align-self:flex-start" data-i18n="schemes.modeAi">AI 切块</button>
+      <span class="sm-ai-feedback" data-role="ai-feedback" id="sm-ai-feedback"></span>
+    </div>
+
+    <div class="sm-preview"><span data-i18n="schemes.preview">切割预览</span>
+      <canvas class="sm-canvas" width="240" height="240" data-role="scheme-preview" id="sm-preview"></canvas>
+    </div>
+
+    <p class="sm-error" data-role="scheme-error" id="sm-error" hidden></p>
+
+    <div class="sm-editor-actions">
+      <button class="primary-btn" data-role="save-scheme" id="sm-save" data-i18n="schemes.save">保存方案</button>
+      <button class="secondary-btn" data-role="cancel-scheme" data-i18n="common.cancel">取消</button>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ============ i18n 字典 = src/i18n/zh-CN.ts + en-US.ts 真值（1:1 镜像，取原型所需键） ============ */
+const T = {
+  'zh-CN': {
+    'common.confirm':'确认','common.cancel':'取消','common.back':'返回','common.retry':'重玩','common.next':'下一关','common.settings':'设置','common.time':'用时','common.mistakes':'失误',
+    'locale.zh-CN':'简体中文','locale.en-US':'English',
+    'app.title':'LudoBurrow 玩趣洞','app.subtitle':'免安装的益智游戏小窝','app.credit':'© 2026 castle.zhang',
+    'game.keygame':'键盘按键','game.jigsaw':'拼图','game.maze':'迷宫',
+    'keygame.modeFull':'全键盘','keygame.modeCompact':'紧凑键盘','keygame.modeEnglish':'英文单词','keygame.modePinyin':'中文拼音',
+    'keygame.prompt':'按虚拟键盘高亮键，依次准确输入目标内容',
+    'jigsaw.help':'帮助','jigsaw.abandon':'放弃','jigsaw.grid':'网格 {n}×{n}','jigsaw.helps':'帮助 {n} 次',
+    'jigsaw.previewHint':'点击放大','jigsaw.previewClose':'点击任意处关闭',
+    'jigsaw.topicAnimals':'动物','jigsaw.topicSpace':'太空','jigsaw.topicScenery':'风景','jigsaw.topicCartoon':'卡通',
+    'maze.hint':'方向键 / WASD 或点击画面方向移动，抵达出口过关',
+    'maze.themeCastle':'城堡','maze.themeGarden':'花园','maze.themeSnow':'雪原','maze.themeVolcano':'火山',
+    'maze.themeOcean':'海底','maze.themeJungle':'丛林','maze.themeStation':'太空站','maze.themeMine':'矿洞',
+    'schemes.title':'拼图方案','schemes.newScheme':'新建方案','schemes.name':'方案名称','schemes.namePlaceholder':'例如：小狗 6×6',
+    'schemes.mode':'切片方式','schemes.modeCustom':'自定义','schemes.modeAuto':'自动最优','schemes.modeAi':'AI 切块',
+    'schemes.source':'图片来源','schemes.sourceBuiltin':'内置图库','schemes.sourceCustom':'本地上传','schemes.pickImage':'选择图片',
+    'schemes.upload':'上传图片','schemes.rows':'行数','schemes.cols':'列数','schemes.tabDepth':'锯齿深度',
+    'schemes.difficulty':'难度','schemes.difficultyEasy':'简单','schemes.difficultyMedium':'中等','schemes.difficultyHard':'困难',
+    'schemes.preview':'切割预览','schemes.aiThinking':'AI 分析中…',
+    'schemes.aiDegradedAuto':'AI 不可用，已自动按最优切块（{rows}×{cols}）',
+    'schemes.autoBestDone':'已按图片内容选出最优 {rows}×{cols}',
+    'schemes.batchImport':'批量导入并自动建档','schemes.save':'保存方案','schemes.recutConfirm':'同图已有方案，确认新建？',
+    'schemes.delete':'删除','schemes.deleteConfirm':'确认删除？','schemes.edit':'调整','schemes.editScheme':'调整方案',
+    'schemes.empty':'还没有自定义方案，新建一个试试','schemes.defaultName':'方案 {n}',
+    'level.title':'选择关卡','level.best':'最佳','level.levelN':'第 {n} 关','level.progress':'已解锁 {unlocked}/{total} 关',
+    'level.emptyTopic':'该专题暂无切片方案，去「拼图方案」新建一个吧','level.emptyImport':'导入本地图片并自动最优切块',
+    'level.analyzing':'正在为图库每张图分析最优切块…',
+    'container.pause':'暂停','container.progress':'进度',
+    'pause.title':'暂停中','pause.resume':'继续','pause.retry':'重玩本关','pause.exit':'退出关卡',
+    'settle.success':'过关！','settle.fail':'挑战失败','settle.best':'历史最佳','settle.newBest':'新纪录！',
+    'settle.steps':'步数','settle.helps':'帮助次数',
+    'timeLimit.reachedAntiAddiction':'该休息一下啦，眼睛看一看远处吧','timeLimit.lockRemaining':'休息锁定中，还剩 {minutes} 分钟',
+    'settings.language':'语言（切换立即生效）','settings.timeLimitSection':'限时策略',
+    'settings.timeLimitOff':'不限时','settings.timeLimitCompetition':'竞赛模式（到时立即结算）','settings.timeLimitAntiAddiction':'防沉迷模式（到时提醒休息）',
+    'settings.limitMinutes':'每关上限（分钟）','settings.lockMinutes':'休息锁定（分钟）',
+    'settings.saveSection':'存档备份','settings.saveExport':'导出存档','settings.saveExportDone':'存档已导出',
+    'settings.saveImport':'导入存档','settings.saveImportOk':'导入成功，进度已恢复','settings.saveImportFail':'导入失败：文件不是有效的 LudoBurrow 存档',
+    'settings.aiSection':'AI 增强（可选）','settings.aiEnabled':'启用 AI 切块建议','settings.aiProvider':'服务商',
+    'settings.aiProviderQwen':'Qwen（DashScope）','settings.aiProviderGlm':'GLM（智谱）','settings.aiCustom':'自定义（OpenAI 兼容端点）',
+    'settings.aiPresetHint':'留空使用预设','settings.aiBaseUrl':'接口地址（Base URL）','settings.aiModel':'模型名','settings.aiKey':'API Key（仅存本机）',
+    'settings.aiHint':'未配置或调用失败时自动使用本地算法，功能不受影响',
+    'settings.wordbankSection':'词汇表配置','settings.wordbankHint':'自定义键盘游戏「英文单词 / 中文拼音」模式词表；本地单机共享一份配置（服务器版按用户隔离，二期）',
+    'settings.wordbankCategory':'词表类别','settings.wbEnglishLen':'英文词表（词长 {n}）','settings.wbPinyinGrade':'拼音词表（等级 {n}）',
+    'settings.wbEnglishHint':'多个单词用逗号或换行分隔，仅限字母；留空 = 使用内置默认词表',
+    'settings.wbPinyinHint':'每行一条「汉字|拼音」，音节空格分隔，如「学校|xue xiao」；留空 = 使用内置默认词表',
+    'settings.wbResetCategory':'恢复本类默认','settings.wbResetAll':'全部恢复默认','settings.wbResetDone':'词表已恢复默认',
+  },
+  'en-US': {
+    'common.confirm':'OK','common.cancel':'Cancel','common.back':'Back','common.retry':'Retry','common.next':'Next Level','common.settings':'Settings','common.time':'Time','common.mistakes':'Mistakes',
+    'locale.zh-CN':'简体中文','locale.en-US':'English',
+    'app.title':'LudoBurrow','app.subtitle':'An install-free puzzle game burrow','app.credit':'© 2026 castle.zhang',
+    'game.keygame':'Key Press','game.jigsaw':'Jigsaw','game.maze':'Maze',
+    'keygame.modeFull':'Full Keyboard','keygame.modeCompact':'Compact Keyboard','keygame.modeEnglish':'English Words','keygame.modePinyin':'Chinese Pinyin',
+    'keygame.prompt':'Type the highlighted keys in order',
+    'jigsaw.help':'Help','jigsaw.abandon':'Abandon','jigsaw.grid':'Grid {n}×{n}','jigsaw.helps':'Helps: {n}',
+    'jigsaw.previewHint':'Tap to enlarge','jigsaw.previewClose':'Tap anywhere to close',
+    'jigsaw.topicAnimals':'Animals','jigsaw.topicSpace':'Space','jigsaw.topicScenery':'Scenery','jigsaw.topicCartoon':'Cartoon',
+    'maze.hint':'Arrow keys / WASD or click a direction to move. Reach the exit to win',
+    'maze.themeCastle':'Castle','maze.themeGarden':'Garden','maze.themeSnow':'Snowfield','maze.themeVolcano':'Volcano',
+    'maze.themeOcean':'Ocean','maze.themeJungle':'Jungle','maze.themeStation':'Space Station','maze.themeMine':'Mine',
+    'schemes.title':'Jigsaw Schemes','schemes.newScheme':'New Scheme','schemes.name':'Scheme Name','schemes.namePlaceholder':'e.g. Puppy 6×6',
+    'schemes.mode':'Cut Mode','schemes.modeCustom':'Custom','schemes.modeAuto':'Auto Best','schemes.modeAi':'AI Cut',
+    'schemes.source':'Image Source','schemes.sourceBuiltin':'Built-in Gallery','schemes.sourceCustom':'Local Upload','schemes.pickImage':'Pick Image',
+    'schemes.upload':'Upload Image','schemes.rows':'Rows','schemes.cols':'Cols','schemes.tabDepth':'Tab Depth',
+    'schemes.difficulty':'Difficulty','schemes.difficultyEasy':'Easy','schemes.difficultyMedium':'Medium','schemes.difficultyHard':'Hard',
+    'schemes.preview':'Cut Preview','schemes.aiThinking':'AI analyzing…',
+    'schemes.aiDegradedAuto':'AI unavailable; auto best fit applied ({rows}×{cols})',
+    'schemes.autoBestDone':'Best {rows}×{cols} picked from image content',
+    'schemes.batchImport':'Batch Import (Auto Best)','schemes.save':'Save Scheme','schemes.recutConfirm':'Same image in use. Create a parallel scheme?',
+    'schemes.delete':'Delete','schemes.deleteConfirm':'Confirm delete?','schemes.edit':'Edit','schemes.editScheme':'Edit Scheme',
+    'schemes.empty':'No custom schemes yet. Create one!','schemes.defaultName':'Scheme {n}',
+    'level.title':'Select Level','level.best':'Best','level.levelN':'Level {n}','level.progress':'{unlocked}/{total} levels unlocked',
+    'level.emptyTopic':'No cut schemes in this topic yet — create one in Jigsaw Schemes','level.emptyImport':'Import local images (auto best-fit)',
+    'level.analyzing':'Analyzing the gallery to pick optimal cuts…',
+    'container.pause':'Pause','container.progress':'Progress',
+    'pause.title':'Paused','pause.resume':'Resume','pause.retry':'Restart Level','pause.exit':'Exit Level',
+    'settle.success':'Level Clear!','settle.fail':'Challenge Failed','settle.best':'Best','settle.newBest':'New Record!',
+    'settle.steps':'Steps','settle.helps':'Helps',
+    'timeLimit.reachedAntiAddiction':'Time to rest. Look at something far away','timeLimit.lockRemaining':'Rest lock: {minutes} min remaining',
+    'settings.language':'Language (applies instantly)','settings.timeLimitSection':'Time Limit Policy',
+    'settings.timeLimitOff':'No limit','settings.timeLimitCompetition':'Competition (settle when time is up)','settings.timeLimitAntiAddiction':'Anti-addiction (remind to rest)',
+    'settings.limitMinutes':'Per-level limit (minutes)','settings.lockMinutes':'Rest lock (minutes)',
+    'settings.saveSection':'Save Backup','settings.saveExport':'Export Save','settings.saveExportDone':'Save exported',
+    'settings.saveImport':'Import Save','settings.saveImportOk':'Imported. Progress restored','settings.saveImportFail':'Import failed: not a valid LudoBurrow save file',
+    'settings.aiSection':'AI Enhancement (optional)','settings.aiEnabled':'Enable AI cut suggestions','settings.aiProvider':'Provider',
+    'settings.aiProviderQwen':'Qwen (DashScope)','settings.aiProviderGlm':'GLM (Zhipu)','settings.aiCustom':'Custom (OpenAI-compatible endpoint)',
+    'settings.aiPresetHint':'Leave empty to use the preset','settings.aiBaseUrl':'Base URL','settings.aiModel':'Model','settings.aiKey':'API Key (stored locally only)',
+    'settings.aiHint':'Falls back to the local algorithm when unset or on failure',
+    'settings.wordbankSection':'Wordbank','settings.wordbankHint':'Customize word lists for Key Press "English Words / Chinese Pinyin" modes. Local: one shared config (server: per-user, phase 2)',
+    'settings.wordbankCategory':'Category','settings.wbEnglishLen':'English (length {n})','settings.wbPinyinGrade':'Pinyin (grade {n})',
+    'settings.wbEnglishHint':'Separate words with commas or new lines; letters only. Empty = built-in default list',
+    'settings.wbPinyinHint':'One entry per line: "word|pinyin", syllables space-separated, e.g. "学校|xue xiao". Empty = built-in default list',
+    'settings.wbResetCategory':'Reset This List','settings.wbResetAll':'Reset All to Default','settings.wbResetDone':'Wordbank reset to default',
+  },
+};
+let lang = 'zh-CN';
+const t = (k, vars) => {
+  let s = (T[lang] && T[lang][k]) || T['zh-CN'][k] || k;
+  if (vars) for (const [key, v] of Object.entries(vars)) s = s.split('{' + key + '}').join(v);
+  return s;
+};
+const $ = (id) => document.getElementById(id);
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  $('sel-title').textContent = selGame ? gameTitle() : t('level.title');
+  if (cur) $('game-title').textContent = gameTitle() + ' · ' + t('level.levelN', { n: cur.n });
+  renderSelect();
+  renderSchemes();
+  if (jz) jzHud();
+  if (mz) mzHud();
+}
+
+/* ============ 视图流转（platform store 同构） ============ */
+let view = 'menu';
+const VIEWS = ['menu', 'select', 'game', 'settings', 'schemes'];
+function go(v) {
+  view = v;
+  VIEWS.forEach((id) => { $('view-' + id).hidden = id !== v; });
+  if (v !== 'game') { // 离开游戏视图：卸载游戏 DOM（挂载宿主清空口径与 GameContainer destroy 一致）
+    $('mount-host').innerHTML = '';
+    kg = null; jz = null; mz = null;
+    stopTimer();
+    paused = false;
+  }
+}
+/* 假进度（各轨独立解锁 + 最佳成绩，与存档分轨口径一致） */
+const progress = {
+  'keygame:full-random': 12, 'keygame:compact-random': 5, 'keygame:english': 8, 'keygame:pinyin': 3,
+  'maze': 9,
+  'jigsaw:animals': 6, 'jigsaw:space': 4, 'jigsaw:scenery': 3, 'jigsaw:cartoon': 2,
+};
+const records = {}; // `${slotKey}|${n}` -> { stars, bestMs }
+const recordOf = (slotKey, n) => records[slotKey + '|' + n] || null;
+
+/* ============ 轨定义（GameModule.tracks 真实口径） ============ */
+const GAMES = {
+  keygame: {
+    nameKey: 'game.keygame',
+    tracks: [
+      { id: 'full-random', labelKey: 'keygame.modeFull' },
+      { id: 'compact-random', labelKey: 'keygame.modeCompact' },
+      { id: 'english', labelKey: 'keygame.modeEnglish' },
+      { id: 'pinyin', labelKey: 'keygame.modePinyin' },
+    ],
+  },
+  jigsaw: {
+    nameKey: 'game.jigsaw',
+    tracks: [
+      { id: 'animals', labelKey: 'jigsaw.topicAnimals' },
+      { id: 'space', labelKey: 'jigsaw.topicSpace' },
+      { id: 'scenery', labelKey: 'jigsaw.topicScenery' },
+      { id: 'cartoon', labelKey: 'jigsaw.topicCartoon' },
+    ],
+  },
+  maze: { nameKey: 'game.maze', tracks: [] },
+};
+/* 拼图专题方案数（levelCount 动态口径：内置方案每图一关） */
+const JZ_SCHEME_COUNT = { animals: 6, space: 6, scenery: 6, cartoon: 6 };
+const JZ_COLORS = { animals: '#8f714e', space: '#3d5a80', scenery: '#5c8d5a', cartoon: '#c76b98' };
+const JZ_EMOJI = { animals: '🦁', space: '🚀', scenery: '🏔️', cartoon: '🤖' };
+let selGame = null, selTrack = null;
+const totalOf = (g, track) => g === 'jigsaw' ? (JZ_SCHEME_COUNT[track] || 0) : 50;
+const slotKeyOf = (g, track) => track ? g + ':' + track : g;
+const unlockedOf = (g, track) => progress[slotKeyOf(g, track)] || 0;
+
+function gameTitle() { return t(GAMES[selGame].nameKey); }
+
+function openSelect(g) {
+  selGame = g;
+  selTrack = GAMES[g].tracks[0] ? GAMES[g].tracks[0].id : null;
+  document.querySelector('#view-select [data-nav="schemes"]').hidden = g !== 'jigsaw';
+  go('select');
+  renderSelect();
+  if (g === 'jigsaw') { // 分析中提示（onMounted 预热示意，1.2s 后消失）
+    $('sel-analyzing').hidden = false;
+    setTimeout(() => { $('sel-analyzing').hidden = true; }, 1200);
+  }
+}
+function renderSelect() {
+  if (!selGame) return;
+  $('sel-title').textContent = gameTitle() + ' · ' + (selTrack ? t(GAMES[selGame].tracks.find((x) => x.id === selTrack).labelKey) : t('level.title'));
+  const tabs = $('sel-tabs');
+  tabs.innerHTML = '';
+  tabs.hidden = GAMES[selGame].tracks.length === 0;
+  GAMES[selGame].tracks.forEach((tr) => {
+    const b = document.createElement('button');
+    b.className = 'track-tab' + (selTrack === tr.id ? ' is-active' : '');
+    b.dataset.track = tr.id;
+    b.textContent = t(tr.labelKey);
+    b.onclick = () => { selTrack = tr.id; renderSelect(); };
+    tabs.appendChild(b);
+  });
+  const total = totalOf(selGame, selTrack);
+  const slot = slotKeyOf(selGame, selTrack);
+  const un = Math.min(unlockedOf(selGame, selTrack), total);
+  $('sel-progress').textContent = t('level.progress', { unlocked: un, total });
+  const empty = total === 0;
+  $('sel-empty').hidden = !empty;
+  $('sel-empty-import').hidden = !(empty && selGame === 'jigsaw');
+  const grid = $('sel-grid');
+  grid.innerHTML = '';
+  grid.hidden = empty;
+  if (empty) return;
+  for (let n = 1; n <= total; n++) {
+    const cell = document.createElement('button');
+    const locked = n > unlockedOf(selGame, selTrack);
+    cell.className = 'level-cell' + (locked ? ' is-locked' : '');
+    cell.dataset.level = n;
+    cell.disabled = locked;
+    const rec = locked ? null : recordOf(slot, n);
+    cell.innerHTML = '<span class="level-n">' + n + '</span>'
+      + (rec ? '<span class="level-stars" data-stars="' + rec.stars + '">' + '★'.repeat(rec.stars) + '</span>'
+        + '<span class="level-best" data-best-ms="' + rec.bestMs + '">' + t('level.best') + ' ' + (rec.bestMs / 1000).toFixed(1) + 's</span>'
+        : '')
+      + (locked ? '<span class="level-lock">🔒</span>' : '');
+    cell.onclick = () => startLevel(n);
+    grid.appendChild(cell);
+  }
+}
+document.querySelectorAll('.game-entry').forEach((b) => { b.onclick = () => openSelect(b.dataset.game); });
+document.querySelector('#view-select [data-nav="back"]').onclick = () => { selGame = null; go('menu'); };
+document.querySelector('#view-select [data-nav="schemes"]').onclick = () => { go('schemes'); };
+$('sel-empty-import').onclick = () => { go('schemes'); document.querySelector('[data-role="batch-import"]').click(); };
+
+/* ============ 游戏运行时（原型假逻辑） ============ */
+let timerInt = null, sec = 0, paused = false, settled = false;
+let cur = null;
+const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+function startTimer() {
+  stopTimer(); sec = 0; $('hud-time').textContent = '00:00';
+  timerInt = setInterval(() => { if (!paused && !settled) { sec++; $('hud-time').textContent = fmt(sec); } }, 1000);
+}
+function stopTimer() { if (timerInt) { clearInterval(timerInt); timerInt = null; } }
+function startLevel(n) {
+  cur = { game: selGame, track: selTrack, n };
+  settled = false; paused = false;
+  $('ov-pause').hidden = true; $('ov-settle').hidden = true; $('rest-lock').hidden = true;
+  $('game-title').textContent = gameTitle() + ' · ' + t('level.levelN', { n });
+  $('hud-progress').hidden = true;
+  $('mount-host').innerHTML = '';
+  go('game');
+  startTimer();
+  if (cur.game === 'keygame') kgStart();
+  if (cur.game === 'jigsaw') jzStart();
+  if (cur.game === 'maze') mzStart();
+}
+/* 结算（SettlePanel 口径：标签按 gameId；历史最佳仅有记录时显示；下一关最后关隐藏） */
+function settle({ stars, mistakes, isFail = false }) {
+  settled = true; stopTimer();
+  const slot = slotKeyOf(cur.game, cur.track);
+  const key = slot + '|' + cur.n;
+  const prev = recordOf(slot, cur.n);
+  const isNewBest = !isFail && (!prev || sec * 1000 < prev.bestMs);
+  if (isNewBest) {
+    const st = Math.max(1, Math.min(3, stars));
+    records[key] = { stars: st, bestMs: sec * 1000, ...(prev ? { stars: Math.max(st, prev.stars) } : {}) };
+    if (prev) records[key].stars = Math.max(st, prev.stars);
+  }
+  // 过关解锁下一关（轻演示：写假进度）
+  const total = totalOf(cur.game, cur.track);
+  const un = unlockedOf(cur.game, cur.track);
+  if (!isFail && cur.n >= un && cur.n < total) progress[slot] = cur.n + 1;
+  const labelKey = cur.game === 'jigsaw' ? 'settle.helps' : cur.game === 'maze' ? 'settle.steps' : 'common.mistakes';
+  $('st-title').textContent = t(isFail ? 'settle.fail' : 'settle.success');
+  $('st-title').style.color = isFail ? 'var(--color-danger)' : 'var(--color-primary)';
+  const st = Math.max(1, Math.min(3, stars));
+  $('st-stars').textContent = '★'.repeat(st) + '☆'.repeat(3 - st);
+  $('st-time').textContent = fmt(sec);
+  $('st-score-label').textContent = t(labelKey);
+  $('st-score').textContent = mistakes;
+  $('st-best-row').style.display = prev ? '' : 'none';
+  $('st-best').textContent = prev ? fmt(Math.min(sec * 1000, prev.bestMs)) : '--';
+  $('st-newbest').style.display = isNewBest ? '' : 'none';
+  $('st-next').style.display = (!isFail && cur.n < total) ? '' : 'none';
+  $('ov-settle').hidden = false;
+}
+
+/* ---- 键盘游戏（keygame/instance.ts 同构：HUD + prompt + 分段目标 + 数据驱动键盘） ---- */
+const KG_MAIN_ROWS = [
+  [['`','~',1],['1','!',1],['2','@',1],['3','#',1],['4','$',1],['5','%',1],['6','^',1],['7','&',1],['8','*',1],['9','(',1],['0',')',1],['-','_',1],['=','+',1],['Backspace','',2]],
+  [['Tab','',1.5],['Q','',1],['W','',1],['E','',1],['R','',1],['T','',1],['Y','',1],['U','',1],['I','',1],['O','',1],['P','',1],['[','{',1],[']','}',1],['\\','|',1.5]],
+  [['Caps','',1.75],['A','',1],['S','',1],['D','',1],['F','',1],['G','',1],['H','',1],['J','',1],['K','',1],['L','',1],[';',':',1],['\'','"',1],['Enter','',2.25]],
+  [['Shift','',2.25],['Z','',1],['X','',1],['C','',1],['V','',1],['B','',1],['N','',1],['M','',1],[',','<',1],['.','>',1],['/','?',1],['Shift','',2.75]],
+  [['Ctrl','',1.25],['Win','',1.25],['Alt','',1.25],['Space','',6.5],['Alt','',1.25],['Win','',1.25],['Menu','',1.25],['Ctrl','',1.25]],
+];
+/* 数字小键盘区（仅大键盘布局；+ / Enter 纵跨 2 行，0 横跨 2 列——与 layout.ts NUMPAD_ROWS 同构） */
+const KG_NUMPAD = [
+  { id: 'numlock', label: 'Num' }, { id: 'numpaddivide', label: '/' }, { id: 'numpadmultiply', label: '*' }, { id: 'numpadsubtract', label: '-' },
+  { id: 'numpad7', label: '7' }, { id: 'numpad8', label: '8' }, { id: 'numpad9', label: '9' }, { id: 'numpadadd', label: '+', h: 2 },
+  { id: 'numpad4', label: '4' }, { id: 'numpad5', label: '5' }, { id: 'numpad6', label: '6' },
+  { id: 'numpad1', label: '1' }, { id: 'numpad2', label: '2' }, { id: 'numpad3', label: '3' }, { id: 'numpadenter', label: 'Enter', h: 2 },
+  { id: 'numpad0', label: '0', w: 2 }, { id: 'numpaddecimal', label: '.' },
+];
+/* id 映射：主区行内键 id（与 layout.ts 一致的简化标注） */
+const KG_ROW_IDS = [
+  ['grave','1','2','3','4','5','6','7','8','9','0','minus','equal','backspace'],
+  ['tab','Q','W','E','R','T','Y','U','I','O','P','bracketleft','bracketright','backslash'],
+  ['capslock','A','S','D','F','G','H','J','K','L','semicolon','quote','enter'],
+  ['shiftleft','Z','X','C','V','B','N','M','comma','period','slash','shiftright'],
+  ['controlleft','metaleft','altleft','space','altright','metaright','contextmenu','controlright'],
+];
+const KG_NUMPAD_IDS = [
+  ['numlock','numpaddivide','numpadmultiply','numpadsubtract'],
+  ['numpad7','numpad8','numpad9','numpadadd'],
+  ['numpad4','numpad5','numpad6'],
+  ['numpad1','numpad2','numpad3','numpadenter'],
+  ['numpad0','numpaddecimal'],
+];
+const KEY_OF_CHAR = (ch) => /[A-Z0-9]/.test(ch) ? ch : null;
+let kg = null;
+function kgStart() {
+  const mode = cur.track;
+  // 假目标序列：随模式生成（random=字母数字；english=单词；pinyin=拼音段带汉字提示）
+  const seqs = {
+    'full-random': ['Q', 'W', 'E', 'R', 'T', '4', '2', 'Y'],
+    'compact-random': ['A', 'S', 'D', 'F', 'G', 'H'],
+    'english': ['A', 'P', 'P', 'L', 'E'],
+    'pinyin': [],
+  };
+  const segs = [];
+  if (mode === 'pinyin') { segs.push({ hint: '学校', chars: ['X', 'U', 'E'] }); segs.push({ hint: '小', chars: ['X', 'I', 'A', 'O'] }); }
+  else segs.push({ hint: '', chars: seqs[mode] || seqs['full-random'] });
+  const sequence = segs.flatMap((s) => s.chars);
+  const layoutFull = mode !== 'compact-random';
+  kg = { segs, sequence, idx: 0, mistakes: 0, keyEls: new Map(), charEls: [] };
+
+  const root = document.createElement('div'); root.className = 'kg-root';
+  const hud = document.createElement('div'); hud.className = 'kg-hud';
+  const modeEl = document.createElement('span'); modeEl.className = 'kg-mode'; modeEl.dataset.kg = 'mode';
+  modeEl.textContent = t({ 'full-random': 'keygame.modeFull', 'compact-random': 'keygame.modeCompact', english: 'keygame.modeEnglish', pinyin: 'keygame.modePinyin' }[mode]);
+  const mistakesEl = document.createElement('span'); mistakesEl.className = 'kg-mistakes'; mistakesEl.dataset.kg = 'mistakes';
+  const progressEl = document.createElement('span'); progressEl.className = 'kg-progress'; progressEl.dataset.kg = 'progress';
+  hud.append(modeEl, mistakesEl, progressEl);
+  const prompt = document.createElement('div'); prompt.className = 'kg-prompt'; prompt.textContent = t('keygame.prompt');
+  const targets = document.createElement('div'); targets.className = 'kg-targets';
+  kg.targets = targets;
+  for (const seg of kg.segs) {
+    const segEl = document.createElement('div'); segEl.className = 'kg-seg';
+    if (seg.hint) { const h = document.createElement('span'); h.className = 'kg-hint'; h.textContent = seg.hint; segEl.appendChild(h); }
+    for (const ch of seg.chars) {
+      const c = document.createElement('span'); c.className = 'kg-ch'; c.textContent = ch;
+      segEl.appendChild(c); kg.charEls.push(c);
+    }
+    targets.appendChild(segEl);
+  }
+  const kb = document.createElement('div'); kb.className = 'kg-kb'; kb.style.setProperty('--kg-u', '40px');
+  kb.dataset.layout = layoutFull ? 'full' : 'compact';
+  const main = document.createElement('div'); main.className = 'kg-kb-main';
+  KG_MAIN_ROWS.forEach((row, ri) => {
+    const rowEl = document.createElement('div'); rowEl.className = 'kg-row';
+    row.forEach((k, ki) => {
+      const [label, sub, w] = k;
+      const node = document.createElement('div'); node.className = 'kg-key';
+      node.style.width = 'calc(var(--kg-u) * ' + w + ')';
+      const id = KG_ROW_IDS[ri][ki];
+      node.dataset.key = id;
+      node.innerHTML = '<span class="kg-key-label">' + label + '</span>' + (sub ? '<span class="kg-key-sub">' + sub + '</span>' : '');
+      if (KEY_OF_CHAR(label)) regKey(label, node);
+      if (id === 'space') regKey(' ', node);
+      node.onclick = () => kgPress(id === 'space' ? ' ' : (label.length === 1 ? label : null), node);
+      rowEl.appendChild(node);
+    });
+    main.appendChild(rowEl);
+  });
+  kb.appendChild(main);
+  if (layoutFull) {
+    const pad = document.createElement('div'); pad.className = 'kg-kb-num';
+    for (const k of KG_NUMPAD) {
+      const node = document.createElement('div'); node.className = 'kg-key';
+      node.textContent = k.label;
+      if (k.w) node.style.gridColumn = 'span ' + k.w;
+      if (k.h) node.style.gridRow = 'span ' + k.h;
+      if (KEY_OF_CHAR(k.label)) { regKey(k.label, node); node.onclick = () => kgPress(k.label, node); }
+      pad.appendChild(node);
+    }
+    kb.appendChild(pad);
+  }
+  root.append(hud, prompt, targets, kb);
+  $('mount-host').appendChild(root);
+  kgRefreshHud(); kgRefreshChars(); kgHighlight();
+  document.removeEventListener('keydown', kgKeyDown);
+  document.addEventListener('keydown', kgKeyDown);
+}
+function regKey(id, node) {
+  const list = kg.keyEls.get(id) || [];
+  list.push(node); kg.keyEls.set(id, list);
+}
+function kgRefreshHud() {
+  $('mount-host').querySelector('[data-kg="mistakes"]').textContent = t('common.mistakes') + ' ' + kg.mistakes;
+  $('mount-host').querySelector('[data-kg="progress"]').textContent = kg.idx + '/' + kg.sequence.length;
+  $('hud-progress').hidden = false;
+  $('hud-progress').textContent = t('container.progress') + ' ' + kg.idx + '/' + kg.sequence.length;
+}
+function kgRefreshChars() {
+  kg.charEls.forEach((c, i) => {
+    c.classList.toggle('done', i < kg.idx);
+    c.classList.toggle('cur', i === kg.idx);
+  });
+}
+function kgHighlight() {
+  for (const nodes of kg.keyEls.values()) for (const node of nodes) node.classList.remove('kg-key-next');
+  if (!paused && !settled && kg.idx < kg.sequence.length) {
+    for (const node of kg.keyEls.get(kg.sequence[kg.idx]) || []) node.classList.add('kg-key-next');
+  }
+}
+function kgFlash(nodes, cls, ms) {
+  for (const node of nodes) node.classList.add(cls);
+  setTimeout(() => { for (const node of nodes) node.classList.remove(cls); }, ms);
+}
+function kgPress(ch, btn) {
+  if (paused || settled || kg.idx >= kg.sequence.length || !ch) return;
+  if (ch.toUpperCase() === kg.sequence[kg.idx]) {
+    kgFlash(kg.keyEls.get(ch.toUpperCase()) || (btn ? [btn] : []), 'kg-key-hit', 260);
+    kg.idx++; kgRefreshChars(); kgRefreshHud();
+    if (kg.idx >= kg.sequence.length) { kgHighlight(); setTimeout(() => settle({ stars: sec < 30 ? 3 : sec < 60 ? 2 : 1, mistakes: kg.mistakes }), 200); return; }
+    kgHighlight();
+  } else {
+    kg.mistakes++;
+    kgFlash(kg.keyEls.get(kg.sequence[kg.idx]) || [], 'kg-key-err', 320);
+    kgFlash([kg.targets], 'kg-shake', 320);
+    kgRefreshHud();
+  }
+}
+function kgKeyDown(e) {
+  if (view !== 'game' || !cur || cur.game !== 'keygame') return;
+  if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) { e.preventDefault(); kgPress(e.key.toUpperCase(), null); }
+}
+
+/* ---- 拼图（jigsaw/instance.ts 同构：五区三列 DOM 示意 + HUD） ---- */
+const JZ_ROWS = 3, JZ_COLS = 2, JZ_TOTAL = JZ_ROWS * JZ_COLS;
+let jz = null;
+function jzStart() {
+  jz = { placed: {}, sel: null, helps: 0, done: 0 };
+  const root = document.createElement('div'); root.className = 'jg-root';
+  const hud = document.createElement('div'); hud.className = 'jg-hud';
+  const gridEl = document.createElement('span'); gridEl.dataset.jg = 'grid';
+  const helpsEl = document.createElement('span'); helpsEl.dataset.jg = 'helps';
+  const progressEl = document.createElement('span'); progressEl.className = 'jg-progress'; progressEl.dataset.jg = 'progress';
+  const helpBtn = document.createElement('button'); helpBtn.className = 'jg-btn'; helpBtn.dataset.jg = 'help'; helpBtn.textContent = t('jigsaw.help');
+  const abandonBtn = document.createElement('button'); abandonBtn.className = 'jg-btn jg-btn-warn'; abandonBtn.dataset.jg = 'abandon'; abandonBtn.textContent = t('jigsaw.abandon');
+  helpBtn.onclick = jzHelp; abandonBtn.onclick = jzAbandon;
+  hud.append(gridEl, helpsEl, progressEl, helpBtn, abandonBtn);
+  const stage = document.createElement('div'); stage.className = 'jg-stage';
+  const color = JZ_COLORS[cur.track] || '#888';
+  // 左列：效果图（点击放大） + 暂存区
+  const preview = document.createElement('div'); preview.className = 'jg-zone jg-preview filled-zone';
+  preview.style.background = color; preview.innerHTML = '<span style="color:#fff;font-weight:700;font-size:15px">' + cur.track + '-' + String(cur.n).padStart(2, '0') + '</span>';
+  const zoom = document.createElement('div'); zoom.className = 'jg-zoom'; zoom.textContent = t('jigsaw.previewClose');
+  zoom.onclick = (e) => { e.stopPropagation(); zoom.classList.remove('on'); };
+  preview.onclick = () => zoom.classList.add('on');
+  preview.appendChild(zoom);
+  const staging = document.createElement('div'); staging.className = 'jg-zone'; staging.dataset.jg = 'staging';
+  const stack = document.createElement('div'); stack.className = 'jg-stack'; staging.appendChild(stack);
+  // 中列：拼图区（网格底座）
+  const board = document.createElement('div'); board.className = 'jg-zone filled-zone'; board.dataset.jg = 'board';
+  const bgrid = document.createElement('div'); bgrid.className = 'jg-board-grid';
+  bgrid.style.gridTemplateColumns = 'repeat(' + JZ_COLS + ', 1fr)';
+  for (let i = 0; i < JZ_TOTAL; i++) {
+    const c = document.createElement('div'); c.className = 'jg-cell';
+    c.dataset.slot = i;
+    c.onclick = () => jzDrop(i, c);
+    bgrid.appendChild(c);
+  }
+  board.appendChild(bgrid);
+  // 右列：当前块 + 剩余块
+  const current = document.createElement('div'); current.className = 'jg-zone filled-zone'; current.dataset.jg = 'current';
+  const remaining = document.createElement('div'); remaining.className = 'jg-zone'; remaining.dataset.jg = 'remaining';
+  const rstack = document.createElement('div'); rstack.className = 'jg-stack'; remaining.appendChild(rstack);
+  stage.append(preview, staging, board, current, remaining);
+  root.append(hud, stage);
+  $('mount-host').appendChild(root);
+  // 剩余块队列（洗牌顺序演示）
+  jz.order = Array.from({ length: JZ_TOTAL }, (_, i) => i).sort(() => Math.random() - 0.5);
+  jzHud(); jzRenderTrays();
+}
+function jzHud() {
+  const root = $('mount-host');
+  root.querySelector('[data-jg="grid"]').textContent = t('jigsaw.grid', { n: JZ_ROWS === JZ_COLS ? JZ_ROWS : JZ_ROWS + '×' + JZ_COLS }).replace('{n}×{n}', JZ_ROWS + '×' + JZ_COLS);
+  root.querySelector('[data-jg="helps"]').textContent = t('jigsaw.helps', { n: jz.helps });
+  root.querySelector('[data-jg="progress"]').textContent = jz.done + '/' + JZ_TOTAL;
+  $('hud-progress').hidden = false;
+  $('hud-progress').textContent = t('container.progress') + ' ' + jz.done + '/' + JZ_TOTAL;
+}
+function jzRenderTrays() {
+  const root = $('mount-host');
+  const color = JZ_COLORS[cur.track] || '#888';
+  const staging = root.querySelector('[data-jg="staging"] .jg-stack');
+  const remaining = root.querySelector('[data-jg="remaining"] .jg-stack');
+  const currentZone = root.querySelector('[data-jg="current"]');
+  staging.innerHTML = ''; remaining.innerHTML = '';
+  currentZone.innerHTML = '';
+  if (jz.sel != null) {
+    const cur1 = document.createElement('div'); cur1.className = 'jg-current';
+    cur1.style.background = color; cur1.textContent = JZ_EMOJI[cur.track];
+    currentZone.appendChild(cur1);
+  }
+  for (const idx of jz.order) {
+    if (jz.placed[idx]) continue;
+    const b = document.createElement('button'); b.className = 'jg-thumb';
+    if (idx === jz.sel) b.classList.add('jg-thumb-cur');
+    b.style.background = color; b.textContent = JZ_EMOJI[cur.track];
+    b.onclick = () => { jz.sel = idx; jzRenderTrays(); };
+    (jz.sel != null ? staging : remaining).appendChild(b);
+  }
+}
+function jzDrop(slotIdx, cellEl) {
+  if (paused || settled || jz.sel == null || jz.placed[jz.sel] != null) return;
+  if (slotIdx === jz.sel) {
+    jz.placed[jz.sel] = true; jz.done++;
+    const color = JZ_COLORS[cur.track] || '#888';
+    cellEl.classList.add('placed'); cellEl.style.background = color; cellEl.textContent = JZ_EMOJI[cur.track];
+    jz.sel = null; jzHud(); jzRenderTrays();
+    if (jz.done === JZ_TOTAL) setTimeout(() => settle({ stars: sec < 40 ? 3 : sec < 90 ? 2 : 1, mistakes: jz.helps }), 200);
+  } else {
+    cellEl.classList.add('misplaced');
+    setTimeout(() => cellEl.classList.remove('misplaced'), 320);
+  }
+}
+function jzHelp() {
+  if (paused || settled || !jz) return;
+  const rest = Array.from({ length: JZ_TOTAL }, (_, i) => i).filter((i) => !jz.placed[i]);
+  if (!rest.length) return;
+  jz.helps++;
+  const cell = $('mount-host').querySelector('[data-slot="' + rest[0] + '"]');
+  cell.classList.add('help-target');
+  setTimeout(() => cell.classList.remove('help-target'), 700);
+  jzHud();
+}
+function jzAbandon() {
+  if (paused || settled || !jz) return;
+  jz.helps++;
+  setTimeout(() => settle({ stars: 1, mistakes: jz.helps }), 400);
+}
+
+/* ---- 迷宫（maze/instance.ts 同构：HUD 尺寸 + 8 主题胶囊 + 步数/失误 + 键盘/点击移动） ---- */
+const MAZE = [
+  '#########',
+  '#S..#...#',
+  '#.#.#.#.#',
+  '#.#...#.#',
+  '#.#####.#',
+  '#....E..#',
+  '#########',
+];
+const MAZE_THEMES = ['castle', 'garden', 'snow', 'volcano', 'ocean', 'jungle', 'station', 'mine'];
+const MAZE_THEME_KEY = { castle: 'maze.themeCastle', garden: 'maze.themeGarden', snow: 'maze.themeSnow', volcano: 'maze.themeVolcano', ocean: 'maze.themeOcean', jungle: 'maze.themeJungle', station: 'maze.themeStation', mine: 'maze.themeMine' };
+let mz = null;
+function mzStart() {
+  mz = { steps: 0, bumps: 0, hero: null, theme: 'castle' };
+  const root = document.createElement('div'); root.className = 'mz-root';
+  const hud = document.createElement('div'); hud.className = 'mz-hud';
+  const sizeEl = document.createElement('span'); sizeEl.dataset.mz = 'size';
+  const themeEl = document.createElement('span'); themeEl.className = 'mz-theme'; themeEl.dataset.mz = 'theme';
+  for (const th of MAZE_THEMES) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'mz-theme-btn';
+    btn.dataset.mzTheme = th; btn.textContent = t(MAZE_THEME_KEY[th]);
+    btn.onclick = () => { mz.theme = th; mzHud(); };
+    themeEl.appendChild(btn);
+  }
+  const stepsEl = document.createElement('span'); stepsEl.className = 'mz-steps'; stepsEl.dataset.mz = 'steps';
+  const mistakesEl = document.createElement('span'); mistakesEl.className = 'mz-mistakes'; mistakesEl.dataset.mz = 'mistakes';
+  const hintEl = document.createElement('span'); hintEl.className = 'mz-hint'; hintEl.textContent = t('maze.hint');
+  hud.append(sizeEl, themeEl, stepsEl, mistakesEl, hintEl);
+  const host = document.createElement('div'); host.className = 'mz-canvas-host';
+  const grid = document.createElement('div'); grid.className = 'mz-grid';
+  grid.style.gridTemplateColumns = 'repeat(' + MAZE[0].length + ', 38px)';
+  MAZE.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      const c = document.createElement('div'); c.className = 'mz-cell';
+      if (ch === '#') c.classList.add('wall');
+      if (ch === 'E') c.classList.add('goal');
+      if (ch === 'S') mz.hero = { x, y };
+      c.onclick = () => {
+        const dx = Math.sign(x - mz.hero.x), dy = Math.sign(y - mz.hero.y);
+        if (Math.abs(x - mz.hero.x) + Math.abs(y - mz.hero.y) === 1) mzMove(dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
+      };
+      grid.appendChild(c);
+    });
+  });
+  host.appendChild(grid);
+  root.append(hud, host);
+  $('mount-host').appendChild(root);
+  mzHud(); mzRender();
+}
+function mzHud() {
+  const root = $('mount-host');
+  root.querySelector('[data-mz="size"]').textContent = MAZE[0].length + '×' + MAZE.length;
+  root.querySelectorAll('.mz-theme-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mzTheme === mz.theme)));
+  root.querySelector('[data-mz="steps"]').textContent = t('settle.steps') + ' ' + mz.steps;
+  root.querySelector('[data-mz="mistakes"]').textContent = t('common.mistakes') + ' ' + mz.bumps;
+}
+function mzRender() {
+  const g = $('mount-host').querySelector('.mz-grid');
+  g.querySelectorAll('.mz-hero').forEach((el) => el.remove());
+  const h = document.createElement('div'); h.className = 'mz-hero'; h.textContent = '🙂';
+  g.children[mz.hero.y * MAZE[0].length + mz.hero.x].appendChild(h);
+}
+function mzMove(dir) {
+  if (paused || settled || view !== 'game' || !cur || cur.game !== 'maze') return;
+  const D = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
+  const ch = (MAZE[mz.hero.y + D[1]] || '')[mz.hero.x + D[0]];
+  if (ch && ch !== '#') {
+    mz.hero = { x: mz.hero.x + D[0], y: mz.hero.y + D[1] };
+    mz.steps++;
+    mzHud(); mzRender();
+    if (ch === 'E') setTimeout(() => settle({ stars: mz.steps <= 12 ? 3 : mz.steps <= 20 ? 2 : 1, mistakes: mz.bumps }), 200);
+  } else {
+    mz.bumps++; mzHud();
+  }
+}
+document.removeEventListener('keydown', mzKeyDown);
+document.addEventListener('keydown', (e) => mzKeyDown(e));
+function mzKeyDown(e) {
+  if (view !== 'game' || paused || settled || !cur || cur.game !== 'maze') return;
+  const K = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
+  if (K[e.key]) { e.preventDefault(); mzMove(K[e.key]); }
+}
+
+/* ---- 暂停 / 结算（GameContainer + SettlePanel 流转） ---- */
+$('view-game').querySelector('[data-nav="pause"]').onclick = () => {
+  if (settled) return;
+  paused = true; $('ov-pause').hidden = false;
+};
+document.querySelectorAll('#ov-pause [data-nav]').forEach((b) => {
+  b.onclick = () => {
+    const nav = b.dataset.nav;
+    if (nav === 'resume') { paused = false; $('ov-pause').hidden = true; }
+    else if (nav === 'retry') { $('ov-pause').hidden = true; paused = false; startLevel(cur.n); }
+    else { $('ov-pause').hidden = true; paused = false; stopTimer(); renderSelect(); go('select'); }
+  };
+});
+document.querySelectorAll('#ov-settle [data-nav]').forEach((b) => {
+  b.onclick = () => {
+    $('ov-settle').hidden = true;
+    const nav = b.dataset.nav;
+    if (nav === 'retry') startLevel(cur.n);
+    else if (nav === 'next') { startLevel(cur.n + 1); }
+    else { renderSelect(); go('select'); }
+  };
+});
+
+/* ============ 设置（SettingsPanel.vue 同构：select/单选/开关/textarea） ============ */
+$('view-settings').querySelector('[data-nav="back"]').onclick = () => go('menu');
+$('set-locale').onchange = (e) => { lang = e.target.value; applyLang(); };
+function tlModeOf() { return document.querySelector('input[name="tl-mode"]:checked').value; }
+document.querySelectorAll('input[name="tl-mode"]').forEach((r) => {
+  r.onchange = () => {
+    $('tl-numbers').hidden = tlModeOf() === 'off';
+    $('tl-lock-row').hidden = tlModeOf() !== 'antiAddiction';
+  };
+});
+$('ai-toggle').onchange = (e) => { $('ai-fields').hidden = !e.target.checked; };
+/* 词汇表：类别 select（词长 3-8 + 等级 1-3）+ textarea（所见即所玩口径示意） */
+const WB_CATS = [
+  ...[3, 4, 5, 6, 7, 8].map((n) => ({ v: 'en-' + n, k: 'settings.wbEnglishLen', n })),
+  ...[1, 2, 3].map((n) => ({ v: 'py-' + n, k: 'settings.wbPinyinGrade', n })),
+];
+function wbFill() {
+  const sel = $('wb-category');
+  sel.innerHTML = '';
+  WB_CATS.forEach((c) => {
+    const o = document.createElement('option'); o.value = c.v; o.textContent = t(c.k, { n: c.n });
+    sel.appendChild(o);
+  });
+  wbHint();
+}
+function wbHint() { $('wb-hint').textContent = t($('wb-category').value.startsWith('en-') ? 'settings.wbEnglishHint' : 'settings.wbPinyinHint'); }
+$('wb-category').onchange = wbHint;
+document.querySelectorAll('[data-role="wb-reset-category"]').forEach((b) => { b.onclick = () => { $('set-feedback').textContent = t('settings.wbResetDone'); }; });
+document.querySelectorAll('[data-role="wb-reset-all"]').forEach((b) => { b.onclick = () => { $('wb-text').value = ''; $('set-feedback').textContent = t('settings.wbResetDone'); }; });
+document.querySelectorAll('[data-role="save-export"]').forEach((b) => { b.onclick = () => { $('set-feedback').textContent = t('settings.saveExportDone'); }; });
+document.querySelectorAll('[data-role="save-import"]').forEach((i) => { i.onchange = () => { $('set-feedback').textContent = t('settings.saveImportOk'); }; });
+
+/* ============ 方案管理（SchemeManager.vue 同构：列表卡 + 编辑面板） ============ */
+const TOPIC_OPT = [
+  { id: 'animals', labelKey: 'jigsaw.topicAnimals' },
+  { id: 'space', labelKey: 'jigsaw.topicSpace' },
+  { id: 'scenery', labelKey: 'jigsaw.topicScenery' },
+  { id: 'cartoon', labelKey: 'jigsaw.topicCartoon' },
+];
+/* 假方案列表（来源 · rows×cols · 切片方式 口径） */
+let SCHEMES = [
+  { name: '小狗 6×6', source: 'builtin', topic: 'animals', img: 'animals-01', rows: 6, cols: 6, mode: 'auto' },
+  { name: '火箭拼图', source: 'custom', topic: 'space', img: '', rows: 8, cols: 8, mode: 'custom' },
+];
+let smMode = 'custom', smSource = 'builtin', smDz = 'medium', smEditing = null;
+function smModeLabel(m) { return t({ custom: 'schemes.modeCustom', auto: 'schemes.modeAuto', ai: 'schemes.modeAi' }[m]); }
+function smSourceLabel(s) { return t(s === 'builtin' ? 'schemes.sourceBuiltin' : 'schemes.sourceCustom'); }
+function renderSchemes() {
+  const list = $('sm-list');
+  list.innerHTML = '';
+  $('sm-empty').hidden = SCHEMES.length > 0;
+  $('sm-batch-feedback').hidden = !$('sm-batch-feedback').textContent;
+  SCHEMES.forEach((s) => {
+    const card = document.createElement('div'); card.className = 'sm-card';
+    const main = document.createElement('div'); main.className = 'sm-card-main';
+    main.innerHTML = '<span class="sm-name"></span>';
+    main.querySelector('.sm-name').textContent = s.name;
+    const meta = document.createElement('p'); meta.className = 'sm-meta';
+    meta.textContent = smSourceLabel(s.source) + ' · ' + s.rows + '×' + s.cols + ' · ' + smModeLabel(s.mode);
+    const actions = document.createElement('div'); actions.className = 'sm-actions';
+    const edit = document.createElement('button'); edit.className = 'secondary-btn'; edit.textContent = t('schemes.edit');
+    edit.onclick = () => openEditor(s);
+    const del = document.createElement('button'); del.className = 'secondary-btn sm-danger';
+    let armed = false;
+    del.textContent = t('schemes.delete');
+    del.onclick = () => {
+      if (!armed) { armed = true; del.textContent = t('schemes.deleteConfirm'); setTimeout(() => { armed = false; del.textContent = t('schemes.delete'); }, 2500); }
+      else { SCHEMES = SCHEMES.filter((x) => x !== s); renderSchemes(); }
+    };
+    actions.append(edit, del);
+    card.append(main, meta, actions);
+    list.appendChild(card);
+  });
+}
+function openEditor(scheme) {
+  smEditing = scheme || null;
+  $('sm-editor').hidden = false;
+  $('sm-header-actions').style.visibility = 'hidden';
+  $('sm-editor-title').textContent = t(scheme ? 'schemes.editScheme' : 'schemes.newScheme');
+  const nameInput = $('sm-editor').querySelector('[data-field="name"]');
+  nameInput.value = scheme ? scheme.name : '';
+  smMode = scheme ? scheme.mode : 'custom';
+  smSource = scheme ? scheme.source : 'builtin';
+  $('sm-rows').value = scheme ? scheme.rows : 8;
+  $('sm-cols').value = scheme ? scheme.cols : 8;
+  $('sm-tab').value = '0.16'; $('sm-tabv').textContent = '0.16';
+  $('sm-error').hidden = true;
+  $('sm-ai-feedback').textContent = ''; $('sm-auto-feedback').textContent = '';
+  smSyncSegs(); smFillImages(); smSyncMode();
+  drawPreview();
+}
+function closeEditor() { $('sm-editor').hidden = true; $('sm-header-actions').style.visibility = ''; smEditing = null; }
+function smSyncSegs() {
+  $('sm-mode').querySelectorAll('button').forEach((b) => b.classList.toggle('is-on', b === $('sm-mode').querySelector('[data-role="mode-' + smMode + '"]')));
+  $('sm-source').querySelectorAll('button').forEach((b) => b.classList.toggle('is-on', b === $('sm-source').querySelector('[data-role="source-' + smSource + '"]')));
+  $('sm-dz').querySelectorAll('button').forEach((b) => b.classList.toggle('is-on', b.dataset.role === 'difficulty-' + smDz));
+}
+function smFillImages() {
+  const sel = $('sm-image');
+  sel.innerHTML = '';
+  TOPIC_OPT.forEach((tp) => {
+    const g = document.createElement('optgroup'); g.label = t(tp.labelKey);
+    for (let i = 1; i <= 6; i++) {
+      const o = document.createElement('option');
+      o.value = tp.id + '-' + String(i).padStart(2, '0');
+      o.textContent = tp.id + '-' + String(i).padStart(2, '0');
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
+  });
+}
+function smSyncMode() {
+  $('sm-custom-params').hidden = smMode !== 'custom';
+  $('sm-auto-field').hidden = smMode !== 'auto';
+  $('sm-ai-field').hidden = smMode !== 'ai';
+  $('sm-pick-field').hidden = smSource !== 'builtin';
+  $('sm-upload-field').hidden = smSource !== 'custom';
+}
+$('sm-mode').querySelectorAll('button').forEach((b) => { b.onclick = () => { smMode = b.dataset.role.replace('mode-', ''); smSyncSegs(); smSyncMode(); }; });
+$('sm-source').querySelectorAll('button').forEach((b) => { b.onclick = () => { smSource = b.dataset.role.replace('source-', ''); smSyncSegs(); smSyncMode(); }; });
+$('sm-dz').querySelectorAll('button').forEach((b) => { b.onclick = () => { smDz = b.dataset.role.replace('difficulty-', ''); smSyncSegs(); }; });
+$('sm-tab').oninput = (e) => { $('sm-tabv').textContent = Number(e.target.value).toFixed(2); };
+/* 难度档 → 块数窗口（SchemeManager DIFFICULTY_FALLBACK 口径示意：简单 4×5 / 中等 6×7 / 困难 8×9） */
+$('sm-dz').addEventListener('click', () => {
+  const F = { easy: [4, 5], medium: [6, 7], hard: [8, 9] }[smDz];
+  $('sm-auto-feedback').textContent = t('schemes.autoBestDone', { rows: F[0], cols: F[1] });
+  drawPreview(F[0], F[1]);
+});
+$('sm-preview').onclick = null;
+function drawPreview(rows, cols) {
+  const c = $('sm-preview');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 240, 240);
+  ctx.fillStyle = JZ_COLORS[smSource === 'builtin' ? ($('sm-image').value || 'animals').split('-')[0] : 'animals'] || '#9db8a5';
+  ctx.fillRect(0, 0, 240, 240);
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
+  const cw = 240 / cols, chh = 240 / rows;
+  for (let i = 1; i < cols; i++) { ctx.beginPath(); ctx.moveTo(i * cw, 0); ctx.lineTo(i * cw, 240); ctx.stroke(); }
+  for (let i = 1; i < rows; i++) { ctx.beginPath(); ctx.moveTo(0, i * chh); ctx.lineTo(240, i * chh); ctx.stroke(); }
+}
+$('sm-image').onchange = () => drawPreview(+$('sm-rows').value, +$('sm-cols').value);
+$('sm-rows').oninput = () => drawPreview(+$('sm-rows').value, +$('sm-cols').value);
+$('sm-cols').oninput = () => drawPreview(+$('sm-rows').value, +$('sm-cols').value);
+document.querySelector('[data-role="ai-suggest"]').onclick = () => {
+  $('sm-ai-feedback').textContent = t('schemes.aiDegradedAuto', { rows: 6, cols: 7 });
+  drawPreview(6, 7);
+};
+document.querySelector('[data-role="batch-import"]').onclick = () => {
+  const fb = $('sm-batch-feedback');
+  fb.textContent = t('schemes.batchDone', { n: 2 }); fb.hidden = false;
+};
+$('sm-save').onclick = () => {
+  const nameInput = $('sm-editor').querySelector('[data-field="name"]');
+  const rows = +$('sm-rows').value, cols = +$('sm-cols').value;
+  if (rows < 2 || rows > 12 || cols < 2 || cols > 12) { $('sm-error').textContent = t('schemes.invalidParams'); $('sm-error').hidden = false; return; }
+  const name = nameInput.value.trim() || t('schemes.defaultName', { n: SCHEMES.length + 1 });
+  if (smEditing) { smEditing.name = name; smEditing.rows = rows; smEditing.cols = cols; smEditing.mode = smMode; smEditing.source = smSource; }
+  else SCHEMES.push({ name, source: smSource, topic: 'animals', img: $('sm-image').value, rows, cols, mode: smMode });
+  closeEditorAndRender();
+};
+document.querySelector('[data-role="cancel-scheme"]').onclick = closeEditorAndRender;
+function closeEditorAndRender() { closeEditor(); renderSchemes(); }
+
+/* init */
+$('sm-editor').hidden = true;
+wbFill();
+smFillImages();
+smSyncSegs(); smSyncMode();
+drawPreview(8, 8);
+renderSchemes();
+applyLang();
+</script>
+</body>
+</html>

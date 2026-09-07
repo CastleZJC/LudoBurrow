@@ -1,25 +1,18 @@
 # UI 原型目录
 
-LudoBurrow 平台级页面的单文件 HTML 原型（视觉与交互基准），2026-09-06 建立首批六页，与 v1.1.0 实现对齐。
+LudoBurrow 平台级页面的**单份交互式 HTML 原型**（`LudoBurrow.html`，2026-09-07 建立并与当前实现全量对齐）。原型内可点击流转五视图（主菜单 / 选关 / 三游戏 / 设置 / 方案管理）与暂停、结算浮层，双击即可在浏览器体验。
 
 ## 原型清单
 
-| 文件 | 页面 | 对齐实现 |
-|------|------|----------|
-| `LudoBurrow-main-menu.html` | 主菜单（三游戏入口 + 设置） | `src/components/MainMenu.vue` |
-| `LudoBurrow-level-select.html` | 关卡选择（专题页签 + 关卡网格） | `src/components/LevelSelect.vue` |
-| `LudoBurrow-pause.html` | 暂停浮层（继续 / 重玩本关 / 退出关卡） | `src/components/PauseOverlay.vue` + `GameContainer.vue` |
-| `LudoBurrow-settle.html` | 结算浮层（星级 / 用时 / 新纪录 / 下一关） | `src/components/SettlePanel.vue` + `GameContainer.vue` |
-| `LudoBurrow-settings.html` | 设置（语言 / 限时策略 / AI 增强 / 词汇表 / 存档备份） | `src/components/SettingsPanel.vue` |
-| `LudoBurrow-scheme-manager.html` | 拼图方案管理（方案卡列表 + 新建/调整面板） | `src/components/SchemeManager.vue` |
-
-## 命名格式
-
-`LudoBurrow-<页面或主题>.html`（游戏内画面如拼图盘面、迷宫画布属组件级，暂无原型，按需增补）
+| 文件 | 覆盖页面 | 对齐实现 |
+|------|----------|----------|
+| `LudoBurrow.html` | 主菜单、关卡选择（轨页签 + 50 关网格）、键盘游戏（四模式 + 78 键虚拟键盘）、拼图（五区三列）、迷宫（8 主题 + 点击/键盘移动）、暂停浮层、结算浮层、设置（语言/限时/AI/词汇表/存档备份）、方案管理（列表 + 新建/调整面板） | `src/components/*.vue` + `src/games/*` 同构 |
 
 ## 使用约定
 
-- 每页原型自包含：设计 token（与 `src/style.css` `:root` 单一出处同源）+ 组件 scoped 样式同源副本 + `data-*` 测试锚点属性，双击即可在浏览器查看
-- 实现页面须与原型对齐；后续实现调整视觉时**同步回写原型**，保持两端口径一致
-- 文案以 `src/i18n/zh-CN.ts` 为权威（原型内为静态示意值）
+- 单文件自包含：设计 token（与 `src/style.css` `:root` 单一出处同源）+ 组件 scoped 样式同源副本 + `data-*` 锚点属性，双击即可在浏览器打开
+- 原型为**假状态演示**：进度、方案、记录均为内存假数据，不落 localStorage、不影响真实存档
+- 游戏内界面（键盘盘面/拼图盘面/迷宫画布）为**示意布局**，以真实实现为逐像素基准；结构、class 与 `data-*` 锚点与真实组件同构
+- 文案以 `src/i18n/zh-CN.ts` / `en-US.ts` 为权威（原型内为真值同源副本，切换语言立即生效）
+- 后续实现调整视觉或交互时**同步回写原型**，保持两端口径一致
 - UI 样式规范文档（颜色/字号/组件视觉的系统化整理）待后续需要时在 `documents/design/` 下补建

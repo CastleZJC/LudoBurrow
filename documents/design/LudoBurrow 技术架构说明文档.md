@@ -674,9 +674,9 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 
 ## 15.3 内置图库合规
 
-- **M3 实施口径**：内置图库由 `scripts/gen-gallery.mjs` 确定性程序化生成（离线环境无外网素材渠道与 WebP 编码依赖；1024 源图仅绘制 + 192 分析缩略内嵌 `thumbs.ts`（data URI 不触发 canvas taint），零第三方素材、输出恒定可复现，体积可控）；图库根目录 `CREDITS.md` 标注生成方式与许可（随项目 MIT 发布）
-- 开源素材收录位保留（M6 扩充可选）：仅收 CC0 / CC-BY，≥1K 分辨率，每专题目录携带 `LICENSE.md` 逐张标注来源 URL 与许可类型
-- 收录流程：开源素材 = 来源核验 → 许可与分辨率复核留痕 → 入库标注；程序化生成 = 种子化渲染 → 输出恒定（重跑可复现）
+- **M3 实施口径（历史，已被 v1.1.0 图库换源取代）**：M3 期曾以 `scripts/gen-gallery.mjs` 确定性程序化生成图库（离线环境无外网素材渠道与 WebP 编码依赖）；M6 验收返工起 24 张全部换为 Wikimedia Commons / Openclipart 真实照片（现行口径见 §15.1：`scripts/fetch-gallery.mjs` 获取 + `scripts/check-color.ps1` 彩色校验，gen-gallery.mjs 随换源移除）。分发结构不变——源图（2048 宽）走 `assets/` 相对路径仅绘制，192 长边分析缩略仍由 `fetch-gallery.mjs` 自动内嵌 `thumbs.ts`（data URI 不触发 canvas taint）；图库根目录 `CREDITS.md` 逐张标注来源与许可
+- 开源素材收录（M6 已落地）：CC0 / CC-BY / CC BY-SA / 公有领域，≥1K 分辨率，`public/assets/images/CREDITS.md` 逐张标注来源 URL 与许可类型
+- 收录流程：开源素材 = 来源核验 → 许可与分辨率复核留痕 → 入库标注（`fetch-gallery.mjs` 单脚本完成抓取→缩略内嵌→CREDITS 更新）
 
 ## 15.4 自定义导入
 
@@ -752,7 +752,7 @@ LudoBurrow-vX.Y.Z/
 | M5 AI 增强 | Qwen/GLM Provider + 切块建议 + 降级链 | AI 建议可用，离线不受影响 |
 | M6 打磨 | PWA 落地、图库复核扩充、发布流水线（含翻译齐备门禁） | 覆盖率 ≥80% + 翻译齐备，release 产物验证 |
 
-任务分解、AI 辅助开发工作流、验收标准明细（F-/NF-/Q- 编号）见《LudoBurrow 开发计划文档》（权威）。
+任务分解、AI 辅助开发工作流、验收标准明细（F-/NF-/Q- 编号）见《LudoBurrow 开发计划文档》（权威；内部文档，不入库）。
 
 ## 19.2 二期框架（Web 端登录与素材隔离 + iOS 移动端支持 + 横竖屏适配，一期预留）
 
