@@ -29,6 +29,9 @@ documents/local/
 # 内部规划及执行目录（superpowers 规格/计划：仅限本机，不入库不上传）
 docs/
 
+# 内部开发计划（仅限本机，不入库不上传）
+documents/design/LudoBurrow 开发计划文档.md
+
 # OS
 .DS_Store
 Thumbs.db
