@@ -31,6 +31,8 @@ const games = computed(() => listGames())
     <button class="secondary-btn" data-menu="settings" @click="platform.openSettings()">
       {{ t('common.settings') }}
     </button>
+
+    <footer class="app-credit" data-menu="credit">{{ t('app.credit') }}</footer>
   </div>
 </template>
 
@@ -41,6 +43,8 @@ const games = computed(() => listGames())
   align-items: center;
   gap: 24px;
   padding: 48px 24px;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 .app-title {
   font-size: 40px;
@@ -82,5 +86,10 @@ const games = computed(() => listGames())
 .game-name {
   font-size: 20px;
   font-weight: 600;
+}
+.app-credit {
+  margin-top: auto;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 </style>

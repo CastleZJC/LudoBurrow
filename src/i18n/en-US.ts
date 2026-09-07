@@ -19,6 +19,7 @@ export default {
   app: {
     title: 'LudoBurrow',
     subtitle: 'An install-free puzzle game burrow',
+    credit: '© 2026 castle.zhang',
   },
   menu: {
     play: 'Play',

@@ -20,6 +20,7 @@ export default {
   app: {
     title: 'LudoBurrow 玩趣洞',
     subtitle: '免安装的益智游戏小窝',
+    credit: '© 2026 castle.zhang',
   },
   menu: {
     play: '开始玩',

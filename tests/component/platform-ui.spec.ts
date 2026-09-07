@@ -6,7 +6,7 @@ import { stubModule, createStubLevel } from '@/games/stub'
 import GameContainer from '@/components/GameContainer.vue'
 import { getUnlockedCount, getLevelRecord } from '@/core/level-manager'
 import { mountWithApp } from './helpers'
-import { applyLocale } from '@/i18n'
+import { applyLocale, i18n } from '@/i18n'
 
 describe('GameContainer + stub 插件全链路（M1 验收：可玩可结算）', () => {
   beforeEach(() => {
@@ -128,6 +128,17 @@ describe('MainMenu', () => {
 
     await wrapper.find('[data-menu="settings"]').trigger('click')
     expect(platform.view).toBe('settings')
+
+    wrapper.unmount()
+  })
+
+  it('底部居中渲染创建声明（castle.zhang，i18n 单一出处）', async () => {
+    const { default: MainMenu } = await import('@/components/MainMenu.vue')
+    const wrapper = mountWithApp(MainMenu)
+
+    const credit = wrapper.find('[data-menu="credit"]')
+    expect(credit.exists()).toBe(true)
+    expect(credit.text()).toBe(i18n.global.t('app.credit'))
 
     wrapper.unmount()
   })
