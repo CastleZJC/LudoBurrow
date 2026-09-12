@@ -22,11 +22,20 @@ function okResponse(body: unknown): Response {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('resolveProviderConfig（预设补全，§14.3）', () => {
-  it('glm 空 baseURL/model → 预设补全（一期模型口径 glm-5.3）', () => {
+  it('glm 空 baseURL/model → 预设补全（2026-09 口径 glm-5.3-flash）', () => {
     const c = resolveProviderConfig(GLM)
     expect(c.id).toBe('glm')
     expect(c.baseURL).toBe(PROVIDER_PRESETS.glm.baseURL)
-    expect(c.model).toBe('glm-5.3')
+    expect(c.model).toBe('glm-5.3-flash')
+  })
+
+  it('qwen/deepseek 空 baseURL/model → 各自预设补全（三预设模型均多模态）', () => {
+    const q = resolveProviderConfig({ provider: 'qwen', baseURL: '', model: '', apiKey: 'k' })
+    expect(q.baseURL).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(q.model).toBe('qwen3.8-flash')
+    const d = resolveProviderConfig({ provider: 'deepseek', baseURL: '', model: '', apiKey: 'k' })
+    expect(d.baseURL).toBe('https://api.deepseek.com')
+    expect(d.model).toBe('deepseek-flash')
   })
 
   it('显式 baseURL/model 优先于预设；custom 不套预设原样透传', () => {
@@ -75,7 +84,7 @@ describe('createSuggestionProvider（OpenAI 兼容请求）', () => {
     expect(init.method).toBe('POST')
 
     const body = JSON.parse(init.body as string) as { model: string; messages: { content: unknown[] }[] }
-    expect(body.model).toBe('glm-5.3')
+    expect(body.model).toBe('glm-5.3-flash')
     expect(body.messages).toHaveLength(1)
     const parts = body.messages[0]!.content as Array<Record<string, unknown>>
     const textPart = parts.find((p) => p.type === 'text') as { text: string } | undefined

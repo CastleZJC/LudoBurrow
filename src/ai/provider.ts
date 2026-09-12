@@ -7,15 +7,21 @@ import type { AiConfig } from '@/core/save'
 
 export type ProviderId = AiConfig['provider']
 
-/** 预设端点（§14.2）：qwen = 阿里 DashScope 兼容模式；glm = 智谱开放平台（一期模型口径 glm-5.3） */
+/** 预设端点与模型（§14.2，2026-09-12 联网复核）：qwen=阿里 DashScope 兼容模式；glm=智谱开放平台；
+ * deepseek=官方 OpenAI 兼容端点（deepseek-v4-flash 已下线，官方统一为 deepseek-flash）。
+ * 三预设模型均为多模态（视觉建议请求含 image_url，纯文本模型不可用）。 */
 export const PROVIDER_PRESETS: Record<ProviderId, { baseURL: string; model: string }> = {
   qwen: {
     baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen-vl-max',
+    model: 'qwen3.8-flash',
   },
   glm: {
     baseURL: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-5.3',
+    model: 'glm-5.3-flash',
+  },
+  deepseek: {
+    baseURL: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
   },
   custom: { baseURL: '', model: '' },
 }

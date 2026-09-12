@@ -172,6 +172,7 @@ export default {
     aiProvider: '服务商',
     aiProviderQwen: 'Qwen（DashScope）',
     aiProviderGlm: 'GLM（智谱）',
+    aiProviderDeepseek: 'DeepSeek（深度求索）',
     aiCustom: '自定义（OpenAI 兼容端点）',
     aiPresetHint: '留空使用预设',
     aiBaseUrl: '接口地址（Base URL）',

@@ -57,14 +57,18 @@ function patchAi(patch: Partial<AiConfig>): void {
 
 function onAiToggle(event: Event): void {
   const on = (event.target as HTMLInputElement).checked
-  // 关闭 = 移除整段（undefined 不序列化，存档不再含 ai 字段）
+  // 关闭 = 移除整段（undefined 不序列化，存档不再含 ai 字段）；开启 = 预设值直接填入输入框（可见可改）
   platform.patchSettings(
-    on ? { ai: { provider: 'glm', baseURL: '', model: '', apiKey: '' } } : { ai: undefined },
+    on
+      ? { ai: { provider: 'glm', baseURL: PROVIDER_PRESETS.glm.baseURL, model: PROVIDER_PRESETS.glm.model, apiKey: '' } }
+      : { ai: undefined },
   )
 }
 
 function onAiProviderChange(event: Event): void {
-  patchAi({ provider: (event.target as HTMLSelectElement).value as AiConfig['provider'] })
+  const provider = (event.target as HTMLSelectElement).value as AiConfig['provider']
+  // 切换供应商 = 该商预设 URL/模型覆盖式回填输入框（框内可再改，存档值请求时优先于预设）
+  patchAi({ provider, baseURL: PROVIDER_PRESETS[provider].baseURL, model: PROVIDER_PRESETS[provider].model })
 }
 
 function onAiBaseURL(event: Event): void {
@@ -250,6 +254,7 @@ async function importSave(event: Event): Promise<void> {
           <select :value="aiProvider" data-role="ai-provider" @change="onAiProviderChange">
             <option value="qwen">{{ t('settings.aiProviderQwen') }}</option>
             <option value="glm">{{ t('settings.aiProviderGlm') }}</option>
+            <option value="deepseek">{{ t('settings.aiProviderDeepseek') }}</option>
             <option value="custom">{{ t('settings.aiCustom') }}</option>
           </select>
         </label>

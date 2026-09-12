@@ -101,9 +101,14 @@ describe('SettingsPanel', () => {
     expect(wrapper.find('[data-section="ai"]').exists()).toBe(true)
     expect(wrapper.find('[data-role="ai-provider"]').exists()).toBe(false)
 
-    // 开启 → 默认 glm（一期口径），表单展开 + 预设占位
+    // 开启 → 默认 glm，预设 URL/模型直接填入输入框（可见可改）
     await wrapper.find('[data-role="ai-toggle"]').setValue(true)
-    expect(platform.settings.ai).toMatchObject({ provider: 'glm', baseURL: '', model: '', apiKey: '' })
+    expect(platform.settings.ai).toMatchObject({
+      provider: 'glm',
+      baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+      model: 'glm-5.3-flash',
+      apiKey: '',
+    })
     expect(wrapper.find('[data-role="ai-baseurl"]').attributes('placeholder')).toContain('bigmodel')
 
     // 填 Key + 显式 model → 写入并持久化
@@ -123,6 +128,35 @@ describe('SettingsPanel', () => {
     expect(platform.settings.ai).toBeUndefined()
     const saved2 = JSON.parse(localStorage.getItem('ludoburrow/save') ?? '{}')
     expect(saved2.settings.ai).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('AI 切换供应商：预设 URL/模型覆盖式回填输入框并持久化（含 deepseek）', async () => {
+    const platform = usePlatformStore()
+    const wrapper = mountWithApp(SettingsPanel)
+    await wrapper.find('[data-role="ai-toggle"]').setValue(true)
+    await wrapper.find('[data-role="ai-apikey"]').setValue('sk-abc')
+
+    // 切 deepseek → 预设回填，Key 保留，输入框可见
+    await wrapper.find('[data-role="ai-provider"]').setValue('deepseek')
+    expect(platform.settings.ai).toMatchObject({
+      provider: 'deepseek',
+      baseURL: 'https://api.deepseek.com',
+      model: 'deepseek-flash',
+      apiKey: 'sk-abc',
+    })
+    expect((wrapper.find('[data-role="ai-baseurl"]').element as HTMLInputElement).value).toBe('https://api.deepseek.com')
+
+    // 再切 qwen → 覆盖回填；切 custom → 清空两栏由用户自填，Key 保留
+    await wrapper.find('[data-role="ai-provider"]').setValue('qwen')
+    expect(platform.settings.ai).toMatchObject({
+      provider: 'qwen',
+      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen3.8-flash',
+    })
+    await wrapper.find('[data-role="ai-provider"]').setValue('custom')
+    expect(platform.settings.ai).toMatchObject({ provider: 'custom', baseURL: '', model: '', apiKey: 'sk-abc' })
 
     wrapper.unmount()
   })

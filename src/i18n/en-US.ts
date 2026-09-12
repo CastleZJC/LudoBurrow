@@ -171,6 +171,7 @@ export default {
     aiProvider: 'Provider',
     aiProviderQwen: 'Qwen (DashScope)',
     aiProviderGlm: 'GLM (Zhipu)',
+    aiProviderDeepseek: 'DeepSeek',
     aiCustom: 'Custom (OpenAI-compatible endpoint)',
     aiPresetHint: 'Leave empty to use the preset',
     aiBaseUrl: 'Base URL',

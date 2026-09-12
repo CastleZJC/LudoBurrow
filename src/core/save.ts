@@ -8,7 +8,7 @@ export const SCHEMA_VERSION = 7
 
 /** AI Provider 配置（设置页录入，存本机；导出默认脱敏） */
 export interface AiConfig {
-  provider: 'qwen' | 'glm' | 'custom'
+  provider: 'qwen' | 'glm' | 'deepseek' | 'custom'
   baseURL: string
   model: string
   apiKey: string
@@ -252,7 +252,7 @@ function validateGameSave(v: unknown): v is GameSaveData {
 function validateAi(v: unknown): v is AiConfig {
   return (
     isRecord(v) &&
-    (v.provider === 'qwen' || v.provider === 'glm' || v.provider === 'custom') &&
+    (v.provider === 'qwen' || v.provider === 'glm' || v.provider === 'deepseek' || v.provider === 'custom') &&
     typeof v.baseURL === 'string' &&
     typeof v.model === 'string' &&
     typeof v.apiKey === 'string'
