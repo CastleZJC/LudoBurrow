@@ -1,6 +1,7 @@
 // SchemeManager 组件测试（验收返工「方案 = 关卡」：新建即入轨 / F-18 确认 / 3.11 上传闭环）
 import { describe, it, expect, beforeEach, beforeAll, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import SchemeManager from '@/components/SchemeManager.vue'
 import { mountWithApp } from './helpers'
@@ -634,5 +635,54 @@ describe('SchemeManager AI 建议链路（三分类：applied 入档 / 非 appli
     expect(scheme.params.suggestion).toBeUndefined()
     expect(scheme.mode).toBe('custom')
     wrapper.unmount()
+  })
+})
+
+// ---- 就近编辑布局（2026-09-12）：新建=列表顶部；编辑=对应卡片正下方；打开就近滚动 ----
+describe('SchemeManager 就近编辑布局', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    saveImageMock.mockReset()
+  })
+
+  it('新建态：编辑器为列表第一个子元素（位于空态提示之前）', async () => {
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="new-scheme"]').trigger('click')
+
+    const listEl = wrapper.find('.sm-list').element as HTMLElement
+    expect(listEl.firstElementChild?.getAttribute('data-role')).toBe('scheme-editor')
+    wrapper.unmount()
+  })
+
+  it('编辑态：编辑器位于被编辑卡片与下一卡片之间', async () => {
+    createScheme('方案一', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    createScheme('方案二', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    const wrapper = mountWithApp(SchemeManager)
+    const cards = wrapper.findAll('[data-scheme]')
+    await cards[0]!.find('[data-role="edit-scheme"]').trigger('click')
+
+    const children = Array.from((wrapper.find('.sm-list').element as HTMLElement).children)
+    expect(children).toHaveLength(3)
+    expect(children[0]!.getAttribute('data-scheme')).toBe(listSchemes()[0]!.id)
+    expect(children[1]!.getAttribute('data-role')).toBe('scheme-editor')
+    expect(children[2]!.getAttribute('data-scheme')).toBe(listSchemes()[1]!.id)
+    wrapper.unmount()
+  })
+
+  it('编辑器挂载后触发就近滚动（block: nearest）', async () => {
+    createScheme('方案一', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    const original = Element.prototype.scrollIntoView
+    const scrollSpy = vi.fn()
+    Element.prototype.scrollIntoView = scrollSpy as unknown as typeof Element.prototype.scrollIntoView
+    try {
+      const wrapper = mountWithApp(SchemeManager)
+      await wrapper.find('[data-role="edit-scheme"]').trigger('click')
+      await flushPromises()
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' })
+      wrapper.unmount()
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
   })
 })
