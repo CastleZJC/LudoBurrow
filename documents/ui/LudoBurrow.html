@@ -585,6 +585,9 @@ const T = {
     'jigsaw.help': '帮助', 'jigsaw.abandon': '放弃', 'jigsaw.grid': '网格 {n}×{n}', 'jigsaw.helps': '帮助 {n} 次',
     'jigsaw.loadError': '图片加载失败，请稍后重试',
     'jigsaw.previewHint': '点击放大', 'jigsaw.previewClose': '点击任意处关闭',
+    'jigsaw.zoneNameCurrent': '当前块', 'jigsaw.zoneHintCurrent': '拖到盘面对应位置安放',
+    'jigsaw.zoneNameStaging': '暂存区', 'jigsaw.zoneHintStaging': '先放不确定的块，可随时拿起',
+    'jigsaw.zoneNameRemaining': '剩余队列', 'jigsaw.zoneHintRemaining': '按顺序自动补入当前位',
     'jigsaw.topicAnimals': '动物', 'jigsaw.topicSpace': '太空', 'jigsaw.topicScenery': '风景',
     'jigsaw.topicCartoon': '卡通', 'jigsaw.topicCustom': '我的拼图',
     'maze.hint': '方向键 / WASD 或点击画面方向移动，抵达出口过关',
@@ -660,6 +663,9 @@ const T = {
     'jigsaw.help': 'Help', 'jigsaw.abandon': 'Abandon', 'jigsaw.grid': 'Grid {n}×{n}', 'jigsaw.helps': 'Helps: {n}',
     'jigsaw.loadError': 'Failed to load image, please try again later',
     'jigsaw.previewHint': 'Tap to enlarge', 'jigsaw.previewClose': 'Tap anywhere to close',
+    'jigsaw.zoneNameCurrent': 'Current piece', 'jigsaw.zoneHintCurrent': 'drag it onto the board',
+    'jigsaw.zoneNameStaging': 'Staging', 'jigsaw.zoneHintStaging': 'park pieces here, pick up anytime',
+    'jigsaw.zoneNameRemaining': 'Queue', 'jigsaw.zoneHintRemaining': 'feeds the current slot in order',
     'jigsaw.topicAnimals': 'Animals', 'jigsaw.topicSpace': 'Space', 'jigsaw.topicScenery': 'Scenery',
     'jigsaw.topicCartoon': 'Cartoon', 'jigsaw.topicCustom': 'My Puzzles',
     'maze.hint': 'Arrow keys / WASD or click a direction to move. Reach the exit to win',
@@ -1797,17 +1803,27 @@ class JigsawBoard {
 
 /* ================= 五区布局（对齐 games/jigsaw/layout.ts） ================= */
 const JG_PAD = 10;
+const HINT_STRIP = 22;
 function computeLayout(width, height) {
   const sideW = Math.min(300, Math.max(180, Math.round(width * 0.24)));
   const innerH = height - JG_PAD * 2;
   const upperH = Math.round(innerH * 0.55);
   return {
     preview: { x: JG_PAD, y: JG_PAD, w: sideW - JG_PAD * 2, h: upperH },
-    staging: { x: JG_PAD, y: JG_PAD + upperH + JG_PAD, w: sideW - JG_PAD * 2, h: innerH - upperH - JG_PAD },
+    staging: { x: JG_PAD, y: JG_PAD + upperH + JG_PAD, w: sideW - JG_PAD * 2, h: innerH - upperH - JG_PAD - HINT_STRIP },
     board: { x: sideW + JG_PAD, y: JG_PAD, w: width - sideW * 2 - JG_PAD * 3, h: innerH },
-    current: { x: width - sideW + JG_PAD, y: JG_PAD, w: sideW - JG_PAD * 2, h: upperH },
-    remaining: { x: width - sideW + JG_PAD, y: JG_PAD + upperH + JG_PAD, w: sideW - JG_PAD * 2, h: innerH - upperH - JG_PAD },
+    current: { x: width - sideW + JG_PAD, y: JG_PAD, w: sideW - JG_PAD * 2, h: upperH - HINT_STRIP },
+    remaining: { x: width - sideW + JG_PAD, y: JG_PAD + upperH + JG_PAD, w: sideW - JG_PAD * 2, h: innerH - upperH - JG_PAD - HINT_STRIP },
   };
+}
+function zoneLabel(ctx, rect, nameKey, hintKey) {
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(90, 96, 108, 0.75)';
+  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.fillText(t(nameKey), rect.x + rect.w / 2, rect.y + rect.h / 2 + 5);
+  ctx.fillStyle = 'rgba(90, 96, 108, 0.95)';
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.fillText(t(hintKey), rect.x + rect.w / 2, rect.y + rect.h + 12);
 }
 function fitRectAspect(box, contentW, contentH) {
   if (contentW <= 0 || contentH <= 0) return { x: box.x, y: box.y, w: 0, h: 0 };
@@ -2033,6 +2049,7 @@ function mountJigsaw(host, level, hooks) {
     // 暂存区（左下）：58px 格 / 66px 步距 + 框
     ctx.strokeStyle = '#8a8f98';
     ctx.strokeRect(L.staging.x, L.staging.y, L.staging.w, L.staging.h);
+    zoneLabel(ctx, L.staging, 'jigsaw.zoneNameStaging', 'jigsaw.zoneHintStaging');
     const stList = board.stagingList;
     const colsN = Math.max(1, Math.floor((L.staging.w - JG_PAD) / 66));
     stList.forEach((idx, i) => {
@@ -2047,6 +2064,7 @@ function mountJigsaw(host, level, hooks) {
     // 当前块（右上）：fitInto 0.9 + 框
     ctx.strokeStyle = '#3a6ea5';
     ctx.strokeRect(L.current.x, L.current.y, L.current.w, L.current.h);
+    zoneLabel(ctx, L.current, 'jigsaw.zoneNameCurrent', 'jigsaw.zoneHintCurrent');
     hit.currentRect = L.current;
     const cur = board.currentIndex;
     if (cur !== null) {
@@ -2060,6 +2078,7 @@ function mountJigsaw(host, level, hooks) {
     // 剩余队列（右下）：34px 缩略 / 40px 步距 + 框
     ctx.strokeStyle = '#8a8f98';
     ctx.strokeRect(L.remaining.x, L.remaining.y, L.remaining.w, L.remaining.h);
+    zoneLabel(ctx, L.remaining, 'jigsaw.zoneNameRemaining', 'jigsaw.zoneHintRemaining');
     const rem = board.remainingOrder;
     const rcols = Math.max(1, Math.floor((L.remaining.w - JG_PAD) / 40));
     rem.forEach((idx, i) => {
