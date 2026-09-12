@@ -164,6 +164,7 @@ const previewCanvas = ref<HTMLCanvasElement | null>(null)
 let previewToken = 0
 
 // 模式联动：进 auto 即按当前图与难度自动选规格（换图/换难度重算）；离开 ai 清除建议权重（防跨模式误带）
+// 打开既有 auto 方案不自动重算：预填保留存量参数（改难度/换图才重推导，open→save 不再随机漂移 tabDepth）
 // （实例仅在面板打开时存在，原 watch 数组中的 panelOpen 维度随抽取移除）
 watch([mode, difficulty, imageId, customAssetId], async () => {
   if (mode.value !== 'ai' && appliedSuggestion.value) appliedSuggestion.value = null

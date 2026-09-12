@@ -77,6 +77,7 @@ function askDelete(schemeId: string): void {
     return
   }
   deleteScheme(schemeId)
+  if (editingId.value === schemeId) closePanel()
   confirmDeleteId.value = null
   if (confirmDeleteTimer) {
     clearTimeout(confirmDeleteTimer)

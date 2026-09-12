@@ -685,4 +685,20 @@ describe('SchemeManager 就近编辑布局', () => {
       Element.prototype.scrollIntoView = original
     }
   })
+
+  it('删除正在编辑的方案：关闭编辑面板并恢复头部按钮', async () => {
+    createScheme('方案一', { kind: 'builtin', imageId: 'animals-01' }, PARAMS)
+    const wrapper = mountWithApp(SchemeManager)
+    await wrapper.find('[data-role="edit-scheme"]').trigger('click')
+    expect(wrapper.find('[data-role="scheme-editor"]').exists()).toBe(true)
+
+    // 二次确认删除流：首次点按武装，3 秒内再点确认删除
+    await wrapper.find('[data-role="delete-scheme"]').trigger('click')
+    await wrapper.find('[data-role="delete-confirm"]').trigger('click')
+
+    expect(listSchemes()).toHaveLength(0)
+    expect(wrapper.find('[data-role="scheme-editor"]').exists()).toBe(false)
+    expect(wrapper.find('[data-role="new-scheme"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })
