@@ -486,7 +486,7 @@ interface GameHooks {
 
 | Provider | 端点 | 说明 |
 |---|---|---|
-| Qwen（DashScope） | OpenAI 兼容模式 | 用户指定优先 |
+| Qwen（阿里云百炼） | OpenAI 兼容模式 | 用户指定优先 |
 | GLM（智谱） | OpenAI 兼容模式 | 用户指定优先 |
 | 自定义 | 任意 OpenAI 兼容 base URL | 扩展预留 |
 
@@ -626,7 +626,7 @@ interface CutSuggestionProvider {
 ```
 
 - OpenAI 兼容 HTTP 调用（fetch + AbortController 超时）
-- 预设 Qwen（DashScope）/ GLM（智谱）；自定义 base URL 扩展预留
+- 预设 Qwen（阿里云百炼）/ GLM（智谱）；自定义 base URL 扩展预留
 
 ## 14.3 配置与安全
 

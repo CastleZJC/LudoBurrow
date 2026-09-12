@@ -170,7 +170,7 @@ export default {
     aiSection: 'AI 增强（可选）',
     aiEnabled: '启用 AI 切块建议',
     aiProvider: '服务商',
-    aiProviderQwen: 'Qwen（DashScope）',
+    aiProviderQwen: 'Qwen（阿里云百炼）',
     aiProviderGlm: 'GLM（智谱）',
     aiProviderDeepseek: 'DeepSeek（深度求索）',
     aiCustom: '自定义（OpenAI 兼容端点）',

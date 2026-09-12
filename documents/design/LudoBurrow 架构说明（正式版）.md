@@ -114,7 +114,7 @@ src/
 | 国际化 | vue-i18n | 中/英双语，SUPPORTED_LOCALES 注册表扩展（技术架构 §13.5） |
 | 渲染 | Canvas 2D（拼图/迷宫）+ DOM/CSS（键盘游戏） | 拼图任意形状切块与拖拽、迷宫瓦片渲染需要 Canvas 性能；键盘游戏是 UI 型，DOM 更简单 |
 | 测试 | Vitest + @vue/test-utils | 与 Vite 同体系；覆盖率阈值硬约束 |
-| AI（可选） | Qwen（DashScope）/ GLM（智谱）OpenAI 兼容接口 | 用户指定优先；国内可达、配置标准 |
+| AI（可选） | Qwen（阿里云百炼）/ GLM（智谱）OpenAI 兼容接口 | 用户指定优先；国内可达、配置标准 |
 
 > 精确版本于 M1 脚手架初始化时锁定，钉版清单以《LudoBurrow 代码规范》§十三 为准。
 

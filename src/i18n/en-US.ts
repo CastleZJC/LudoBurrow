@@ -169,7 +169,7 @@ export default {
     aiSection: 'AI Enhancement (optional)',
     aiEnabled: 'Enable AI cut suggestions',
     aiProvider: 'Provider',
-    aiProviderQwen: 'Qwen (DashScope)',
+    aiProviderQwen: 'Qwen (Alibaba Cloud Model Studio)',
     aiProviderGlm: 'GLM (Zhipu)',
     aiProviderDeepseek: 'DeepSeek',
     aiCustom: 'Custom (OpenAI-compatible endpoint)',
