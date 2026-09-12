@@ -328,6 +328,14 @@ export function mountJigsaw(
     drawZoneFrame(rects.current, '#3a6ea5')
     drawZoneFrame(rects.remaining, '#8a8f98')
 
+    // 三区功能水印：描述在区框外下方留白条内；区名在区内正中（先名后块 → 块覆盖区名）
+    drawZoneHint(rects.current, 'jigsaw.zoneHintCurrent')
+    drawZoneHint(rects.staging, 'jigsaw.zoneHintStaging')
+    drawZoneHint(rects.remaining, 'jigsaw.zoneHintRemaining')
+    drawZoneName(rects.current, 'jigsaw.zoneNameCurrent')
+    drawZoneName(rects.staging, 'jigsaw.zoneNameStaging')
+    drawZoneName(rects.remaining, 'jigsaw.zoneNameRemaining')
+
     // 暂存块 / 当前块 / 剩余块
     for (const i of board.stagingList) {
       if (isInFlightOrDrag(i)) continue
@@ -407,6 +415,24 @@ export function mountJigsaw(
     ctx.strokeStyle = color
     ctx.lineWidth = 1
     ctx.strokeRect(rect.x, rect.y, rect.w, rect.h)
+  }
+
+  /** 三区功能水印：区名（区内正中，拼块之下绘制 → 空区可读、有块被遮） */
+  function drawZoneName(rect: Rect, key: string): void {
+    ctx.fillStyle = 'rgba(90, 96, 108, 0.75)'
+    ctx.font = '13px system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(i18n.global.t(key), rect.x + rect.w / 2, rect.y + rect.h / 2 + 5)
+    ctx.textAlign = 'left'
+  }
+
+  /** 三区功能水印：功能描述（区框外下方水平居中，同 previewHint 样式） */
+  function drawZoneHint(rect: Rect, key: string): void {
+    ctx.fillStyle = 'rgba(90, 96, 108, 0.95)'
+    ctx.font = '12px system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(i18n.global.t(key), rect.x + rect.w / 2, rect.y + rect.h + 12)
+    ctx.textAlign = 'left'
   }
 
   function isInFlightOrDrag(index: number): boolean {

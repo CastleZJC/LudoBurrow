@@ -5,6 +5,7 @@ import {
   boardContentRect,
   computeLayout,
   fitRectAspect,
+  HINT_STRIP,
   hitTestSlot,
   pointInRect,
   slotRect,
@@ -43,7 +44,7 @@ describe('computeLayout（五区）', () => {
     expect(rects.remaining.x).toBeGreaterThanOrEqual(rects.board.x + rects.board.w)
     // 中列拼图区全高（与左右列同顶同底）
     expect(rects.board.y).toBe(rects.preview.y)
-    expect(rects.board.y + rects.board.h).toBe(rects.staging.y + rects.staging.h)
+    expect(rects.board.y + rects.board.h).toBe(rects.staging.y + rects.staging.h + HINT_STRIP) // 中列全高；左列下段底部预留描述条
   })
 
   it('容器过小抛 RangeError', () => {
@@ -129,5 +130,26 @@ describe('hitTestSlot（网格级吸附命中）', () => {
 
   it('末边界坐标钳到最后一段', () => {
     expect(hitTestSlot(199.9, 179.9, board, plan)).toEqual({ row: 2, col: 3 })
+  })
+})
+
+describe('computeLayout（三区水印描述条 HINT_STRIP）', () => {
+  it('三区高度各减 HINT_STRIP，preview/board 不变', () => {
+    const rects = computeLayout(960, 600)
+    const innerH = 600 - 20
+    const upperH = Math.round(innerH * 0.55)
+    expect(HINT_STRIP).toBe(22)
+    expect(rects.current.h).toBe(upperH - HINT_STRIP)
+    expect(rects.staging.h).toBe(innerH - upperH - 10 - HINT_STRIP)
+    expect(rects.remaining.h).toBe(rects.staging.h)
+    expect(rects.preview.h).toBe(upperH)
+    expect(rects.board.h).toBe(innerH)
+  })
+
+  it('描述条留白：三区框下方留白 ≥ HINT_STRIP 且不出容器', () => {
+    const rects = computeLayout(960, 600)
+    expect(600 - (rects.staging.y + rects.staging.h)).toBeGreaterThanOrEqual(HINT_STRIP)
+    expect(600 - (rects.remaining.y + rects.remaining.h)).toBeGreaterThanOrEqual(HINT_STRIP)
+    expect(rects.remaining.y - (rects.current.y + rects.current.h)).toBeGreaterThanOrEqual(HINT_STRIP)
   })
 })

@@ -9,6 +9,7 @@ import type { GameHooks, LevelProgress, LevelResult } from '@/core/types'
 import { mountJigsaw } from '@/games/jigsaw/instance'
 import { createTopicLevel } from '@/games/jigsaw/schemes'
 import { boardContentRect, computeLayout, slotRect } from '@/games/jigsaw/layout'
+import { i18n } from '@/i18n'
 
 // services 素材仓库 mock：仅 assetId 分支消费（内置/deps 注入路径不触碰）
 const { loadImageMock } = vi.hoisted(() => ({ loadImageMock: vi.fn() }))
@@ -31,6 +32,9 @@ const originalGetContext = proto.getContext
 // 渲染帧计数（A1 断言用：clearRect 每渲染帧恰好一次）
 const renderFrames = { count: 0 }
 
+// fillText 参数记录（三区功能水印断言用）
+const fillTexts = { values: [] as string[] }
+
 function makeCtx(): CanvasRenderingContext2D {
   const store: Record<string, unknown> = {}
   return new Proxy(store as unknown as CanvasRenderingContext2D, {
@@ -38,6 +42,7 @@ function makeCtx(): CanvasRenderingContext2D {
       const store = target as unknown as Record<string, unknown>
       if (prop === 'canvas') return { width: 0, height: 0 }
       if (prop === 'clearRect') return () => { renderFrames.count += 1 }
+      if (prop === 'fillText') return (text: string) => { fillTexts.values.push(String(text)) }
       if (!(prop in store)) {
         Object.defineProperty(store, prop, {
           value: () => undefined,
@@ -176,6 +181,20 @@ describe('mountJigsaw（挂载与初始化）', () => {
     expect(container.querySelector('[data-jg="error"]')).toBeTruthy()
     inst.destroy()
     container.remove()
+  })
+
+  it('三区常驻功能水印：区名与边框外描述随 i18n 渲染', async () => {
+    fillTexts.values.length = 0
+    const { inst } = await mountReady()
+    vi.advanceTimersByTime(100)
+    const texts = fillTexts.values
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneNameCurrent'))
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneHintCurrent'))
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneNameStaging'))
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneHintStaging'))
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneNameRemaining'))
+    expect(texts).toContain(i18n.global.t('jigsaw.zoneHintRemaining'))
+    inst.destroy()
   })
 })
 

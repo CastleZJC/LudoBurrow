@@ -26,6 +26,9 @@ export interface ZoneRects {
 
 const PAD = 10
 
+/** 三区底部预留的功能描述条高度（水印边框外下方文字，规格 §3） */
+export const HINT_STRIP = 22
+
 /**
  * 五区布局（容器逻辑尺寸 → 各区矩形；三列式，v1.0 验收返工）。
  * 左右列同宽 = 容器 24%（180-300px）；左列上/下按 55%/45% 分（参考图略大），右列同高对齐；
@@ -38,9 +41,9 @@ export function computeLayout(width: number, height: number): ZoneRects {
   const upperH = Math.round(innerH * 0.55)
 
   const preview = { x: PAD, y: PAD, w: sideW - PAD * 2, h: upperH }
-  const staging = { x: PAD, y: PAD + upperH + PAD, w: sideW - PAD * 2, h: innerH - upperH - PAD }
+  const staging = { x: PAD, y: PAD + upperH + PAD, w: sideW - PAD * 2, h: innerH - upperH - PAD - HINT_STRIP }
   const board = { x: sideW + PAD, y: PAD, w: width - sideW * 2 - PAD * 3, h: innerH }
-  const current = { x: width - sideW + PAD, y: PAD, w: sideW - PAD * 2, h: upperH }
+  const current = { x: width - sideW + PAD, y: PAD, w: sideW - PAD * 2, h: upperH - HINT_STRIP }
   const remaining = { x: width - sideW + PAD, y: staging.y, w: sideW - PAD * 2, h: staging.h }
   return { preview, board, staging, current, remaining }
 }
