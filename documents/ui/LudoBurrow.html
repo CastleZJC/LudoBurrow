@@ -2716,16 +2716,15 @@ function renderSchemes() {
         <button class="secondary-btn" data-sm="batch">${esc(t('schemes.batchImport'))}</button>
         <input type="file" data-sm="batch-files" accept="image/*" multiple hidden>
       </header>
-      <div class="sm-layout">
-        <div class="sm-list">
-          ${list.length === 0 ? `<p class="sm-empty">${esc(t('schemes.empty'))}</p>` : list.map((s) => `
-            <div class="sm-item${sm.editingId === s.id ? ' is-on' : ''}" data-scheme="${s.id}">
-              <span>${esc(s.name)}</span>
-              <span class="sm-meta">${s.rows}×${s.cols}${s.mode === 'ai' ? ' · AI' : ''}</span>
-              <button class="sm-del" data-del="${s.id}">${esc(sm.deleteArmId === s.id && Date.now() < sm.deleteArmUntil ? t('schemes.deleteConfirm') : t('schemes.delete'))}</button>
-            </div>`).join('')}
-        </div>
-        ${smRenderEditor()}
+      <div class="sm-list">
+        ${!sm.editingId ? smRenderEditor() : ''}
+        ${list.length === 0 ? `<p class="sm-empty">${esc(t('schemes.empty'))}</p>` : list.map((s) => `
+          <div class="sm-item${sm.editingId === s.id ? ' is-on' : ''}" data-scheme="${s.id}">
+            <span>${esc(s.name)}</span>
+            <span class="sm-meta">${s.rows}×${s.cols}${s.mode === 'ai' ? ' · AI' : ''}</span>
+            <button class="sm-del" data-del="${s.id}">${esc(sm.deleteArmId === s.id && Date.now() < sm.deleteArmUntil ? t('schemes.deleteConfirm') : t('schemes.delete'))}</button>
+          </div>
+          ${sm.editingId === s.id ? smRenderEditor() : ''}`).join('')}
       </div>
     </div>`;
   $('[data-nav="back"]').addEventListener('click', () => go('select', { game: 'jigsaw', track: 'custom' }));
@@ -2803,6 +2802,7 @@ function renderSchemes() {
   const cancelBtn = $('[data-sm="cancel"]', editor);
   if (cancelBtn) cancelBtn.addEventListener('click', () => { resetSm(); renderSchemes(); });
   smPaintPreview(editor);
+  $('[data-role="sm-editor"]')?.scrollIntoView?.({ block: 'nearest' });
 }
 function resetSm() {
   sm.editingId = null; sm.mode = 'custom'; sm.source = 'custom'; sm.difficulty = 'easy';
