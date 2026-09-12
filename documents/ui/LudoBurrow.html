@@ -634,7 +634,7 @@ const T = {
     'settings.saveImport': '导入存档', 'settings.saveImportOk': '导入成功，进度已恢复',
     'settings.saveImportFail': '导入失败：文件不是有效的 LudoBurrow 存档',
     'settings.aiSection': 'AI 增强（可选）', 'settings.aiEnabled': '启用 AI 切块建议', 'settings.aiProvider': '服务商',
-    'settings.aiProviderQwen': 'Qwen（DashScope）', 'settings.aiProviderGlm': 'GLM（智谱）',
+    'settings.aiProviderQwen': 'Qwen（DashScope）', 'settings.aiProviderGlm': 'GLM（智谱）', 'settings.aiProviderDeepseek': 'DeepSeek（深度求索）',
     'settings.aiCustom': '自定义（OpenAI 兼容端点）', 'settings.aiPresetHint': '留空使用预设',
     'settings.aiBaseUrl': '接口地址（Base URL）', 'settings.aiModel': '模型名', 'settings.aiKey': 'API Key（仅存本机）',
     'settings.aiHint': '未配置或调用失败时自动使用本地算法，功能不受影响',
@@ -712,7 +712,7 @@ const T = {
     'settings.saveImport': 'Import Save', 'settings.saveImportOk': 'Imported. Progress restored',
     'settings.saveImportFail': 'Import failed: not a valid LudoBurrow save file',
     'settings.aiSection': 'AI Enhancement (optional)', 'settings.aiEnabled': 'Enable AI cut suggestions', 'settings.aiProvider': 'Provider',
-    'settings.aiProviderQwen': 'Qwen (DashScope)', 'settings.aiProviderGlm': 'GLM (Zhipu)',
+    'settings.aiProviderQwen': 'Qwen (DashScope)', 'settings.aiProviderGlm': 'GLM (Zhipu)', 'settings.aiProviderDeepseek': 'DeepSeek',
     'settings.aiCustom': 'Custom (OpenAI-compatible endpoint)', 'settings.aiPresetHint': 'Leave empty to use the preset',
     'settings.aiBaseUrl': 'Base URL', 'settings.aiModel': 'Model', 'settings.aiKey': 'API Key (stored locally only)',
     'settings.aiHint': 'Falls back to the local algorithm when unset or on failure',
@@ -736,10 +736,17 @@ function t(key, params) {
 
 /* ================= 内存态 store（原型不持久化；刷新即全新存档） ================= */
 const TOTAL_LEVELS = 50;
+/* AI 供应商预设（与 src/ai/provider.ts PROVIDER_PRESETS 同源口径，2026-09-12 联网复核） */
+const AI_PRESETS = {
+  qwen: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen3.8-flash' },
+  glm: { baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-5.3-flash' },
+  deepseek: { baseURL: 'https://api.deepseek.com', model: 'deepseek-flash' },
+  custom: { baseURL: '', model: '' },
+};
 const S = {
   locale: 'zh-CN',
   timeLimit: 'off', limitMinutes: 5, lockMinutes: 1,
-  aiEnabled: false, aiProvider: 'qwen', aiBaseUrl: '', aiModel: '', aiKey: '',
+  aiEnabled: false, aiProvider: 'glm', aiBaseUrl: AI_PRESETS.glm.baseURL, aiModel: AI_PRESETS.glm.model, aiKey: '',
   mazeTheme: 'castle',
   wordbank: { english: {}, pinyin: {} },
   unlocked: { keygame: 1, maze: 1, jigsaw: {} },
@@ -3028,6 +3035,7 @@ function renderSettings() {
             <select data-set="aiProvider">
               <option value="qwen"${S.aiProvider === 'qwen' ? ' selected' : ''}>${esc(t('settings.aiProviderQwen'))}</option>
               <option value="glm"${S.aiProvider === 'glm' ? ' selected' : ''}>${esc(t('settings.aiProviderGlm'))}</option>
+              <option value="deepseek"${S.aiProvider === 'deepseek' ? ' selected' : ''}>${esc(t('settings.aiProviderDeepseek'))}</option>
               <option value="custom"${S.aiProvider === 'custom' ? ' selected' : ''}>${esc(t('settings.aiCustom'))}</option>
             </select></div>
           <div class="text-row"><label>${esc(t('settings.aiBaseUrl'))}</label>
@@ -3068,7 +3076,14 @@ function renderSettings() {
   $('[data-set="limitMinutes"]').addEventListener('change', (e) => { S.limitMinutes = Math.max(1, Number(e.target.value) || 5); });
   $('[data-set="lockMinutes"]').addEventListener('change', (e) => { S.lockMinutes = Math.max(1, Number(e.target.value) || 1); });
   $('[data-set="aiEnabled"]').addEventListener('change', (e) => { S.aiEnabled = e.target.checked; });
-  $('[data-set="aiProvider"]').addEventListener('change', (e) => { S.aiProvider = e.target.value; });
+  $('[data-set="aiProvider"]').addEventListener('change', (e) => {
+    S.aiProvider = e.target.value;
+    // 与 src 覆盖式回填一致：预设 URL/模型直接填入输入框（可见可改）
+    const p = AI_PRESETS[S.aiProvider];
+    S.aiBaseUrl = p.baseURL; S.aiModel = p.model;
+    $('[data-set="aiBaseUrl"]').value = p.baseURL;
+    $('[data-set="aiModel"]').value = p.model;
+  });
   $('[data-set="aiBaseUrl"]').addEventListener('input', (e) => { S.aiBaseUrl = e.target.value; });
   $('[data-set="aiModel"]').addEventListener('input', (e) => { S.aiModel = e.target.value; });
   $('[data-set="aiKey"]').addEventListener('input', (e) => { S.aiKey = e.target.value; });
@@ -3134,7 +3149,7 @@ function renderSettings() {
           S.mazeTheme = data.settings.mazeTheme || 'castle';
           if (data.settings.ai) {
             S.aiEnabled = !!data.settings.ai.enabled;
-            S.aiProvider = data.settings.ai.provider || 'qwen';
+            S.aiProvider = data.settings.ai.provider || 'glm';
             S.aiBaseUrl = data.settings.ai.baseURL || '';
             S.aiModel = data.settings.ai.model || '';
             S.aiKey = data.settings.ai.key || '';
