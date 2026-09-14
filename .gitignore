@@ -32,6 +32,9 @@ docs/
 # 内部开发计划（仅限本机，不入库不上传）
 documents/design/LudoBurrow 开发计划文档.md
 
+# 设计文档历史存档（基线快照，仅限本机，不入库不上传）
+documents/design/历史存档/
+
 # OS
 .DS_Store
 Thumbs.db

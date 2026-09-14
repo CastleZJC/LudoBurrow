@@ -7,10 +7,9 @@
 >
 > | 版本 | 日期时间 | 修订性质 | 修订摘要 | 修改人 |
 > |------|----------|----------|----------|--------|
-> | V1.0 | 2026-09-05 19:20:00 | 初稿 | TypeScript / Vue 3 / Canvas / 资产 / Git 提交规范 | castle |
-> | V1.1 | 2026-09-05 21:12:00 | 设计修订 | 新增 §十一 多语言编码规范（原十一/十二章顺延为十二/十三）；分层约束增加适配层与 i18n 条款；技术栈表增加 vue-i18n | castle |
+> | V1.0 | 2026-09-14 | 基线发布 | 文档基线：资产规范对齐图库换源口径、Pinia 示例对齐实际 platform store、§十三钉版清单回填 package.json 实测版本；此前修订历史随基线清零，存档于 `documents/design/历史存档/V1/` | castle |
 >
-> **适用范围**：LudoBurrow 全部源码与资产（src/ / tests/ / assets/）
+> **适用范围**：LudoBurrow 全部源码与资产（src/ / tests/ / public/assets/）
 
 ---
 
@@ -117,13 +116,13 @@ const next = { ...save, unlocked: { ...save.unlocked, [gameId]: n + 1 } }
 ```vue
 <script setup lang="ts">
 // 1. 类型导入
-import type { LevelConfig } from '@/core/level-manager'
+import type { BaseLevelConfig } from '@/core/types'
 // 2. 组件导入
 import StarRating from './StarRating.vue'
 // 3. store/composable 导入
-import { useSettingsStore } from '@/stores/settings'
+import { usePlatformStore } from '@/stores/platform'
 // 4. Props & Emits
-const props = defineProps<{ level: LevelConfig }>()
+const props = defineProps<{ level: BaseLevelConfig }>()
 const emit = defineEmits<{ retry: []; next: [] }>()
 // 5. 响应式状态
 const running = ref(false)
@@ -152,18 +151,20 @@ onMounted(start)
 ### 3.3 状态管理（Pinia）
 
 ```ts
-// stores/settings.ts
-export const useSettingsStore = defineStore('settings', () => {
+// stores/platform.ts（平台唯一 store）
+export const usePlatformStore = defineStore('platform', () => {
+  // 视图状态机 / 当前关卡配置 / 挂载纪元 / 结算信息 / 设置快照
+  const view = ref<PlatformView>('menu')
   const settings = ref(defaultSettings())
-  const timeLimitMode = computed(() => settings.value.timeLimit.mode)
 
-  function update(patch: Partial<Settings>) { ... }
+  function openLevel(...) { ... }   // 写经 core 层持久化后同步刷新快照
 
-  return { settings, timeLimitMode, update }
+  return { view, settings, openLevel }
 })
 ```
 
 - 仅平台级状态建 store（技术架构 §16.2）；游戏内部状态留在 GameInstance
+- 设置读写一律经 `core/settings.ts`（getSettings / updateSettings，持久化并入存档单一 key），store 仅持响应式快照，不另建 settings store
 - store 单测与组件解耦（见测试规范 §四）
 
 ### 3.4 组件纪律
@@ -185,9 +186,10 @@ src/
 ├── engines/     # 纯逻辑引擎（无 DOM/无 Vue）
 ├── ai/          # AI Provider（OpenAI 兼容封装）
 ├── components/  # 平台级 UI
+├── stores/      # 平台级 Pinia 状态（单一 platform store）
 ├── i18n/        # 语言包 + 注册表（§十一）
-├── services/    # 运行环境适配层：登录态/素材仓库（技术架构 §7.4）
-└── assets/      # 图库/瓦片/sprite
+└── services/    # 运行环境适配层：登录态/素材仓库（技术架构 §7.4）
+public/assets/   # 静态资产：图库/瓦片/sprite/游戏图标（构建随包分发）
 tests/           # 独立测试目录（与 src/ 分离）
 ```
 
@@ -206,7 +208,7 @@ tests/           # 独立测试目录（与 src/ 分离）
 ### 4.3 GameModule 实现约定
 
 - 每游戏目录：`index.ts`（模块出口）/ `level.ts`（createLevel）/ `instance.ts`（GameInstance）
-- `createLevel(n)` 必须纯函数：同 n 同结果；内部只用 `createRng(seed)` 派生随机
+- `createLevel(n, track?)` 必须纯函数：同参数同结果；内部只用 `createRng(seed)` 派生随机
 - `destroy()` 必须清理全部事件监听、rAF、定时器（泄漏由组件测试覆盖）
 
 ---
@@ -227,7 +229,7 @@ tests/           # 独立测试目录（与 src/ 分离）
 ### 5.3 交互与坐标
 
 - 事件坐标 → 画布坐标换算封装为工具函数（处理 devicePixelRatio 与缩放）
-- 拖拽用 Pointer Events（统一鼠标/触摸；触屏适配已排期二期——iOS 移动端支持，开发计划 §四之二 W-6）
+- 拖拽用 Pointer Events（统一鼠标/触摸；触屏适配属二期 iOS 移动端支持范围）
 
 ### 5.4 资源
 
@@ -290,14 +292,16 @@ tests/           # 独立测试目录（与 src/ 分离）
 
 ### 10.1 图片资产
 
-- 内置图库：`assets/images/<专题>/<名称>.png`（M3.9 实施口径：`scripts/gen-gallery.mjs` 确定性程序化生成，1024 源图仅绘制 + 192 分析缩略同配方内嵌 `src/games/jigsaw/thumbs.ts`；生成产物勿手改，重跑脚本即复现）
-- 许可标注：图库根目录 `CREDITS.md`（生成素材随项目 MIT 发布）；若后续收录开源素材，改为每专题 `LICENSE.md` 逐张标注来源 URL、作者、许可（CC0/CC-BY）
-- 命名：kebab-case，含义明确（`animals-01.png`）
+- 内置图库：`public/assets/images/<专题>/<名称>`（jpg/png）——24 张开放许可真实照片，`scripts/fetch-gallery.mjs` 自 Wikimedia Commons（照片）与 Openclipart（cartoon，全站 CC0）抓取：2048 宽源图走相对路径仅绘制，192 长边分析缩略以 data URI 内嵌 `src/games/jigsaw/thumbs.ts`（file:// canvas taint 规避，见问题汇总 P2-01）；换图/增图经该脚本重跑，产物勿手改
+- 彩色校验：`scripts/check-color.ps1` 逐张校验（HSV 饱和度均值与彩色像素占比达标才算 colorful），选图规则「彩色、色彩鲜明、主体清晰、能引起孩子兴趣」
+- 许可标注：图库根目录 `CREDITS.md` 逐张标注来源 URL、作者、许可（CC0 / CC-BY / CC BY-SA / 公有领域），发布产物校验强制（部署规范 §2.3）
+- 命名：kebab-case，含义明确（`animals-01.jpg`）
 
 ### 10.2 瓦片与 sprite
 
-- `assets/tiles/<主题>/` 瓦片集 + `assets/sprites/` 帧动画条带（M4 实施为单文件 `hero.png` 96×128 条带）
-- 同主题瓦片尺寸统一；M4 实施口径：`scripts/gen-maze-assets.mjs` 确定性程序化生成（同 §10.1 图库口径，CREDITS.md 随 MIT 标注）；CC0 来源（Kenney/OpenGameArt）为后续收录位优先项
+- `public/assets/tiles/<主题>/` 瓦片集（8 主题 × wall/floor/goal/start，1024×1024）+ `public/assets/sprites/hero.png` 帧动画条带（768×1024：4 方向 × 3 帧，帧 256×256）
+- 同主题瓦片尺寸统一；实施口径：`scripts/gen-maze-assets.mjs` 确定性程序化生成（像素画逻辑网格整数放大，CREDITS.md 随 MIT 标注）；运行时 paletteSkin 色板兜底；CC0 外部来源（Kenney/OpenGameArt）仍为可选收录位
+- 游戏图标：`public/assets/icons/*.svg`（三游戏入口图标）；PWA 图标由 `scripts/gen-pwa-icons.mjs` 程序化生成（产物根 `icons/`）
 
 ### 10.3 词库
 
@@ -356,24 +360,22 @@ src/i18n/
 
 ## 十三、技术栈版本要求
 
-> 原则：**精确版本钉版**（不用 `^`/`~`），M1 脚手架初始化时锁定并回填本表；升级须走文档修订 + 全量回归。
+> 原则：**精确版本钉版**（不用 `^`/`~`），以 package.json 为准；升级须走文档修订 + 全量回归。
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| Node.js | （M1 锁定） | 开发环境 |
-| TypeScript | （M1 锁定） | strict 全开 |
-| Vite | （M1 锁定） | 构建 |
-| vite-plugin-singlefile | （M1 锁定） | IIFE 单文件产物 |
-| Vue 3 | （M1 锁定） | `<script setup>` |
-| Pinia | （M1 锁定） | 平台状态 |
-| vue-i18n | （M1 锁定） | 多语言（legacy: false，§十一） |
-| Vitest | （M1 锁定） | 测试引擎 |
-| @vue/test-utils | （M1 锁定） | 组件测试 |
-| @vitest/coverage-v8 | （M1 锁定） | 覆盖率 |
-| happy-dom | （M1 锁定） | DOM 测试环境 |
-| vue-tsc | （M1 锁定） | 类型检查 |
+| Node.js | 22（本机实测 v22.22.3） | 开发环境（未设 engines 强制） |
+| TypeScript | 5.9.3 | strict 全开 |
+| Vite | 7.3.6 | 构建 |
+| vite-plugin-singlefile | 2.3.3 | IIFE 单文件产物 |
+| Vue 3 | 3.5.42 | `<script setup>` |
+| Pinia | 3.0.4 | 平台状态 |
+| vue-i18n | 11.4.10 | 多语言（legacy: false，§十一） |
+| Vitest | 3.2.7 | 测试引擎 |
+| @vue/test-utils | 2.5.0 | 组件测试 |
+| @vitest/coverage-v8 | 3.2.7 | 覆盖率 |
+| happy-dom | 20.14.0 | DOM 测试环境 |
+| vue-tsc | 3.3.11 | 类型检查 |
+| sharp | ^0.35.4 | 资产脚本依赖（fetch-gallery 缩略），非运行时 |
 
-| 工具 | 用途 |
-|---|---|
-| Prettier | 格式化（Vue/TS） |
-| ESLint | Lint（no-unused-vars 等与 tsconfig 双保险） |
+格式化与 Lint 工具（Prettier/ESLint）未引入：未用代码由 vue-tsc（noUnusedLocals / noUnusedParameters）+ tsconfig 门禁拦截，代码风格由评审把关；如后续引入须回填本表并走文档修订。

@@ -7,9 +7,7 @@
 >
 > | 版本 | 日期时间 | 修订性质 | 修订摘要 | 修改人 |
 > |------|----------|----------|----------|--------|
-> | V1.0 | 2026-09-05 19:30:00 | 初稿 | Vitest 测试策略 / 覆盖率门禁 / Canvas 测试策略 / 浏览器冒烟 | castle |
-> | V1.1 | 2026-09-05 21:15:00 | 设计修订 | 新增 §3.4 翻译齐备守卫测试（G-1~G-5）；命令与门禁增加 check:i18n；冒烟矩阵增加语言切换场景；必测清单增加 i18n/适配层条目 | castle |
-> | V1.2 | 2026-09-06 05:30:00 | 实施同步 | §九 增补 M6.4 自动化等价覆盖注记（verify-dist + vite preview 11 URL + 各场景对应测试文件），明确 AI 自动化与人工三浏览器复核分工 | castle |
+> | V1.0 | 2026-09-14 | 基线发布 | 文档基线：测试目录结构对齐仓库实际（unit/component/store 41 spec）、测试基线登记口径改指 README §版本迭代；此前修订历史随基线清零，存档于 `documents/design/历史存档/V1/` | castle |
 >
 > **适用对象**：开发人员（含 AI 辅助开发会话）
 > **文档用途**：规范 LudoBurrow 全阶段测试策略、覆盖率要求与质量门禁标准
@@ -81,26 +79,17 @@
 
 ```
 tests/
-├── unit/            # engines + core 单元测试
-│   ├── jigsaw-cutter.spec.ts
-│   ├── maze-generator.spec.ts
-│   ├── wordbank.spec.ts
-│   ├── rng.spec.ts
-│   ├── save.spec.ts
-│   ├── timer.spec.ts
-│   └── level-manager.spec.ts
-├── component/       # Vue 组件与 GameModule 实例测试
-│   ├── LevelSelect.spec.ts
-│   ├── keygame.spec.ts
-│   ├── jigsaw.spec.ts
-│   └── maze.spec.ts
-├── store/           # Pinia store 测试
-│   └── settings.spec.ts
+├── unit/            # engines + core + ai + pwa 单元测试（jigsaw-cutter / maze-generator / wordbank /
+│                   #   rng / save / timer / level-manager / game-registry / settings / i18n-guard /
+│                   #   ai-provider / ai-suggest / cut-suggestion / services / pwa / jigsaw-* / maze-* / keygame-*）
+├── component/       # Vue 组件与 GameModule 实例/链路测试（level-select / panels / platform-ui /
+│                   #   scheme-manager / keygame-instance / keygame-flow / maze-flow / jigsaw-scheme-flow / debug）
+├── store/           # Pinia store 测试（platform.spec.ts）
 └── setup.ts         # 全局 setup（canvas mock 等）
 ```
 
 - `tests/` 独立于 `src/`（与源码分离，随 git 仓库正常发布；dist/ 构建产物不含测试）
-- 文件命名：`<被测模块>.spec.ts`，与 src 模块名一一对应
+- 文件命名：`<被测模块>.spec.ts`，与 src 模块名一一对应；spec 数量随开发累积，以仓库实际为准（当前 41 个）
 
 ### 2.2 Vitest 配置基线
 
@@ -272,7 +261,7 @@ npm run check:i18n         # 翻译齐备校验（与 §3.4 守卫同规则脚�
 | 翻译齐备（i18n 守卫） | G-1~G-5 全过 + `npm run check:i18n` 退出码 0 | 阻断（发布双门禁之一） |
 | 浏览器矩阵冒烟 | Chrome/Edge/Firefox file:// + 在线全过 | 阻断（发布前） |
 
-> 各里程碑当期测试基线（用例数）登记于《LudoBurrow 开发计划文档》（内部文档，不入库）修订记录。
+> 当期测试基线（用例数与覆盖率）以 `README.md §版本迭代` 最新一行登记为准（历史明细见已归档的开发计划文档）。
 
 ---
 

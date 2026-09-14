@@ -7,10 +7,7 @@
 >
 > | 版本 | 日期时间 | 修订性质 | 修订摘要 | 修改人 |
 > |------|----------|----------|----------|--------|
-> | V1.0 | 2026-09-05 19:40:00 | 初稿 | 发布产物形态 / 发布流水线 / 本地分发 / 在线部署 / 版本回滚 | castle |
-> | V1.1 | 2026-09-05 21:20:00 | 设计修订 | 发布流水线新增第 4 步「翻译齐备门禁」，与覆盖率并列双门禁（开发口碑保障线） | castle |
-> | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿：新增 §5.3 PWA 实施细节（M6.2 落地）；§三 流水线第 8 步更新为发布收尾（Release 模板 + git tag 检查，M6.3）；§2.1 产物结构与 §2.3 校验清单补 PWA 产物；§七 冒烟口径统一为 9 场景（测试规范 §九） | castle |
-> | V1.3 | 2026-09-06 22:45:00 | 设计修订 | §2.1 产物结构与 §2.3 校验清单补许可文件（LICENSE 构建拷贝 / THIRD-PARTY-NOTICES.md 随 public/ 分发 / assets CREDITS.md；verify-dist 第 7 步自动校验） | castle |
+> | V1.0 | 2026-09-14 | 基线发布 | 文档基线：产物结构对齐实际（8 主题瓦片、真实照片图库、assets/icons 游戏图标）；此前修订历史随基线清零，存档于 `documents/design/历史存档/V1/` | castle |
 >
 > **适用范围**：LudoBurrow 全部版本发布（本地 Release zip 与在线部署；项目为纯前端静态应用，无服务器运维）
 
@@ -38,9 +35,10 @@ LudoBurrow-vX.Y.Z/
 ├── sw.js                   # Service Worker（CACHE_VERSION 与 package.json version 一致）
 ├── icons/                  # PWA 图标（icon-192/512.png，程序化生成，含拼图块剪影）
 └── assets/
-    ├── images/             # 内置图库（4 专题 × 6 张 PNG；含 CREDITS.md 许可标注）
-    ├── tiles/              # 迷宫瓦片（castle|garden 两主题 × wall/floor/goal/start；含 CREDITS.md）
-    └── sprites/            # 角色帧动画条带（hero.png，4 方向 × 3 帧）
+    ├── images/             # 内置图库（4 专题 × 6 张，2048 宽真实照片 jpg/png；含 CREDITS.md 许可标注）
+    ├── tiles/              # 迷宫瓦片（8 主题 × wall/floor/goal/start，1024²；含 CREDITS.md）
+    ├── sprites/            # 角色帧动画条带（hero.png，768×1024：4 方向 × 3 帧）
+    └── icons/              # 游戏图标 SVG（三游戏入口）
 ```
 
 ### 2.2 产物命名与校验

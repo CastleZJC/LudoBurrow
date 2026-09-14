@@ -2,18 +2,18 @@
 
 本文件为**跨工具通用项目规则**（非 Claude Code 专用）：任何在本仓库工作的 AI 编码工具 / IDE（Claude Code、Qoder 等）均应遵循此处的架构约束、开发命令、发布原则与审核标准。文件名沿用 `CLAUDE.md` 仅为历史兼容。**本文件是项目规则的唯一权威载体，后续任何规则调整均直接更新本文件，不新建 / 不迁移到其它 IDE 原生规则文件。**
 
-> **职责分工（2026-09-05 建立）**：本文件只保留 AI 工作必需的规则、约束与命令；与规范文档重复的技术细节已下沉，规范文档为对应领域的权威载体——
+> **职责分工**：本文件只保留 AI 工作必需的规则、约束与命令；与规范文档重复的技术细节已下沉，规范文档为对应领域的权威载体——
 > - 架构 / 技术选型 / 模块职责 / GameModule 插件体系 / 三游戏设计 / AI 能力 / 数据资产 → 《LudoBurrow 技术架构说明文档》（权威来源）
 > - 编码规范 / git commit 格式 / 资产规范 / 多语言文案规范 → 《LudoBurrow 代码规范》
 > - 测试命令 / 覆盖率门禁 → 《LudoBurrow 测试规范文档》
 > - 发布产物 / 发布流水线 / 在线部署 → 《LudoBurrow 部署规范》
-> - 里程碑 M1-M6 / AI 辅助开发工作流（superpowers + ecc Skills × glm 5.3）/ 验收标准 → 《LudoBurrow 开发计划文档》（内部文档，不入库）
+> - 里程碑 M1-M6 / AI 辅助开发工作流（superpowers + ecc Skills × glm 5.3）/ 验收标准 → 《LudoBurrow 开发计划文档》（内部历史文档，已归档至 `documents/design/历史存档/`，不入库）
 >
 > 规则类内容（发布原则、文档审核标准、能力边界）以本文件为权威，不外迁。
 
 ## Project Overview
 
-LudoBurrow（ludo = 拉丁语「玩」+ burrow = 「洞穴、庇护所」）是一个 PC 端益智游戏平台：**纯前端静态应用，免安装、本地优先**——双击 `index.html` 即玩（file:// 协议），同一产物可直接部署网页在线访问。无后端、无数据库、无运行时依赖。
+LudoBurrow（ludo = 拉丁语「玩」+ burrow = 「洞穴、庇护所」）是一个 PC 端益智游戏平台：**纯前端静态应用，免安装、本地优先**——双击构建产物 `index.html` 即玩（file:// 协议；仓库自带免安装成品 `play/index.html`，根目录 `index.html` 为开发模板），同一产物可直接部署网页在线访问。无后端、无数据库、无运行时依赖。
 
 | 游戏 | 玩法核心 | 关卡 |
 |---|---|---|
@@ -21,7 +21,7 @@ LudoBurrow（ludo = 拉丁语「玩」+ burrow = 「洞穴、庇护所」）是�
 | 拼图 | 类线下拼图：切块、吸附、试错、校验（可选 AI 增强切块） | 按专题方案动态 |
 | 迷宫 | 方向键/WASD 控制像素小人走迷宫 | 50 |
 
-**当前状态（2026-09-07）**：一期（M1-M6）全部完成并发布 v1.0.0，验收反馈三轮返工完成（v1.1.0）——三游戏 / 拼图切块引擎 + 方案管理（方案即关卡）+ AI 切块建议（全降级链）/ 中英双语 / 图库 24 张 / PWA / release 8 步流水线；当前门禁：typecheck 0 错、565 tests、coverage 94.21%（branches 90.47%）、i18n 156 键。二期已排期（Web 登录与素材隔离 + iOS 移动端支持 + 横竖屏布局自适应），Web 分叉框架已预留。里程碑明细见《LudoBurrow 开发计划文档》（内部文档，不入库）。
+**当前状态（2026-09-14 基线）**：一期（M1-M6）全部完成（v1.0.0 发布，验收返工迭代至 v1.1.0，后续验收成果随下版发布）——三游戏 / 拼图切块引擎 + 方案管理（方案即关卡）+ AI 切块建议（全降级链）/ 中英双语 / 图库 24 张 / PWA / release 8 步流水线；当前门禁：typecheck 0 错、574 tests、coverage 94.25%（branches 90.48%）、i18n 163 键。二期已排期（Web 登录与素材隔离 + iOS 移动端支持 + 横竖屏布局自适应），Web 分叉框架已预留。里程碑明细见已归档的《LudoBurrow 开发计划文档》。
 
 **核心约束（贯穿全部设计）**：
 
@@ -31,7 +31,7 @@ LudoBurrow（ludo = 拉丁语「玩」+ burrow = 「洞穴、庇护所」）是�
 - **开源合规**：内置图库全部开放许可（CC0 / CC-BY / CC BY-SA / 公有领域，逐张标注）；商业 IP 图片仅通过「自定义导入」由用户本地加载，不分发、不出本机
 - **多语言**：UI 中/英双语（个人设置切换，立即生效），语言框架可扩展；游戏内容（词库/关卡）不随语言切换
 
-**分期边界（2026-09-05 修订，v1.1）**：
+**分期边界**：
 
 - **一期（M1-M6，本地优先）**：全部具体功能落地，不延后不跳过——键盘/迷宫各 50 关、拼图切块引擎与方案管理（方案即关卡，按专题方案动态关数）、多语言中英、内置图库齐备（每专题 ≥5 张 CC0/CC-BY）、PWA、发布流水线。**Web 端以「运行环境适配层」保留框架**：登录态与自定义素材仓库两个抽象接口 + LocalAdapter 全量实现，不实现服务端
 - **二期（框架一期已预留，避免大改动）**：Web 端用户登录 + 自定义素材用户隔离（WebAdapter 对接服务端）；本地端永不需要登录、素材不隔离；除登录与素材隔离外，Web 端与本地端行为完全一致
@@ -56,21 +56,23 @@ src/
 │   ├── jigsaw-cutter/       #   切块引擎：本地梯度算法 + AI Provider 接口
 │   ├── maze-generator/      #   迷宫生成（种子随机可复现）
 │   └── wordbank/            #   词库：数字/字母/英文分级词/中文拼音词表
-├── components/              # 平台级 UI（主菜单/关卡选择/暂停/结算/设置）
-├── assets/                  # 内置 CC0 图库（按专题分目录）、瓦片皮肤、sprite
-├── ai/                      # AI Provider：Qwen/GLM 预设 + 自定义 OpenAI 兼容端点
+├── components/              # 平台级 UI（主菜单/关卡选择/暂停/结算/设置/方案管理）
+├── stores/                  # 平台级 Pinia 状态（视图状态机/当前关卡/设置快照）
+├── ai/                      # AI Provider：Qwen/GLM/DeepSeek 预设 + 自定义 OpenAI 兼容端点
 ├── i18n/                    # 多语言：zh-CN/en-US 语言包 + SUPPORTED_LOCALES 注册表
 └── services/                # 运行环境适配层：登录态 + 自定义素材仓库（LocalAdapter 一期 / WebAdapter 二期）
 ```
 
+静态资产位于 `public/assets/`（内置图库 4 专题 24 张、迷宫瓦片 8 主题、sprite、游戏图标），构建随包以相对路径分发，不内联进单文件。
+
 - **依赖方向**：`components / games → core`，`games → engines`，`components/games → services / i18n`；engines 与 core **不依赖 Vue**、不反向依赖 games。禁止反向依赖。
-- **GameModule 插件接口（扩展性核心）**：`{ id, name, icon, createLevel(n), mount(container, level, hooks) }`——新游戏 = 新建 `games/xxx/` 目录 + 注册一行，平台的计时、存档、关卡管理、限时策略自动生效（详见技术架构 §8）。
+- **GameModule 插件接口（扩展性核心）**：`{ id, name, icon, createLevel(n, track?), mount(container, level, hooks), tracks?, levelCount? }`（后两者可选，支持多轨进度与动态关卡数）——新游戏 = 新建 `games/xxx/` 目录 + 注册一行，平台的计时、存档、关卡管理、限时策略自动生效（详见技术架构 §8）。
 - **数据流**：`LevelConfig(参数+种子，确定性生成) → GameInstance 挂载渲染 → 用户操作 → 完成/放弃 → 结算（用时、星级）→ save 写入 → 解锁下一关`。
 
 ## 关键架构约束（AI 必须遵守）
 
 - **file:// 兼容**：构建产物为 **vite-plugin-singlefile 产出的单文件 IIFE index.html**（JS/CSS 全内联）；1K+ 图片以相对路径放 `assets/` 随包分发，不内联。任何运行时依赖（关卡定义、词库）一律走 **TS 模块内嵌**，**禁止运行时 fetch 本地 JSON**（file:// 下被 CORS 阻止）。
-- **确定性生成**：所有关卡由「参数 + 种子」程序化生成（mulberry32 PRNG），同关卡每次打开内容一致；150 个关卡无手工配置文件。
+- **确定性生成**：所有关卡由「参数 + 种子」程序化生成（mulberry32 PRNG），同关卡每次打开内容一致；键盘/迷宫各 50 关 + 拼图 24 内置方案全部程序化生成，无手工配置文件。
 - **engines 纯逻辑**：切块算法、迷宫生成、词库全部为无 UI 的纯 TS 模块；Canvas 渲染逻辑（坐标计算/状态机）抽为纯函数，保证可单测。
 - **存档健壮性**：localStorage 单一 key `ludoburrow/save`，带 schema version + migration 链；损坏时提示并支持从导出备份恢复，**不静默清空**。
 - **拼图方案版本隔离**：每个切块方案是独立版本，各自挂独立游戏进度，互不删除；切换方案 = 切换存档槽。
@@ -81,7 +83,7 @@ src/
 
 ## Development Commands
 
-> 命令集已全部落地（M1.11），与《测试规范文档》§七、《部署规范》§三 一致。
+> 命令集与《测试规范文档》§七、《部署规范》§三 一致。
 
 ```bash
 npm install                # 安装依赖
@@ -91,6 +93,7 @@ npm run test               # vitest run（全量测试）
 npm run test:coverage      # vitest run --coverage（覆盖率报告）
 npm run check:i18n         # 翻译齐备校验（zh↔en 键位 1:1 / 空值 / 注册表一致性）
 npm run build              # 类型检查 + 单文件构建（dist/）
+npm run play               # 构建免安装成品副本（play/，双击即玩）
 npm run release            # 发布门禁全量 8 步：typecheck → test → 覆盖率 ≥80% → 翻译齐备 → build → 产物校验（含 PWA）→ zip+SHA-256 → 发布收尾（Release 模板 + git tag 检查）
 ```
 
@@ -128,7 +131,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 - **Git commits**: `<type>: <description in Chinese> yyyymmdd by castle`（types: feat/fix/refactor/docs/test/chore）——详见代码规范 §八。**提交前脱敏检查（强制）**：本地图库及由其生成的主题方案等产物不入库，提交前核验暂存清单（见发布原则禁止行为）。
 - **命名与结构**、**Vue/TS 编码模式**、**Canvas 规范**、**资产规范** → 详见《LudoBurrow 代码规范》。
 - **多语言口径（同功能同描述同出处）**：同一功能、同一词义的文案必须使用同一个 i18n key（单一出处，跨页面复用置于 `common` 段），禁止多段重复定义同名同值键；守卫测试强制（见代码规范 §十一、测试规范 §3.4）。
-- **AI 辅助开发工作流**：需求澄清 → 计划 → TDD → 验证 → 审查的 Skill 工作流（superpowers + ecc，模型 glm 5.3）→ 详见《LudoBurrow 开发计划文档》§二；**声称完成前必须实际运行验证命令**（superpowers:verification-before-completion 纪律）。
+- **AI 辅助开发工作流**：需求澄清 → 计划 → TDD → 验证 → 审查的 Skill 工作流（superpowers + ecc，模型 glm 5.3）→ 详见《LudoBurrow 开发计划文档》§二（已归档：`documents/design/历史存档/`）；**声称完成前必须实际运行验证命令**（superpowers:verification-before-completion 纪律）。
 
 ## 能力边界（防擅自加戏）
 
@@ -139,7 +142,7 @@ npm run release            # 发布门禁全量 8 步：typecheck → test → �
 - 内置商业 IP 素材（汪汪队、奥特曼等仅用户自定义导入）
 - Web 服务端技术选型与实现（属二期；一期仅保留适配层框架）
 
-已排期能力（一期已全部落地）：i18n 中英 + 适配层框架（M1 ✅）、自定义素材本地持久化（M3 ✅）、PWA（M6.2 ✅）；二期排期：Web 端登录与素材隔离（适配层框架一期已预留）、iOS 移动端支持（PWA/移动端网页：iOS Safari 可玩 + 添加到主屏，触屏适配/安全区/离线；PC 键盘+鼠标优先不变，开发计划 §四之二 W-6）、横竖屏布局自适应（垂直翻转：适配不同长宽比显示屏，界面自适应重排 + 游戏画布等比适配，与 iOS 竖屏联动，W-7）、音效系统（一期开关已随存档 schema v3 移除，开发计划 §四之二 W-5）、迷宫后续主题包（内容扩充）。
+已排期能力（一期已全部落地）：i18n 中英 + 适配层框架（M1 ✅）、自定义素材本地持久化（M3 ✅）、PWA（M6.2 ✅）；二期排期：Web 端登录与素材隔离（适配层框架一期已预留）、iOS 移动端支持（PWA/移动端网页：iOS Safari 可玩 + 添加到主屏，触屏适配/安全区/离线；PC 键盘+鼠标优先不变）、横竖屏布局自适应（垂直翻转：适配不同长宽比显示屏，界面自适应重排 + 游戏画布等比适配，与 iOS 竖屏联动）、音效系统（一期开关已随存档 schema v3 移除）、迷宫后续主题包（内容扩充）。
 
 ## Documentation
 
@@ -152,9 +155,9 @@ Architecture and design docs in Chinese are in `documents/design/`：
 | `LudoBurrow 代码规范.md` | Coding standards（TypeScript / Vue 3 / Canvas / 资产）+ git commit 格式 |
 | `LudoBurrow 测试规范文档.md` | Testing strategy and standards（Vitest + 覆盖率门禁 + 浏览器冒烟） |
 | `LudoBurrow 部署规范.md` | 发布产物 / 发布流水线 / 在线部署 / 版本回滚 |
-| `LudoBurrow 开发计划文档.md`（内部文档，不入库） | 里程碑 M1-M6 / AI 辅助开发工作流（superpowers + ecc × glm 5.3）/ 验收标准 / 质量门禁 / 风险 |
+| `LudoBurrow 开发计划文档.md`（内部历史文档，已归档至 `documents/design/历史存档/`，不入库） | 里程碑 M1-M6 / AI 辅助开发工作流（superpowers + ecc × glm 5.3）/ 验收标准 / 质量门禁 / 风险 |
 | `LudoBurrow 问题汇总明细.md` | 开发避坑指南（每条现象/根因/解决/参考四段式，随开发累积） |
-| `documents/ui/` | UI 原型目录（平台级页面六页单文件 HTML：主菜单/选关/暂停/结算/设置/方案管理，见该目录 README） |
+| `documents/ui/` | UI 原型目录（单文件交互式 HTML：主菜单/选关/游戏/设置/方案管理五视图 + 暂停/结算浮层，见该目录 README） |
 | `documents/bug/` | BUG 修复文档目录（命名规范见该目录 README） |
 | 本文件 §文档审核标准 | 文档审核规则 |
 
@@ -209,3 +212,11 @@ Architecture and design docs in Chinese are in `documents/design/`：
 | **引用有效** | 所有文档间引用路径是否正确 |
 | **示例准确** | 代码示例、配置示例是否可运行 |
 | **版本同步** | 文档中的版本号与 package.json 是否一致 |
+
+## 版本记录
+
+> 历史修订记录已随 2026-09-14 文档基线清零归档（见 `documents/design/历史存档/`）；此后每次规则调整在此追加一行。
+
+| 日期 | 说明 | 修改人 |
+|------|------|--------|
+| 2026-09-14 | 基线发布：全量文档复核统一口径（门禁数字实测更新、架构树对齐实际目录、GameModule 接口补全），README 增加英文版，设计文档建立历史存档（V1） | castle |

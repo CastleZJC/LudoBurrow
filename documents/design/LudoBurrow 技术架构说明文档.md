@@ -1,17 +1,12 @@
 # LudoBurrow 技术架构说明文档
 
 > **文档名称**：LudoBurrow 技术架构说明文档
-> **基于文档**：《LudoBurrow架构说明》（设计定稿 v1.0，2026-09-05；原文档已迁移吸收至本文档体系）
 >
 > **修订记录**：
 >
 > | 版本 | 日期时间 | 修订性质 | 修订摘要 | 修改人 |
 > |------|----------|----------|----------|--------|
-> | V1.0 | 2026-09-05 19:10:00 | 初稿 | 设计定稿 v1.0 权威化：总体架构 / GameModule 插件体系 / 三游戏设计 / AI 能力 / 数据资产 / 构建发布 / 测试基线 | castle |
-> | V1.1 | 2026-09-05 21:05:00 | 设计修订 | ①分期边界定稿：一期本地优先全量落地 + Web 框架预留（新增 §7.4 运行环境适配层、§19.2 二期框架）②多语言一期化（新增 §13.5）③自定义素材经适配层持久化（本地 IndexedDB，§15 修订）④非目标/风险/结论同步更新 | castle |
-> | V1.2 | 2026-09-06 05:30:00 | 实施同步 | M6 定稿口径同步：§5.5 PWA 已落地（M6.2，实施细节见《部署规范》§5.3）；§13.5 增补 i18n 豁免边界（AI 提示词 / manifest 元数据 / 诊断日志非 UI 文案，M6.6）；§21 / R-02 图库扩充至 24 张（M6.1 实测约 870KB）与「专题包化」实施口径（目录专题化全量随包 + 在线 SW 按需缓存） | castle |
-> | V1.3 | 2026-09-06 22:45:00 | 设计修订 | ①音效开关移除：一期无音频引擎实现（设置项定义端→消费端闭环断裂），代码/UI/i18n/存档 schema v2→v3 全链移除；二期规划补音效系统（§19.2，开发计划 §四之二 W-5）②发布产物补许可文件：LICENSE（vite 构建拷贝）+ THIRD-PARTY-NOTICES.md（public/ 分发），verify-dist 第 7 步门禁 | castle |
-> | V1.4 | 2026-09-07 22:10:00 | 设计修订 | 二期排期扩项：新增 iOS 移动端支持（PWA/移动端网页：Safari 可玩 + 添加主屏，W-6）与横竖屏布局自适应（垂直翻转：适配不同长宽比显示屏，W-7）；§3.2 非目标表移除移动端/触屏适配条目，§19.2 标题与任务草案同步 | castle |
+> | V1.0 | 2026-09-14 | 基线发布 | 文档基线：基于代码全量复核统一口径（GameModule 接口含 tracks/levelCount、AI Provider 三预设、图库换源真实照片、发布产物结构、自定义词表闭环等）；此前修订历史随基线清零，存档于 `documents/design/历史存档/V1/` | castle |
 >
 > **适用范围**：LudoBurrow 全部开发实施（本文为技术架构唯一权威来源；《架构说明（正式版）》为评审精简口径，冲突时以本文为准）
 
@@ -37,7 +32,7 @@ LudoBurrow 于 2026-09-05 完成设计定稿（v1.0）。为支撑 M1-M6 开发�
 
 - 开发实施（M1-M6 全里程碑）与 AI 辅助开发的架构依据
 - 代码评审与文档审核的对照基准
-- 《代码规范》《测试规范文档》《部署规范》《开发计划文档》均以本文为上游
+- 《代码规范》《测试规范文档》《部署规范》均以本文为上游；一期《开发计划文档》（已归档：`documents/design/历史存档/`）亦以本文为上游
 
 # 2. 系统建设目标与原则
 
@@ -127,7 +122,7 @@ LudoBurrow 于 2026-09-05 完成设计定稿（v1.0）。为支撑 M1-M6 开发�
 ### 场景 B：新游戏插件接入
 
 ```
-新建 games/xxx/ 目录 → 实现 GameModule 五成员 → game-registry 注册一行
+新建 games/xxx/ 目录 → 实现 GameModule 必需五成员 → game-registry 注册一行
 → 平台计时/存档/关卡管理/限时策略自动生效
 ```
 
@@ -185,11 +180,21 @@ LudoBurrow 于 2026-09-05 完成设计定稿（v1.0）。为支撑 M1-M6 开发�
 **发布产物形态**：
 
 ```
-LudoBurrow-v1.0.0/
-├── index.html        # 单文件应用（JS/CSS 内联，IIFE）
+LudoBurrow-vX.Y.Z/
+├── index.html              # 单文件应用（JS/CSS 内联，IIFE）
+├── LICENSE                 # 项目许可（构建时拷贝）
+├── THIRD-PARTY-NOTICES.md  # 第三方组件声明
+├── manifest.webmanifest    # PWA 安装清单（file:// 下不使用）
+├── sw.js                   # Service Worker（CACHE_VERSION 与 package.json 一致）
+├── icons/                  # PWA 图标（icon-192/512.png）
 └── assets/
-    └── images/...    # 内置图库（相对路径引用）
+    ├── images/             # 内置图库（4 专题 × 6 张，含 CREDITS.md）
+    ├── tiles/              # 迷宫瓦片（8 主题 × 4，含 CREDITS.md）
+    ├── sprites/            # 角色帧动画条带
+    └── icons/              # 游戏图标 SVG
 ```
+
+产物结构与校验的权威清单见《LudoBurrow 部署规范》§2。
 
 localStorage 在 file:// 下 Chrome/Edge/Firefox 均可用（按 origin 隔离，file 页面共享同一存储区）。
 
@@ -327,11 +332,12 @@ interface EnvAdapter {
 ```ts
 interface GameModule {
   id: string                    // 唯一标识，如 'jigsaw'
-  name: string                  // 显示名，如 '拼图'
+  name: string                  // 显示名 i18n key（渲染时 t(module.name)，禁止硬编码文案）
   icon: string                  // 图标资源路径
-  levelCount(track?: string): number  // 关卡总数（拼图按专题方案动态，v1.0 验收返工）
-  createLevel(n: number): LevelConfig
-  mount(container: HTMLElement, level: LevelConfig, hooks: GameHooks): GameInstance
+  tracks?: readonly { id: string; labelKey: string }[]  // 多轨进度轨（键盘四模式/拼图专题；缺省单轨）
+  levelCount?: (track?: string) => number                // 轨内关卡总数（动态关卡游戏用，如拼图按方案数；缺省固定 50）
+  createLevel(n: number, track?: string): BaseLevelConfig
+  mount(container: HTMLElement, level: BaseLevelConfig, hooks: GameHooks): GameInstance
 }
 
 interface GameInstance {
@@ -348,9 +354,9 @@ interface GameHooks {
 }
 ```
 
-## 8.3 LevelConfig 约定
+## 8.3 LevelConfig 约定（BaseLevelConfig，各游戏判别联合扩展）
 
-- 由 `createLevel(n)` 以「参数 + 种子」确定性生成（§9）
+- 由 `createLevel(n, track?)` 以「参数 + 种子」确定性生成（§9）
 - 各游戏自定义具体字段（拼图：网格规格/图片引用/方案 id；迷宫：尺寸/分支度/主题/种子；键盘：模式/序列长度/限时）
 - 必须可序列化（进存档仅存关卡号与方案引用，不存完整 config）
 
@@ -368,7 +374,7 @@ interface GameHooks {
 
 ## 8.5 新游戏接入步骤
 
-1. 新建 `games/xxx/`，实现 GameModule 五成员
+1. 新建 `games/xxx/`，实现 GameModule 必需五成员（id/name/icon/createLevel/mount；多轨或动态关卡可加 tracks/levelCount）
 2. `core/game-registry.ts` 注册一行
 3. 平台计时、存档、关卡管理、限时策略自动生效——无需改动 core/components
 
@@ -380,7 +386,7 @@ interface GameHooks {
 
 - **参数**：由关卡号 n 决定的难度参数（尺寸/长度/限时等）
 - **种子**：`hash(gameId + ':' + n)` 派生，保证同关卡内容恒定
-- 收益：无 150 个手工关卡文件；「第 37 关」可复现、可分享、可回归测试
+- 收益：无手工关卡配置文件；「第 37 关」可复现、可分享、可回归测试
 
 ## 9.2 PRNG
 
@@ -488,6 +494,7 @@ interface GameHooks {
 |---|---|---|
 | Qwen（阿里云百炼） | OpenAI 兼容模式 | 用户指定优先 |
 | GLM（智谱） | OpenAI 兼容模式 | 用户指定优先 |
+| DeepSeek | OpenAI 兼容模式 | 用户指定优先 |
 | 自定义 | 任意 OpenAI 兼容 base URL | 扩展预留 |
 
 API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存储，不上传）。AI 调用失败、超时、未配置时**自动降级本地算法，功能不中断**。AI 返回的建议同样经过块唯一性校验，不合法则降级。验收返工二轮起，建议只贡献 rows/cols（权重字段仅随方案入档作历史兼容，切割线恒均匀）；应用前与本地同块数网格做质量门槛对比（minScore 不占优则拒绝，回退本地）。
@@ -583,7 +590,7 @@ API Key / Base URL / 模型名在设置页配置，存 localStorage（本机存�
 
 ## 13.4 设置（core/settings.ts）
 
-全局设置项：**语言（locale，中/英，切换立即生效）**、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）、迷宫主题（mazeTheme，8 主题全集见 §12.3；**迷宫 HUD 内切换写入**，不在设置页暴露，缺省城堡，存档 v7 新增）。设置并入存档单一 key，经 settings.ts 统一读写。
+全局设置项：**语言（locale，中/英，切换立即生效）**、限时策略（关闭/竞赛/防沉迷 + 时长）、AI Provider 配置（provider/baseURL/model/key）、迷宫主题（mazeTheme，8 主题全集见 §12.3；**迷宫 HUD 内切换写入**，不在设置页暴露，缺省城堡，存档 v7 新增）。设置并入存档单一 key，经 settings.ts 统一读写。另设**自定义词表**（wordbank，存档独立段 v5）：设置页编辑英文/拼音词表覆盖，缺省回退引擎内嵌默认词表，仅键盘「英文单词 / 中文拼音」模式消费（词表模式取词口径见 §10.4）。
 
 ## 13.5 多语言（i18n）
 
@@ -620,13 +627,13 @@ AI 是**可选增强**而非依赖：唯一用例 = 拼图切块建议。未配�
 
 ```ts
 interface CutSuggestionProvider {
-  id: 'qwen' | 'glm' | 'custom'
-  requestCutSuggestion(image: ImageSource, timeoutMs: number): Promise<CutSuggestionJSON>
+  id: 'qwen' | 'glm' | 'deepseek' | 'custom'
+  requestCutSuggestion(imageDataUrl: string, timeoutMs: number): Promise<string>
 }
 ```
 
-- OpenAI 兼容 HTTP 调用（fetch + AbortController 超时）
-- 预设 Qwen（阿里云百炼）/ GLM（智谱）；自定义 base URL 扩展预留
+- OpenAI 兼容 HTTP 调用（fetch + AbortController 超时）；Provider 层只做「HTTP 进、文本出」，JSON 解析归引擎层规范化器
+- 预设 Qwen（阿里云百炼）/ GLM（智谱）/ DeepSeek（模型均须多模态，视觉建议必需）；自定义 base URL 扩展预留
 
 ## 14.3 配置与安全
 
@@ -663,7 +670,7 @@ AI 返回 JSON 统一经本地规范化器：schema 校验（行列划分 + 每�
 | 关卡定义 | TS 模块（内嵌） | `createLevel(n)` 参数化生成，规避 file:// 下 fetch JSON 的 CORS 限制 |
 | 英文词库 | TS 模块 | 分级词表（3 字母 → 8+ 字母），来源开源词表整理 |
 | 拼音词库 | TS 模块 | `{word:'学校', pinyin:'xue xiao'}` 结构，常用字词分级 |
-| 内置图库 | `assets/images/<专题>/` | M3 实施为确定性程序化生成 PNG（1024 源图仅绘制 + 192 分析缩略内嵌 `thumbs.ts`，`CREDITS.md` 标注，见 §15.3）；预留 CC0/CC-BY 收录位（≥1K，逐张标注） |
+| 内置图库 | `assets/images/<专题>/` | 24 张开放许可真实照片（Wikimedia Commons / Openclipart；2048 宽源图相对路径仅绘制 + 192 分析缩略内嵌 `thumbs.ts`，`CREDITS.md` 逐张标注，见 §15.3） |
 | 瓦片/sprite | `assets/tiles/<主题>/`、`assets/sprites/` | M4 实施为确定性程序化生成 PNG（gen-maze-assets.mjs：验收返工二轮 8 主题 × 4 瓦片 = 32 张 1024² + 768×1024 hero 条带共 33 文件约 399KB——像素画逻辑网格整数倍放大；CREDITS.md 标注随 MIT）；运行时 paletteSkin 色板兜底（§12.3），CC0 收录位保留（M6 后增量） |
 | 自定义图片 | FileReader 导入 → services/ 素材仓库 | 本地 IndexedDB 持久化（跨会话保留）；Web 二期服务端按用户隔离；不落仓库 |
 
@@ -689,22 +696,22 @@ FileReader 读取 → 经 `services/` 素材仓库持久化（本地 IndexedDB�
 | 页面/组件 | 职责 |
 |---|---|
 | 主菜单 | 三游戏入口 + 设置入口 |
-| 关卡选择 | 50 关网格、锁定态、星级/最佳用时 |
+| 关卡选择 | 关卡网格（键盘/迷宫 50 关；拼图先选专题、按方案动态）、锁定态、星级/最佳用时 |
 | 游戏容器 | 挂载 GameInstance、暂停/继续/退出、计时显示 |
 | 暂停 | 继续/重开/放弃/设置快捷入口 |
 | 结算 | 用时/星级/最佳对比/下一关/重玩 |
-| 设置 | 语言（中/英，立即生效）、限时策略、AI Provider、存档导出导入 |
-| 图片管理（拼图） | 导入图片、预切块工作流、方案列表与版本管理 |
+| 设置 | 语言（中/英，立即生效）、限时策略、AI Provider、自定义词表、存档导出导入 |
+| 方案管理（拼图） | 专题图库选择、本地导入建档、方案列表与就近编辑（新建置顶、编辑内联于对应卡片下方）、原位调整与删除 |
 
 ## 16.2 状态管理（Pinia）
 
-仅平台级状态建 store：`currentGame` / `levelProgress` / `settings` / `saveSnapshot`。游戏内部状态（拼图盘面、迷宫角色位置）留在 GameInstance 内部，**不进全局 store**。
+仅平台级状态建 store（`stores/platform.ts` 单一 store）：视图状态机（view / 当前关卡号与配置 / 挂载纪元 levelEpoch / 结算信息）、设置快照（写经 core/settings 持久化后同步刷新）、方案页自动批量导入标志等。游戏内部状态（拼图盘面、迷宫角色位置）留在 GameInstance 内部，**不进全局 store**。
 
 ## 16.3 前端工程规范
 
 - 视图切换：轻量状态切换（是否引入 vue-router 在 M1 实施时定，倾向不引入）
 - 组件命名 PascalCase；composable `use*.ts`；详见《代码规范》
-- UI 原型：`documents/ui/` 已建立六页平台级页面原型（主菜单/选关/暂停/结算/设置/方案管理，单文件 HTML 与实现样式同源，见该目录 README）
+- UI 原型：`documents/ui/` 为单文件交互式 HTML（主菜单/选关/游戏/设置/方案管理五视图 + 暂停/结算浮层，与实现样式同源，见该目录 README）
 
 # 17. 测试基线
 
@@ -727,9 +734,12 @@ FileReader 读取 → 经 `services/` 素材仓库持久化（本地 IndexedDB�
 
 ```
 LudoBurrow-vX.Y.Z/
-├── index.html
-└── assets/images/…（+ tiles/sprite）
+├── index.html / LICENSE / THIRD-PARTY-NOTICES.md
+├── manifest.webmanifest / sw.js / icons/（PWA）
+└── assets/{images, tiles, sprites, icons}
 ```
+
+完整产物结构与校验清单见《LudoBurrow 部署规范》§2（权威）。
 
 打包 zip 附 GitHub Release；产物不含测试代码与 node_modules。
 
@@ -748,11 +758,11 @@ LudoBurrow-vX.Y.Z/
 | M1 平台骨架 | core 全部 + 主菜单/关卡选择/存档 + **i18n 基建（中英）+ 运行环境适配层（LocalAdapter）** + file:// 与在线双模式跑通 | 存档往返、计时准确、语言切换生效、适配层接口就绪 |
 | M2 键盘游戏 | 四模式 + 50 关 + 虚拟键盘 UI | 全模式可玩 |
 | M3 拼图 | 本地切块引擎 + 布局 + 吸附/校验/放弃/帮助 + 切块方案管理 + **自定义素材本地持久化** + **内置图库齐备（每专题 ≥5 张）** | 50 关可玩，回滚进度隔离正确，素材合规标注完整 |
-| M4 迷宫 | 生成器 + 2 主题 + 像素小人 | 50 关可玩 |
+| M4 迷宫 | 生成器 + 主题瓦片（验收返工二轮补齐至 8 主题）+ 像素小人 | 50 关可玩 |
 | M5 AI 增强 | Qwen/GLM Provider + 切块建议 + 降级链 | AI 建议可用，离线不受影响 |
 | M6 打磨 | PWA 落地、图库复核扩充、发布流水线（含翻译齐备门禁） | 覆盖率 ≥80% + 翻译齐备，release 产物验证 |
 
-任务分解、AI 辅助开发工作流、验收标准明细（F-/NF-/Q- 编号）见《LudoBurrow 开发计划文档》（权威；内部文档，不入库）。
+任务分解、AI 辅助开发工作流、验收标准明细（F-/NF-/Q- 编号）见《LudoBurrow 开发计划文档》（一期历史文档，已归档至 `documents/design/历史存档/`，不入库）。
 
 ## 19.2 二期框架（Web 端登录与素材隔离 + iOS 移动端支持 + 横竖屏适配，一期预留）
 
@@ -763,7 +773,7 @@ LudoBurrow-vX.Y.Z/
 - `services/` 适配层：`EnvAdapter`（auth + assetRepo 两接口）与 LocalAdapter 全量实现，业务代码全部经适配层访问（§7.4）
 - 存档/设置/AI 配置等其余能力两模式共享同一实现（localStorage），无分叉
 
-**二期任务草案（实施时另立开发计划）**：服务端技术选型与实现（登录/会话 + 素材 REST + 按用户隔离存储）→ WebAdapter 实现 → 登录页/登出/会话过期处理 → 构建产物 Web 模式装配 → 双端一致性回归（除登录与素材隔离外零差异）→ 音效系统（音频引擎 + 设置开关 + 开源音效素材选型；一期开关已移除，见《开发计划文档》§四之二 W-5）→ iOS 移动端支持（PWA/移动端网页：iOS Safari 可玩 + 添加到主屏；触屏适配/安全区/离线，W-6）→ 横竖屏布局自适应（垂直翻转：适配不同长宽比显示屏，界面自适应重排 + 画布等比适配，W-7）。
+**二期任务草案（实施时另立开发计划）**：服务端技术选型与实现（登录/会话 + 素材 REST + 按用户隔离存储）→ WebAdapter 实现 → 登录页/登出/会话过期处理 → 构建产物 Web 模式装配 → 双端一致性回归（除登录与素材隔离外零差异）→ 音效系统（音频引擎 + 设置开关 + 开源音效素材选型；一期开关已移除）→ iOS 移动端支持（PWA/移动端网页：iOS Safari 可玩 + 添加到主屏；触屏适配/安全区/离线）→ 横竖屏布局自适应（垂直翻转：适配不同长宽比显示屏，界面自适应重排 + 画布等比适配）。
 
 **明确不做（二期也不做）**：云存档/进度同步、在线排行、多人对战。
 
@@ -774,7 +784,7 @@ LudoBurrow-vX.Y.Z/
 | 框架 | Vue 3 / Pinia / Vite | MIT |
 | 语言/类型 | TypeScript | Apache-2.0 |
 | 测试 | Vitest / @vue/test-utils / happy-dom | MIT |
-| 构建 | vite-plugin-singlefile | MIT（以 M1 锁定版本为准复核） |
+| 构建 | vite-plugin-singlefile | MIT（钉版 2.3.3，见代码规范 §十三） |
 | 素材 | Wikimedia Commons / Openclipart（图库）；gen-maze-assets / gen-pwa-icons（程序化生成） | 图库 CC0 / CC-BY / CC BY-SA / 公有领域（逐张标注）；程序化产物随 MIT |
 
 **重点合规关注**：
@@ -788,7 +798,7 @@ LudoBurrow-vX.Y.Z/
 | 维度 | 要求 |
 |---|---|
 | 性能 | 拼图拖拽、迷宫移动交互流畅（目标 60fps）；50 关最高难度下切块计算 < 2s |
-| 包体积 | 核心 zip 合理可控：内置图库程序化生成体积恒定（M6.1 扩至 24 张实测约 870KB，实施口径见 §15.3）+ 迷宫瓦片/sprite 程序化生成（验收返工二轮 8 主题全量后 33 文件约 399KB，见 §12.3/§12.4）+ PWA 产物轻量（manifest/sw.js/程序化图标，M6.2）。「按需分专题包」调整为：图库目录专题化**全量随包**（zip 下载即玩、50 关全可玩，体积恒定），在线版以 SW 按需缓存等价实现（部署规范 §5.3） |
+| 包体积 | 图库换源真实照片后全量随包（24 张 2048 宽，zip 以 Release 实测为准），在线版以 SW 按需缓存等价实现（部署规范 §5.3）；迷宫瓦片/sprite 程序化生成体积恒定（8 主题 33 文件约 399KB，见 §12.3/§12.4）；PWA 产物轻量（manifest/sw.js/程序化图标）。 |
 | 可靠性 | 存档损坏可提示恢复；AI 失败自动降级；图片加载失败占位提示不崩溃 |
 | 可维护性 | engines 纯逻辑可单测；新游戏零侵入接入；文档与代码同步 |
 | 隐私 | 用户图片与 AI Key 仅存本机；除用户主动触发的 AI 请求外无任何网络传输 |
@@ -798,7 +808,7 @@ LudoBurrow-vX.Y.Z/
 | # | 风险 | 对策 |
 |---|---|---|
 | R-01 | file:// 各浏览器行为差异 | M1 即建立浏览器矩阵冒烟（Chrome/Edge/Firefox），此后每里程碑回归 |
-| R-02 | 1K 图片本地包体积大 | 内置图库程序化生成（体积恒定可控，M3.9/M6.1 实施口径见 §15.3，24 张约 870KB 全量随包）+ 在线版 SW 按需缓存（部署规范 §5.3） |
+| R-02 | 1K 图片本地包体积大 | 图库 24 张真实照片全量随包（体积换清晰度，zip 大小以 Release 实测为准）+ 在线版 SW 按需缓存（部署规范 §5.3）；瓦片/sprite 程序化生成体积恒定 |
 | R-03 | 切块算法产生歧义块 | 块唯一性评分（颜色方差/边缘特征）低于阈值的规格在优选/建议链路被抑制（验收返工二轮起切割恒均匀，不再挪线）；AI 建议同样过此校验 |
 | R-04 | 视觉 AI 返回不合法切割建议 | Provider 输出统一走本地规范化器（schema 校验 + 合法化），无效则降级 |
 | R-05 | localStorage 容量/清空 | 存档 < 1MB 设计；导出备份；损坏提示恢复不静默清空 |
