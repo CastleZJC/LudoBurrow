@@ -64,6 +64,36 @@ html, body {
 }
 .primary-btn:hover, .secondary-btn:hover { filter: brightness(1.05); }
 
+/* ===== 公共组件（对齐 components/：PageHeader / ModalOverlay / FilePickButton / ConfirmButton / FeedbackLine） ===== */
+.page-header { display: flex; align-items: center; gap: 16px; }
+.page-title { margin: 0; font-size: 24px; flex: 1; }
+.page-actions { display: flex; gap: 10px; }
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(0 0 0 / 50%);
+}
+.modal-overlay.is-fixed { position: fixed; }
+.modal-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-lg);
+}
+.file-btn { position: relative; overflow: hidden; cursor: pointer; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.is-danger:hover { border-color: #c0392b; color: #c0392b; }
+.feedback-line { margin: 0; font-size: 14px; color: var(--color-text-secondary); }
+
 /* ===== 主菜单（对齐 MainMenu.vue） ===== */
 .main-menu {
   display: flex;
@@ -96,8 +126,6 @@ html, body {
 
 /* ===== 选关页（对齐 LevelSelect.vue） ===== */
 .level-select { padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
-.select-header { display: flex; align-items: center; gap: 16px; }
-.select-title { margin: 0; font-size: 24px; }
 .progress-line { margin: 0; color: var(--color-text-secondary); }
 .track-tabs { display: flex; flex-wrap: wrap; gap: 10px; }
 .track-tab {
@@ -151,66 +179,16 @@ html, body {
 .hud { display: flex; align-items: center; gap: 16px; }
 .hud-time { font-variant-numeric: tabular-nums; font-weight: 600; }
 .game-host { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-.rest-lock {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: rgb(0 0 0 / 55%);
-  color: #fff;
-  font-size: 22px;
-  z-index: 30;
-}
+/* 休息锁定 = ModalOverlay card=false（遮罩样式见公共组件节；此处仅内容口径，z=30 由内联样式给定） */
+.rest-lock { color: #fff; font-size: 22px; }
 .rest-countdown { font-variant-numeric: tabular-nums; }
 
-/* ===== 暂停浮层（对齐 PauseOverlay.vue） ===== */
-.pause-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 45%);
-  z-index: 20;
-}
-.pause-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 32px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  align-items: center;
-  box-shadow: var(--shadow-lg);
-}
-.pause-card h3 { margin: 0; font-size: 24px; }
+/* ===== 暂停浮层（对齐 PauseOverlay.vue：ModalOverlay z=20 + 卡片） ===== */
+[data-role="pause"] h3 { margin: 0; font-size: 24px; }
 .pause-actions { display: flex; flex-direction: column; gap: 10px; min-width: 200px; }
 
-/* ===== 结算面板（对齐 SettlePanel.vue） ===== */
-.settle-panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 50%);
-  z-index: 40;
-}
-.settle-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 32px 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  box-shadow: var(--shadow-lg);
-  min-width: 320px;
-}
-.settle-card h3 { margin: 0; font-size: 28px; }
+/* ===== 结算面板（对齐 SettlePanel.vue：ModalOverlay z=40 + 卡片） ===== */
+[data-role="settle"] h3 { margin: 0; font-size: 28px; }
 .is-success { color: var(--color-primary); }
 .is-fail { color: var(--color-danger); }
 .stars { font-size: 40px; color: var(--color-accent); letter-spacing: 4px; }
@@ -229,7 +207,6 @@ html, body {
   gap: 24px;
   max-width: 720px;
 }
-.settings-panel h2 { margin: 0; }
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
 .settings-section h3 { margin: 0; font-size: 16px; color: var(--color-text-secondary); }
 .text-row { display: flex; flex-direction: column; gap: 6px; max-width: 420px; }
@@ -243,7 +220,6 @@ html, body {
 }
 .radio-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .hint { font-size: 12px; color: var(--color-text-secondary); }
-.feedback { color: var(--color-primary); font-weight: 700; font-size: 14px; min-height: 18px; margin: 0; }
 .wb-text { max-width: 420px; border-radius: 4px; min-height: 120px; resize: vertical; }
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 
@@ -264,17 +240,8 @@ html, body {
 }
 .sm-item.is-on { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .sm-item .sm-meta { color: var(--color-text-secondary); font-size: 14px; }
-.sm-del {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.sm-del:hover { color: var(--color-danger); }
+.sm-item [data-del] { margin-left: auto; }
+.sm-upload-ok { font-size: 13px; color: var(--color-text-secondary); }
 .sm-editor {
   max-width: 560px;
   padding: 20px;
@@ -325,7 +292,6 @@ html, body {
   background: #fff;
 }
 .sm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.sm-feedback { font-size: 13px; color: var(--color-primary); font-weight: 600; min-height: 18px; margin: 0; }
 .sm-empty { color: var(--color-text-secondary); font-size: 14px; }
 
 /* ===== 键盘按键游戏（对齐 src/style.css kg-*） ===== */
@@ -572,14 +538,14 @@ function esc(v) {
 /* ================= i18n（对齐 src/i18n/zh-CN.ts / en-US.ts，键值 1:1） ================= */
 const T = {
   'zh-CN': {
-    'common.confirm': '确认', 'common.cancel': '取消', 'common.back': '返回', 'common.close': '关闭',
-    'common.retry': '重玩', 'common.next': '下一关', 'common.ok': '好的', 'common.settings': '设置',
+    'common.cancel': '取消', 'common.back': '返回',
+    'common.retry': '重玩', 'common.next': '下一关', 'common.settings': '设置',
     'common.time': '用时', 'common.mistakes': '失误',
+    'common.exitLevel': '退出关卡', 'common.steps': '步数',
     'locale.zh-CN': '简体中文', 'locale.en-US': 'English',
     'app.title': 'LudoBurrow 玩趣洞', 'app.subtitle': '免安装的益智游戏小窝', 'app.credit': '© 2026 castle.zhang',
-    'menu.play': '开始玩',
     'game.keygame': '键盘按键', 'game.jigsaw': '拼图', 'game.maze': '迷宫',
-    'keygame.modeSelect': '选择模式', 'keygame.modeFull': '全键盘', 'keygame.modeCompact': '紧凑键盘',
+    'keygame.modeFull': '全键盘', 'keygame.modeCompact': '紧凑键盘',
     'keygame.modeEnglish': '英文单词', 'keygame.modePinyin': '中文拼音',
     'keygame.prompt': '按虚拟键盘高亮键，依次准确输入目标内容',
     'jigsaw.help': '帮助', 'jigsaw.abandon': '放弃', 'jigsaw.grid': '网格 {n}×{n}', 'jigsaw.helps': '帮助 {n} 次',
@@ -615,15 +581,14 @@ const T = {
     'schemes.delete': '删除', 'schemes.deleteConfirm': '确认删除？', 'schemes.edit': '调整', 'schemes.editScheme': '调整方案',
     'schemes.empty': '还没有自定义方案，新建一个试试', 'schemes.customImage': '自定义图片',
     'schemes.invalidParams': '参数超出范围', 'schemes.needImage': '请先上传图片',
-    'level.title': '选择关卡', 'level.locked': '未解锁', 'level.best': '最佳', 'level.levelN': '第 {n} 关',
+    'level.title': '选择关卡', 'level.best': '最佳', 'level.levelN': '第 {n} 关',
     'level.progress': '已解锁 {unlocked}/{total} 关',
     'level.emptyTopic': '该专题暂无切片方案，去「拼图方案」新建一个吧',
     'level.emptyImport': '导入本地图片并自动最优切块', 'level.analyzing': '正在为图库每张图分析最优切块…',
     'container.pause': '暂停', 'container.progress': '进度',
-    'pause.title': '暂停中', 'pause.resume': '继续', 'pause.retry': '重玩本关', 'pause.exit': '退出关卡',
-    'settle.success': '过关！', 'settle.fail': '挑战失败', 'settle.stars': '星级', 'settle.best': '历史最佳',
-    'settle.newBest': '新纪录！', 'settle.steps': '步数', 'settle.helps': '帮助次数',
-    'timeLimit.reachedCompetition': '时间到！本关挑战结束',
+    'pause.title': '暂停中', 'pause.resume': '继续',
+    'settle.success': '过关！', 'settle.fail': '挑战失败', 'settle.best': '历史最佳',
+    'settle.newBest': '新纪录！', 'settle.helps': '帮助次数',
     'timeLimit.reachedAntiAddiction': '该休息一下啦，眼睛看一看远处吧',
     'timeLimit.lockRemaining': '休息锁定中，还剩 {minutes} 分钟',
     'settings.language': '语言（切换立即生效）',
@@ -647,17 +612,16 @@ const T = {
     'settings.wbResetCategory': '恢复本类默认', 'settings.wbResetAll': '全部恢复默认', 'settings.wbResetDone': '词表已恢复默认',
     'save.corruptTitle': '存档数据损坏', 'save.corruptBody': '检测到本地存档无法读取。可导入之前导出的备份恢复，或重置存档重新开始。',
     'save.corruptReset': '重置存档', 'save.corruptImport': '导入备份',
-    'corruptExit.loadFail': '加载异常，请尝试直接双击 index.html 打开',
   },
   'en-US': {
-    'common.confirm': 'OK', 'common.cancel': 'Cancel', 'common.back': 'Back', 'common.close': 'Close',
-    'common.retry': 'Retry', 'common.next': 'Next Level', 'common.ok': 'Got it', 'common.settings': 'Settings',
+    'common.cancel': 'Cancel', 'common.back': 'Back',
+    'common.retry': 'Retry', 'common.next': 'Next Level', 'common.settings': 'Settings',
     'common.time': 'Time', 'common.mistakes': 'Mistakes',
+    'common.exitLevel': 'Exit Level', 'common.steps': 'Steps',
     'locale.zh-CN': '简体中文', 'locale.en-US': 'English',
     'app.title': 'LudoBurrow', 'app.subtitle': 'An install-free puzzle game burrow', 'app.credit': '© 2026 castle.zhang',
-    'menu.play': 'Play',
     'game.keygame': 'Key Press', 'game.jigsaw': 'Jigsaw', 'game.maze': 'Maze',
-    'keygame.modeSelect': 'Select Mode', 'keygame.modeFull': 'Full Keyboard', 'keygame.modeCompact': 'Compact Keyboard',
+    'keygame.modeFull': 'Full Keyboard', 'keygame.modeCompact': 'Compact Keyboard',
     'keygame.modeEnglish': 'English Words', 'keygame.modePinyin': 'Chinese Pinyin',
     'keygame.prompt': 'Type the highlighted keys in order',
     'jigsaw.help': 'Help', 'jigsaw.abandon': 'Abandon', 'jigsaw.grid': 'Grid {n}×{n}', 'jigsaw.helps': 'Helps: {n}',
@@ -693,15 +657,14 @@ const T = {
     'schemes.delete': 'Delete', 'schemes.deleteConfirm': 'Confirm delete?', 'schemes.edit': 'Edit', 'schemes.editScheme': 'Edit Scheme',
     'schemes.empty': 'No custom schemes yet. Create one!', 'schemes.customImage': 'Custom image',
     'schemes.invalidParams': 'Parameters out of range', 'schemes.needImage': 'Please upload an image first',
-    'level.title': 'Select Level', 'level.locked': 'Locked', 'level.best': 'Best', 'level.levelN': 'Level {n}',
+    'level.title': 'Select Level', 'level.best': 'Best', 'level.levelN': 'Level {n}',
     'level.progress': '{unlocked}/{total} levels unlocked',
     'level.emptyTopic': 'No cut schemes in this topic yet — create one in Jigsaw Schemes',
     'level.emptyImport': 'Import local images (auto best-fit)', 'level.analyzing': 'Analyzing the gallery to pick optimal cuts…',
     'container.pause': 'Pause', 'container.progress': 'Progress',
-    'pause.title': 'Paused', 'pause.resume': 'Resume', 'pause.retry': 'Restart Level', 'pause.exit': 'Exit Level',
-    'settle.success': 'Level Clear!', 'settle.fail': 'Challenge Failed', 'settle.stars': 'Stars', 'settle.best': 'Best',
-    'settle.newBest': 'New Record!', 'settle.steps': 'Steps', 'settle.helps': 'Helps',
-    'timeLimit.reachedCompetition': "Time's up! This level challenge has ended",
+    'pause.title': 'Paused', 'pause.resume': 'Resume',
+    'settle.success': 'Level Clear!', 'settle.fail': 'Challenge Failed', 'settle.best': 'Best',
+    'settle.newBest': 'New Record!', 'settle.helps': 'Helps',
     'timeLimit.reachedAntiAddiction': 'Time to rest. Look at something far away',
     'timeLimit.lockRemaining': 'Rest lock: {minutes} min remaining',
     'settings.language': 'Language (applies instantly)',
@@ -725,7 +688,6 @@ const T = {
     'settings.wbResetCategory': 'Reset This List', 'settings.wbResetAll': 'Reset All to Default', 'settings.wbResetDone': 'Wordbank reset to default',
     'save.corruptTitle': 'Save data corrupted', 'save.corruptBody': 'The local save cannot be read. Import a previous backup to restore, or reset the save.',
     'save.corruptReset': 'Reset Save', 'save.corruptImport': 'Import Backup',
-    'corruptExit.loadFail': 'Load error. Try opening index.html directly',
   },
 };
 function t(key, params) {
@@ -979,10 +941,10 @@ function renderSelect() {
   const trackLabel = tracks ? t(tracks.find((x) => x.id === track).labelKey) : t('level.title');
   app.innerHTML = `
     <div class="level-select" data-view="select">
-      <header class="select-header">
+      <header class="page-header">
         <button class="secondary-btn" data-nav="back">${esc(t('common.back'))}</button>
-        <h2 class="select-title">${esc(t(game.nameKey))} · ${esc(trackLabel)}</h2>
-        ${S.sel.game === 'jigsaw' ? `<button class="secondary-btn" data-nav="schemes">${esc(t('schemes.title'))}</button>` : ''}
+        <h2 class="page-title">${esc(t(game.nameKey))} · ${esc(trackLabel)}</h2>
+        <div class="page-actions">${S.sel.game === 'jigsaw' ? `<button class="secondary-btn" data-nav="schemes">${esc(t('schemes.title'))}</button>` : ''}</div>
       </header>
       ${tabs}
       <p class="progress-line">${esc(t('level.progress', { unlocked: unlockedN, total }))}</p>
@@ -1145,7 +1107,8 @@ function renderGame() {
   }
   function showRestLock() {
     const div = document.createElement('div');
-    div.className = 'rest-lock';
+    div.className = 'modal-overlay rest-lock';
+    div.style.zIndex = '30';
     div.setAttribute('data-role', 'rest-lock');
     div.innerHTML = `<p>${esc(t('timeLimit.reachedAntiAddiction'))}</p>
       <p class="rest-countdown">${esc(t('timeLimit.lockRemaining', { minutes: S.restLockMin }))}</p>`;
@@ -1168,15 +1131,16 @@ function renderGame() {
   }
   function showPause() {
     const div = document.createElement('div');
-    div.className = 'pause-overlay';
+    div.className = 'modal-overlay';
+    div.style.zIndex = '20';
     div.setAttribute('data-role', 'pause');
     div.innerHTML = `
-      <div class="pause-card">
+      <div class="modal-card">
         <h3>${esc(t('pause.title'))}</h3>
         <div class="pause-actions">
           <button class="primary-btn" data-nav="resume">${esc(t('pause.resume'))}</button>
-          <button class="secondary-btn" data-nav="retry">${esc(t('pause.retry'))}</button>
-          <button class="secondary-btn" data-nav="exit">${esc(t('pause.exit'))}</button>
+          <button class="secondary-btn" data-nav="retry">${esc(t('common.retry'))}</button>
+          <button class="secondary-btn" data-nav="exit">${esc(t('common.exitLevel'))}</button>
         </div>
       </div>`;
     $('.game-container').appendChild(div);
@@ -1213,13 +1177,14 @@ function renderGame() {
     const info = S.settle;
     const total = GAMES[level.gameId].levelCount(level.track || undefined);
     const isLast = level.n >= total;
-    const scoreLabelKey = level.gameId === 'jigsaw' ? 'settle.helps' : level.gameId === 'maze' ? 'settle.steps' : 'common.mistakes';
+    const scoreLabelKey = level.gameId === 'jigsaw' ? 'settle.helps' : level.gameId === 'maze' ? 'common.steps' : 'common.mistakes';
     const best = getRecord(level);
     const div = document.createElement('div');
-    div.className = 'settle-panel';
+    div.className = 'modal-overlay';
+    div.style.zIndex = '40';
     div.setAttribute('data-role', 'settle');
     div.innerHTML = `
-      <div class="settle-card">
+      <div class="modal-card">
         <h3 class="${info.isFail ? 'is-fail' : 'is-success'}">${esc(info.isFail ? t('settle.fail') : t('settle.success'))}</h3>
         <div class="stars" data-role="stars">${'★'.repeat(info.result.stars)}${'☆'.repeat(3 - info.result.stars)}</div>
         <dl class="settle-stats">
@@ -1231,7 +1196,7 @@ function renderGame() {
         <div class="settle-actions">
           <button class="secondary-btn" data-nav="retry">${esc(t('common.retry'))}</button>
           ${!info.isFail && !isLast ? `<button class="primary-btn" data-nav="next">${esc(t('common.next'))}</button>` : ''}
-          <button class="secondary-btn" data-nav="exit">${esc(t('pause.exit'))}</button>
+          <button class="secondary-btn" data-nav="exit">${esc(t('common.exitLevel'))}</button>
         </div>
       </div>`;
     $('.game-container').appendChild(div);
@@ -2517,7 +2482,7 @@ function mountMaze(host, level, hooks) {
   const bumpsEl = $('[data-mz="bumps"]', root);
 
   function refreshHud() {
-    stepsEl.textContent = `${t('settle.steps')} ${hero.steps}`;
+    stepsEl.textContent = `${t('common.steps')} ${hero.steps}`;
     bumpsEl.textContent = `${t('common.mistakes')} ${hero.bumps}`;
   }
   function refreshProgress() {
@@ -2684,8 +2649,8 @@ function smRenderEditor() {
         </div>` : `
         <div class="sm-field">
           <label>${esc(t('schemes.upload'))}</label>
-          <input type="file" data-sm="file" accept="image/*">
-          <span class="hint">${esc(src && !src.builtin ? src.name : sm.fileName || '')}</span>
+          <label class="file-btn primary-btn">${esc(t('schemes.upload'))}<input type="file" data-sm="file" accept="image/*"></label>
+          <span class="sm-upload-ok" data-sm="upload-ok">${esc((src && !src.builtin) ? `${t('schemes.uploadOk')}：${src.name}` : (sm.fileName ? `${t('schemes.uploadOk')}：${sm.fileName}` : ''))}</span>
         </div>`}
       <div class="sm-field">
         <label>${esc(t('schemes.rows'))}</label>
@@ -2698,7 +2663,7 @@ function smRenderEditor() {
         <input type="number" data-sm="tab" min="0.08" max="0.25" step="0.01" value="${effTab}">
       </div>
       <canvas class="sm-preview" data-sm="preview" width="520" height="220"></canvas>
-      <p class="sm-feedback" data-sm="feedback">${esc(sm.feedback)}</p>
+      <p class="feedback-line" data-sm="feedback">${esc(sm.feedback)}</p>
       <div class="sm-actions">
         <button class="primary-btn" data-sm="save">${esc(t('schemes.save'))}</button>
         ${isEdit ? `<button class="secondary-btn" data-sm="cancel">${esc(t('common.cancel'))}</button>` : ''}
@@ -2709,12 +2674,13 @@ function renderSchemes() {
   const list = S.userSchemes;
   app.innerHTML = `
     <div class="schemes-page" data-view="schemes">
-      <header class="select-header">
+      <header class="page-header">
         <button class="secondary-btn" data-nav="back">${esc(t('common.back'))}</button>
-        <h2 class="select-title">${esc(t('schemes.title'))}</h2>
-        <button class="primary-btn" data-sm="new">${esc(t('schemes.newScheme'))}</button>
-        <button class="secondary-btn" data-sm="batch">${esc(t('schemes.batchImport'))}</button>
-        <input type="file" data-sm="batch-files" accept="image/*" multiple hidden>
+        <h2 class="page-title">${esc(t('schemes.title'))}</h2>
+        <div class="page-actions">
+          <label class="file-btn primary-btn">${esc(sm.batchBusy ? t('schemes.batchBusy') : t('schemes.batchImport'))}<input type="file" data-sm="batch-files" accept="image/*" multiple${sm.batchBusy ? ' disabled' : ''}></label>
+          <button class="primary-btn" data-sm="new">${esc(t('schemes.newScheme'))}</button>
+        </div>
       </header>
       <div class="sm-list">
         ${!sm.editingId ? smRenderEditor() : ''}
@@ -2722,17 +2688,19 @@ function renderSchemes() {
           <div class="sm-item${sm.editingId === s.id ? ' is-on' : ''}" data-scheme="${s.id}">
             <span>${esc(s.name)}</span>
             <span class="sm-meta">${s.rows}×${s.cols}${s.mode === 'ai' ? ' · AI' : ''}</span>
-            <button class="sm-del" data-del="${s.id}">${esc(sm.deleteArmId === s.id && Date.now() < sm.deleteArmUntil ? t('schemes.deleteConfirm') : t('schemes.delete'))}</button>
+            <button class="secondary-btn is-danger" data-del="${s.id}">${esc(sm.deleteArmId === s.id && Date.now() < sm.deleteArmUntil ? t('schemes.deleteConfirm') : t('schemes.delete'))}</button>
           </div>
           ${sm.editingId === s.id ? smRenderEditor() : ''}`).join('')}
       </div>
     </div>`;
   $('[data-nav="back"]').addEventListener('click', () => go('select', { game: 'jigsaw', track: 'custom' }));
   $('[data-sm="new"]').addEventListener('click', () => { resetSm(); renderSchemes(); });
-  const batchBtn = $('[data-sm="batch"]');
   const batchInput = $('[data-sm="batch-files"]');
-  batchBtn.addEventListener('click', () => batchInput.click());
-  batchInput.addEventListener('change', () => smBatchImport(batchInput.files));
+  batchInput.addEventListener('change', () => {
+    const files = Array.from(batchInput.files);
+    batchInput.value = ''; // 清空选择，允许重复导入同一批文件
+    smBatchImport(files);
+  });
   $$('[data-del]').forEach((el) => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.del;
@@ -2769,6 +2737,7 @@ function renderSchemes() {
   const fileInput = $('[data-sm="file"]', editor);
   if (fileInput) fileInput.addEventListener('change', () => {
     const f = fileInput.files[0];
+    fileInput.value = ''; // 清空选择，允许重复选取同一文件
     if (!f) return;
     if (!f.type.startsWith('image/')) { sm.feedback = t('schemes.notImage'); renderSchemes(); return; }
     if (sm.fileUrl) URL.revokeObjectURL(sm.fileUrl);
@@ -2783,7 +2752,7 @@ function renderSchemes() {
       sm.imgCanvas = cv;
       if (sm.mode !== 'custom') smAutoAnalyze(editor);
       else smPaintPreview(editor);
-      $('[data-sm="feedback"]', editor).textContent = sm.feedback = t('schemes.uploadOk');
+      $('[data-sm="upload-ok"]', editor).textContent = `${t('schemes.uploadOk')}：${sm.fileName}`;
     };
     img.onerror = () => { $('[data-sm="feedback"]', editor).textContent = sm.feedback = t('schemes.uploadFail'); };
     img.src = sm.fileUrl;
@@ -2901,6 +2870,7 @@ function smSchemeExists(sourceKey) {
   return S.userSchemes.some((s) => s.sourceKey === sourceKey);
 }
 function smSave(editor) {
+  const saveBtn = $('[data-sm="save"]', editor);
   const name = ($('[data-sm="name"]', editor).value || '').trim();
   const rows = Number($('[data-sm="rows"]', editor).value);
   const cols = Number($('[data-sm="cols"]', editor).value);
@@ -3002,9 +2972,10 @@ function renderSettings() {
   app.innerHTML = `
     <div class="settings-page" data-view="settings">
       <div class="settings-panel">
-        <header class="select-header">
+        <header class="page-header">
           <button class="secondary-btn" data-nav="back">${esc(t('common.back'))}</button>
-          <h2>${esc(t('common.settings'))}</h2>
+          <h2 class="page-title">${esc(t('common.settings'))}</h2>
+          <div class="page-actions"></div>
         </header>
         <section class="settings-section">
           <h3>${esc(t('common.settings'))}</h3>
@@ -3057,16 +3028,15 @@ function renderSettings() {
             <button class="secondary-btn" data-wb="reset-one">${esc(t('settings.wbResetCategory'))}</button>
             <button class="secondary-btn" data-wb="reset-all">${esc(t('settings.wbResetAll'))}</button>
           </div>
-          <p class="feedback" data-wb="feedback"></p>
+          <p class="feedback-line" data-wb="feedback"></p>
         </section>
         <section class="settings-section">
           <h3>${esc(t('settings.saveSection'))}</h3>
           <div class="sm-actions">
             <button class="secondary-btn" data-save="export">${esc(t('settings.saveExport'))}</button>
-            <button class="secondary-btn" data-save="import">${esc(t('settings.saveImport'))}</button>
-            <input type="file" data-save="import-file" accept="application/json" hidden>
+            <label class="file-btn secondary-btn">${esc(t('settings.saveImport'))}<input type="file" data-save="import-file" accept="application/json"></label>
           </div>
-          <p class="feedback" data-save="feedback"></p>
+          <p class="feedback-line" data-save="feedback"></p>
         </section>
       </div>
     </div>`;
@@ -3130,9 +3100,9 @@ function renderSettings() {
     URL.revokeObjectURL(a.href);
     saveFb.textContent = t('settings.saveExportDone');
   });
-  $('[data-save="import"]').addEventListener('click', () => $('[data-save="import-file"]').click());
   $('[data-save="import-file"]').addEventListener('change', (e) => {
     const f = e.target.files[0];
+    e.target.value = ''; // 清空选择，允许重复选取同一文件
     if (!f) return;
     const reader = new FileReader();
     reader.onload = () => {
