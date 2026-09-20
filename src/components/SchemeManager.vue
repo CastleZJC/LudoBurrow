@@ -4,7 +4,7 @@
 // 编辑器抽为 SchemeEditor 子组件（就近内联）：新建 = 列表顶部；编辑 = 被编辑卡片正下方。
 // 重新切块确认（F-18）在子组件内部处理：同图已有方案在玩时保存需二次确认。
 
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnvAdapter } from '@/services'
 import type { JigsawSchemeData } from '@/core/save'
@@ -13,6 +13,11 @@ import { createScheme, deleteScheme, listSchemes } from '@/games/jigsaw/schemes'
 import { pickBestSpec } from '@/games/jigsaw/optimize'
 import { levelSeed } from '@/engines/rng'
 import { downscaleToAnalysis, loadSourceImage, type ComplexityLevel } from '@/games/jigsaw/gallery'
+import { blobToDataUrl, persistImageFile } from '@/games/jigsaw/assets'
+import PageHeader from '@/components/PageHeader.vue'
+import FilePickButton from '@/components/FilePickButton.vue'
+import ConfirmButton from '@/components/ConfirmButton.vue'
+import FeedbackLine from '@/components/FeedbackLine.vue'
 import SchemeEditor from '@/components/SchemeEditor.vue'
 
 const { t } = useI18n()
@@ -65,24 +70,10 @@ function modeLabel(scheme: JigsawSchemeData): string {
   )
 }
 
-// 删除二次确认（首次点按弹确认态，3 秒未确认自动复原；有成绩的方案同样保留该确认门槛）
-const confirmDeleteId = ref<string | null>(null)
-let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null
-
-function askDelete(schemeId: string): void {
-  if (confirmDeleteId.value !== schemeId) {
-    confirmDeleteId.value = schemeId
-    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer)
-    confirmDeleteTimer = setTimeout(() => (confirmDeleteId.value = null), 3000)
-    return
-  }
+// 删除二次确认（ConfirmButton 首击武装/3 秒未确认自动复原/二击执行；正在编辑的方案被删时同步关面板）
+function onDeleteConfirm(schemeId: string): void {
   deleteScheme(schemeId)
   if (editingId.value === schemeId) closePanel()
-  confirmDeleteId.value = null
-  if (confirmDeleteTimer) {
-    clearTimeout(confirmDeleteTimer)
-    confirmDeleteTimer = null
-  }
   refresh()
 }
 
@@ -91,26 +82,9 @@ function askDelete(schemeId: string): void {
 // → 建方案（确定性 seed）；单张失败跳过不阻断整批；建完即出现在 custom 专题可开玩。
 const batchImporting = ref(false)
 const batchFeedback = ref('')
-const batchInput = ref<HTMLInputElement | null>(null)
+const batchPicker = ref<InstanceType<typeof FilePickButton> | null>(null)
 
-function triggerBatchImport(): void {
-  if (batchImporting.value) return
-  batchInput.value?.click()
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader 失败'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-async function onBatchImport(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  input.value = '' // 清空选择，允许重复导入同一批文件
+async function onBatchFiles(files: File[]): Promise<void> {
   if (files.length === 0) return
   batchImporting.value = true
   batchFeedback.value = t('schemes.batchBusy')
@@ -122,12 +96,7 @@ async function onBatchImport(event: Event): Promise<void> {
     const level = ((idx % 3) + 1) as ComplexityLevel // 轮转难度档（成败都推进，序号即多样性来源）
     idx += 1
     try {
-      const ref = await adapter.assetRepo.saveImage(file, {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        addedAt: Date.now(),
-      })
+      const ref = await persistImageFile(file)
       const blob = await adapter.assetRepo.loadImage({ id: ref.id })
       const img = await loadSourceImage(await blobToDataUrl(blob))
       const best = pickBestSpec(downscaleToAnalysis(img), level)
@@ -158,42 +127,33 @@ async function onBatchImport(event: Event): Promise<void> {
 onMounted(() => {
   if (platform.schemesAutoBatch) {
     platform.schemesAutoBatch = false
-    triggerBatchImport()
+    batchPicker.value?.open()
   }
-})
-
-onBeforeUnmount(() => {
-  if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer)
 })
 </script>
 
 <template>
   <div class="scheme-manager" data-view="schemes">
-    <header class="sm-header">
-      <button class="secondary-btn" data-nav="back" @click="platform.exitToSelect()">
-        {{ t('common.back') }}
-      </button>
-      <h2 class="sm-title">{{ t('schemes.title') }}</h2>
-      <div v-if="!panelOpen" class="sm-header-actions">
-        <button class="primary-btn" data-role="batch-import" :disabled="batchImporting" @click="triggerBatchImport">
+    <PageHeader :title="t('schemes.title')" @back="platform.exitToSelect()">
+      <template v-if="!panelOpen" #actions>
+        <FilePickButton
+          ref="batchPicker"
+          variant="primary"
+          accept="image/*"
+          multiple
+          data-role="batch-input"
+          :disabled="batchImporting"
+          @files="onBatchFiles"
+        >
           {{ batchImporting ? t('schemes.batchBusy') : t('schemes.batchImport') }}
-        </button>
+        </FilePickButton>
         <button class="primary-btn" data-role="new-scheme" @click="openPanel">
           {{ t('schemes.newScheme') }}
         </button>
-        <input
-          ref="batchInput"
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          data-role="batch-input"
-          @change="onBatchImport"
-        />
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
-    <p v-if="batchFeedback" class="sm-batch-feedback" data-role="batch-feedback">{{ batchFeedback }}</p>
+    <FeedbackLine v-if="batchFeedback" data-role="batch-feedback">{{ batchFeedback }}</FeedbackLine>
 
     <section class="sm-list">
       <!-- 新建：编辑器 = 列表第一个元素（最顶） -->
@@ -222,13 +182,14 @@ onBeforeUnmount(() => {
             >
               {{ t('schemes.edit') }}
             </button>
-            <button
-              class="secondary-btn sm-danger"
-              :data-role="confirmDeleteId === s.id ? 'delete-confirm' : 'delete-scheme'"
-              @click="askDelete(s.id)"
-            >
-              {{ confirmDeleteId === s.id ? t('schemes.deleteConfirm') : t('schemes.delete') }}
-            </button>
+            <ConfirmButton
+              :label="t('schemes.delete')"
+              :confirm-label="t('schemes.deleteConfirm')"
+              variant="danger"
+              role="delete-scheme"
+              confirm-role="delete-confirm"
+              @confirm="onDeleteConfirm(s.id)"
+            />
           </div>
         </div>
         <!-- 编辑：编辑器 = 被编辑卡片正下方（key=方案 id，换目标即重挂载重新预填） -->
@@ -251,25 +212,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.sm-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.sm-header-actions {
-  display: flex;
-  gap: 10px;
-}
-.sm-batch-feedback {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-.sm-title {
-  margin: 0;
-  font-size: 24px;
-  flex: 1;
 }
 .sm-list {
   display: flex;
@@ -302,10 +244,6 @@ onBeforeUnmount(() => {
 .sm-actions {
   display: flex;
   gap: 10px;
-}
-.sm-danger:hover {
-  border-color: #c0392b;
-  color: #c0392b;
 }
 .sm-empty {
   color: var(--color-text-secondary);

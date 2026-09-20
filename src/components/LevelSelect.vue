@@ -5,6 +5,7 @@ import { getGame } from '@/core/game-registry'
 import { getLevelRecords, getUnlockedCount, isUnlocked, progressSlotKey, TOTAL_LEVELS } from '@/core/level-manager'
 import type { LevelRecord } from '@/core/types'
 import { usePlatformStore } from '@/stores/platform'
+import PageHeader from '@/components/PageHeader.vue'
 import { schemesForTopic } from '@/games/jigsaw/schemes'
 import type { JigsawTopicId } from '@/games/jigsaw/schemes'
 import { warmBuiltinOptima } from '@/games/jigsaw/optimize'
@@ -48,6 +49,11 @@ const selectedTrackLabel = computed(() => {
   const tr = tracks?.find((x) => x.id === selectedTrack.value)
   return tr ? t(tr.labelKey) : ''
 })
+
+/** 页头标题：游戏名 · 轨名（多轨）/「选择关卡」（单轨） */
+const headerTitle = computed(
+  () => `${t(gameNameKey.value)} · ${tracks ? selectedTrackLabel.value : t('level.title')}`,
+)
 
 function refresh(): void {
   unlockedCount.value = readUnlocked()
@@ -93,22 +99,18 @@ function enterLevel(n: number): void {
 
 <template>
   <div class="level-select" data-view="select">
-    <header class="select-header">
-      <button class="secondary-btn" data-nav="back" @click="platform.goMenu()">
-        {{ t('common.back') }}
-      </button>
-      <h2 class="select-title">
-        {{ t(gameNameKey) }} · {{ tracks ? selectedTrackLabel : t('level.title') }}
-      </h2>
-      <button
-        v-if="gameId === 'jigsaw'"
-        class="secondary-btn"
-        data-nav="schemes"
-        @click="platform.openSchemes()"
-      >
-        {{ t('schemes.title') }}
-      </button>
-    </header>
+    <PageHeader :title="headerTitle" @back="platform.goMenu()">
+      <template #actions>
+        <button
+          v-if="gameId === 'jigsaw'"
+          class="secondary-btn"
+          data-nav="schemes"
+          @click="platform.openSchemes()"
+        >
+          {{ t('schemes.title') }}
+        </button>
+      </template>
+    </PageHeader>
 
     <div v-if="tracks" class="track-tabs" data-role="track-tabs">
       <button
@@ -171,15 +173,6 @@ function enterLevel(n: number): void {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.select-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.select-title {
-  margin: 0;
-  font-size: 24px;
 }
 .progress-line {
   margin: 0;

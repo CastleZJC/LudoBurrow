@@ -29,7 +29,7 @@ describe('LevelSelect 专题轨分流（拼图先选专题，方案 = 关卡）'
     ])
     expect(wrapper.find('[data-track="animals"]').classes()).toContain('is-active')
     // 标题展示专题标签；图库 6 张/专题 → 6 关，无第 7 关
-    expect(wrapper.find('.select-title').text()).toContain('动物')
+    expect(wrapper.find('.page-title').text()).toContain('动物')
     expect(wrapper.find('[data-level="6"]').exists()).toBe(true)
     expect(wrapper.find('[data-level="7"]').exists()).toBe(false)
     expect(wrapper.find('.progress-line').text()).toContain('6')

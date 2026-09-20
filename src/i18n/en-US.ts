@@ -1,16 +1,15 @@
 // English message pack (keys mirror zh-CN 1:1, enforced by guard tests)
 export default {
   common: {
-    confirm: 'OK',
     cancel: 'Cancel',
     back: 'Back',
-    close: 'Close',
     retry: 'Retry',
     next: 'Next Level',
-    ok: 'Got it',
     settings: 'Settings',
     time: 'Time',
     mistakes: 'Mistakes',
+    exitLevel: 'Exit Level',
+    steps: 'Steps',
   },
   locale: {
     'zh-CN': '简体中文',
@@ -21,9 +20,6 @@ export default {
     subtitle: 'An install-free puzzle game burrow',
     credit: '© 2026 castle.zhang',
   },
-  menu: {
-    play: 'Play',
-  },
   game: {
     keygame: 'Key Press',
     jigsaw: 'Jigsaw',
@@ -32,7 +28,6 @@ export default {
     stub: 'Demo',
   },
   keygame: {
-    modeSelect: 'Select Mode',
     modeFull: 'Full Keyboard',
     modeCompact: 'Compact Keyboard',
     modeEnglish: 'English Words',
@@ -120,7 +115,6 @@ export default {
   },
   level: {
     title: 'Select Level',
-    locked: 'Locked',
     best: 'Best',
     levelN: 'Level {n}',
     progress: '{unlocked}/{total} levels unlocked',
@@ -135,20 +129,15 @@ export default {
   pause: {
     title: 'Paused',
     resume: 'Resume',
-    retry: 'Restart Level',
-    exit: 'Exit Level',
   },
   settle: {
     success: 'Level Clear!',
     fail: 'Challenge Failed',
-    stars: 'Stars',
     best: 'Best',
     newBest: 'New Record!',
-    steps: 'Steps',
     helps: 'Helps',
   },
   timeLimit: {
-    reachedCompetition: "Time's up! This level challenge has ended",
     reachedAntiAddiction: 'Time to rest. Look at something far away',
     lockRemaining: 'Rest lock: {minutes} min remaining',
   },
@@ -194,8 +183,5 @@ export default {
     corruptBody: 'The local save cannot be read. Import a previous backup to restore, or reset the save.',
     corruptReset: 'Reset Save',
     corruptImport: 'Import Backup',
-  },
-  corruptExit: {
-    loadFail: 'Load error. Try opening index.html directly',
   },
 }

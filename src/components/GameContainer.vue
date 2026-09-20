@@ -10,6 +10,7 @@ import { schemeLevelNumber, createTopicLevel, topicLevelCount } from '@/games/ji
 import type { JigsawLevelConfig } from '@/games/jigsaw/level'
 import PauseOverlay from './PauseOverlay.vue'
 import SettlePanel from './SettlePanel.vue'
+import ModalOverlay from '@/components/ModalOverlay.vue'
 
 const props = defineProps<{ level: BaseLevelConfig }>()
 const { t } = useI18n()
@@ -239,10 +240,10 @@ onBeforeUnmount(teardown)
       @exit="exitLevel"
     />
 
-    <div v-if="restLockMinutes > 0" class="rest-lock" data-role="rest-lock">
+    <ModalOverlay v-if="restLockMinutes > 0" :card="false" :z="30" class="rest-lock" data-role="rest-lock">
       <p>{{ t('timeLimit.reachedAntiAddiction') }}</p>
       <p class="rest-countdown">{{ t('timeLimit.lockRemaining', { minutes: restLockMinutes }) }}</p>
-    </div>
+    </ModalOverlay>
 
     <SettlePanel
       v-if="platform.settleInfo"
@@ -292,17 +293,8 @@ onBeforeUnmount(teardown)
   overflow: hidden;
 }
 .rest-lock {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: rgb(0 0 0 / 55%);
   color: #fff;
   font-size: 22px;
-  z-index: 30;
 }
 .rest-countdown {
   font-variant-numeric: tabular-nums;

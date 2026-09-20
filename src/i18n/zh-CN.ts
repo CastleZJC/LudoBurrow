@@ -2,16 +2,15 @@
 // 纪律：跨页面复用文案一律放 common 段（同功能同描述同出处）；游戏内容不进语言包
 export default {
   common: {
-    confirm: '确认',
     cancel: '取消',
     back: '返回',
-    close: '关闭',
     retry: '重玩',
     next: '下一关',
-    ok: '好的',
     settings: '设置',
     time: '用时',
     mistakes: '失误',
+    exitLevel: '退出关卡',
+    steps: '步数',
   },
   locale: {
     'zh-CN': '简体中文',
@@ -22,9 +21,6 @@ export default {
     subtitle: '免安装的益智游戏小窝',
     credit: '© 2026 castle.zhang',
   },
-  menu: {
-    play: '开始玩',
-  },
   game: {
     keygame: '键盘按键',
     jigsaw: '拼图',
@@ -33,7 +29,6 @@ export default {
     stub: '示例游戏',
   },
   keygame: {
-    modeSelect: '选择模式',
     modeFull: '全键盘',
     modeCompact: '紧凑键盘',
     modeEnglish: '英文单词',
@@ -121,7 +116,6 @@ export default {
   },
   level: {
     title: '选择关卡',
-    locked: '未解锁',
     best: '最佳',
     levelN: '第 {n} 关',
     progress: '已解锁 {unlocked}/{total} 关',
@@ -136,20 +130,15 @@ export default {
   pause: {
     title: '暂停中',
     resume: '继续',
-    retry: '重玩本关',
-    exit: '退出关卡',
   },
   settle: {
     success: '过关！',
     fail: '挑战失败',
-    stars: '星级',
     best: '历史最佳',
     newBest: '新纪录！',
-    steps: '步数',
     helps: '帮助次数',
   },
   timeLimit: {
-    reachedCompetition: '时间到！本关挑战结束',
     reachedAntiAddiction: '该休息一下啦，眼睛看一看远处吧',
     lockRemaining: '休息锁定中，还剩 {minutes} 分钟',
   },
@@ -195,8 +184,5 @@ export default {
     corruptBody: '检测到本地存档无法读取。可导入之前导出的备份恢复，或重置存档重新开始。',
     corruptReset: '重置存档',
     corruptImport: '导入备份',
-  },
-  corruptExit: {
-    loadFail: '加载异常，请尝试直接双击 index.html 打开',
   },
 }

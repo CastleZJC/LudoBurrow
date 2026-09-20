@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { hasCorruptSave, resetSave, importJson } from '@/core/save'
 import { usePlatformStore } from '@/stores/platform'
+import ModalOverlay from '@/components/ModalOverlay.vue'
+import FilePickButton from '@/components/FilePickButton.vue'
 import MainMenu from '@/components/MainMenu.vue'
 import LevelSelect from '@/components/LevelSelect.vue'
 import GameContainer from '@/components/GameContainer.vue'
@@ -24,10 +26,8 @@ function confirmReset(): void {
   showCorrupt.value = false
 }
 
-async function onImportBackup(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+async function onImportBackup(files: File[]): Promise<void> {
+  const file = files[0]
   if (!file) return
   const result = importJson(await file.text())
   if (result.ok) {
@@ -49,21 +49,20 @@ async function onImportBackup(event: Event): Promise<void> {
     <SettingsPanel v-else-if="platform.view === 'settings'" />
     <SchemeManager v-else-if="platform.view === 'schemes'" />
 
-    <div v-if="showCorrupt" class="corrupt-dialog" data-role="corrupt-dialog">
-      <div class="corrupt-card">
+    <ModalOverlay v-if="showCorrupt" fixed :z="100" data-role="corrupt-dialog">
+      <div class="corrupt-body">
         <h3>{{ t('save.corruptTitle') }}</h3>
         <p>{{ t('save.corruptBody') }}</p>
         <div class="corrupt-actions">
-          <label class="primary-btn file-label">
+          <FilePickButton variant="primary" accept="application/json" @files="onImportBackup">
             {{ t('save.corruptImport') }}
-            <input type="file" accept="application/json" @change="onImportBackup" />
-          </label>
+          </FilePickButton>
           <button class="secondary-btn" data-role="corrupt-reset" @click="confirmReset">
             {{ t('save.corruptReset') }}
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   </div>
 </template>
 
@@ -71,41 +70,18 @@ async function onImportBackup(event: Event): Promise<void> {
 .app-root {
   min-height: 100vh;
 }
-.corrupt-dialog {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 55%);
-  z-index: 100;
-}
-.corrupt-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 32px 40px;
+.corrupt-body {
   max-width: 480px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: var(--shadow-lg);
+  align-items: center;
 }
-.corrupt-card h3 { margin: 0; }
-.corrupt-card p { margin: 0; color: var(--color-text-secondary); }
+.corrupt-body h3 { margin: 0; }
+.corrupt-body p { margin: 0; color: var(--color-text-secondary); }
 .corrupt-actions {
   display: flex;
   gap: 12px;
   justify-content: center;
-}
-.file-label {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-.file-label input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 </style>

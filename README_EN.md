@@ -14,7 +14,7 @@ An install-free, local-first, purely front-end puzzle game platform: **double-cl
 - 🌐 **Bilingual UI (Chinese/English)** — switch in personal settings, takes effect immediately; game content does not change with language
 - 📴 **PWA** — the online build works offline after one visit (the local file:// build does not rely on it)
 
-**Status (2026-09-14 baseline)**: Phase 1 (M1-M6) fully delivered (v1.0.0 released, acceptance rework iterated to v1.1.0, later acceptance results to ship with the next release); current gates: typecheck 0 errors, 574 tests, coverage 94.25% (branches 90.48%), i18n 163 keys. Phase 2 is scheduled (web login & per-user assets + iOS mobile support + portrait/landscape adaptive layout); the web-fork framework is already in place.
+**Status (updated 2026-09-20)**: Phase 1 (M1-M6) fully delivered (v1.0.0 released, acceptance rework iterated to v1.1.0, later acceptance results to ship with the next release); current gates: typecheck 0 errors, 589 tests, coverage 94.27% (branches 90.51%), i18n 153 keys. Phase 2 is scheduled (web login & per-user assets + iOS mobile support + portrait/landscape adaptive layout); the web-fork framework is already in place.
 
 ## Tech Stack
 

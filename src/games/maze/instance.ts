@@ -151,7 +151,7 @@ export function mountMaze(
     for (const t of MAZE_THEMES) {
       themeBtns[t].setAttribute('aria-pressed', String(theme === t))
     }
-    stepsEl.textContent = `${i18n.global.t('settle.steps')} ${hero.steps}`
+    stepsEl.textContent = `${i18n.global.t('common.steps')} ${hero.steps}`
     mistakesEl.textContent = `${i18n.global.t('common.mistakes')} ${hero.bumps}`
   }
 

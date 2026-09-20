@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePlatformStore } from '@/stores/platform'
+import PageHeader from '@/components/PageHeader.vue'
+import FilePickButton from '@/components/FilePickButton.vue'
+import FeedbackLine from '@/components/FeedbackLine.vue'
 import { LOCALE_OPTIONS, type SupportedLocale } from '@/i18n'
 import { exportJson, importJson } from '@/core/save'
 import type { AiConfig } from '@/core/save'
@@ -188,10 +191,8 @@ function exportSave(): void {
   feedback.value = t('settings.saveExportDone')
 }
 
-async function importSave(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+async function importSave(files: File[]): Promise<void> {
+  const file = files[0]
   if (!file) return
   const text = await file.text()
   const result = importJson(text)
@@ -202,10 +203,7 @@ async function importSave(event: Event): Promise<void> {
 
 <template>
   <div class="settings-panel" data-view="settings">
-    <header class="settings-header">
-      <button class="secondary-btn" data-nav="back" @click="platform.goMenu()">{{ t('common.back') }}</button>
-      <h2>{{ t('common.settings') }}</h2>
-    </header>
+    <PageHeader :title="t('common.settings')" @back="platform.goMenu()" />
 
     <section class="settings-section" data-section="language">
       <h3>{{ t('settings.language') }}</h3>
@@ -307,14 +305,13 @@ async function importSave(event: Event): Promise<void> {
       <h3>{{ t('settings.saveSection') }}</h3>
       <div class="save-actions">
         <button class="secondary-btn" data-role="save-export" @click="exportSave">{{ t('settings.saveExport') }}</button>
-        <label class="secondary-btn file-label">
+        <FilePickButton accept="application/json" data-role="save-import" @files="importSave">
           {{ t('settings.saveImport') }}
-          <input type="file" accept="application/json" data-role="save-import" @change="importSave" />
-        </label>
+        </FilePickButton>
       </div>
     </section>
 
-    <p v-if="feedback" class="feedback" data-role="feedback">{{ feedback }}</p>
+    <FeedbackLine v-if="feedback" data-role="feedback">{{ feedback }}</FeedbackLine>
   </div>
 </template>
 
@@ -326,12 +323,6 @@ async function importSave(event: Event): Promise<void> {
   gap: 24px;
   max-width: 720px;
 }
-.settings-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.settings-header h2 { margin: 0; }
 .settings-section {
   display: flex;
   flex-direction: column;
@@ -404,19 +395,5 @@ async function importSave(event: Event): Promise<void> {
   margin: 0;
   font-size: 12px;
   color: var(--color-text-secondary);
-}
-.file-label {
-  position: relative;
-  overflow: hidden;
-}
-.file-label input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.feedback {
-  color: var(--color-primary);
-  font-weight: 600;
 }
 </style>

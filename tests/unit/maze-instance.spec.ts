@@ -113,7 +113,7 @@ describe('mountMaze（挂载与初始化）', () => {
     expect(h.container.querySelector('[data-mz-theme="castle"]')!.textContent).toBe(t('maze.themeCastle'))
     expect(h.container.querySelector('[data-mz-theme="castle"]')!.getAttribute('aria-pressed')).toBe('true')
     expect(h.container.querySelector('[data-mz-theme="garden"]')!.getAttribute('aria-pressed')).toBe('false')
-    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 0`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('common.steps')} 0`)
     expect(h.container.querySelector('[data-mz="mistakes"]')!.textContent).toBe(`${t('common.mistakes')} 0`)
     expect(h.container.querySelector('.mz-hint')!.textContent).toBe(t('maze.hint'))
     inst.destroy()
@@ -223,7 +223,7 @@ describe('移动与碰撞（§12.5）', () => {
     key('ArrowRight') // (0,0)→(1,0)：剩余 1 步 → done=1
     expect(h.progress).toHaveLength(1)
     expect(h.progress[0]!).toMatchObject({ gameId: 'maze', n: 1, done: 1, total: 2 })
-    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 1`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('common.steps')} 1`)
     inst.destroy()
   })
 
@@ -251,7 +251,7 @@ describe('移动与碰撞（§12.5）', () => {
     key('Space')
     expect(h.progress).toHaveLength(0)
     expect(h.results).toHaveLength(0)
-    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 0`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('common.steps')} 0`)
     inst.destroy()
   })
 })
@@ -310,7 +310,7 @@ describe('鼠标控制（相对方向单步：点击小人某侧走一步）', (
     clickDir(h, 0, 0, 100, 0)
     expect(h.progress).toHaveLength(1)
     expect(h.progress[0]!).toMatchObject({ gameId: 'maze', n: 1, done: 1, total: 2 })
-    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 1`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('common.steps')} 1`)
     inst.destroy()
   })
 
@@ -319,7 +319,7 @@ describe('鼠标控制（相对方向单步：点击小人某侧走一步）', (
     clickDir(h, 0, 0, 10, 10) // 两轴位移均 < 半瓦片 36px
     expect(h.progress).toHaveLength(0)
     expect(h.container.querySelector('[data-mz="mistakes"]')!.textContent).toBe(`${t('common.mistakes')} 0`)
-    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('settle.steps')} 0`)
+    expect(h.container.querySelector('[data-mz="steps"]')!.textContent).toBe(`${t('common.steps')} 0`)
     inst.destroy()
   })
 

@@ -17,7 +17,11 @@ import { createScheme, topicOfSource, updateScheme } from '@/games/jigsaw/scheme
 import { pickBestSpec } from '@/games/jigsaw/optimize'
 import { createRng } from '@/engines/rng'
 import { GALLERY, GALLERY_TOPICS, downscaleToAnalysis, loadSourceImage } from '@/games/jigsaw/gallery'
+import { blobToDataUrl, persistImageFile } from '@/games/jigsaw/assets'
 import { THUMBS } from '@/games/jigsaw/thumbs'
+import FilePickButton from '@/components/FilePickButton.vue'
+import ConfirmButton from '@/components/ConfirmButton.vue'
+import FeedbackLine from '@/components/FeedbackLine.vue'
 
 const props = defineProps<{
   /** 编辑的方案；null = 新建 */
@@ -60,9 +64,8 @@ const DEFAULT_UNIQUENESS_THRESHOLD = 18
 const uploading = ref(false)
 const uploadError = ref('')
 const formError = ref('')
-/** F-18：保存二次确认态（3 秒未确认自动复原） */
-const saveConfirm = ref(false)
-let saveConfirmTimer: ReturnType<typeof setTimeout> | null = null
+/** 保存二次确认按钮（F-18：首击武装，3 秒未确认自动复原；autoArm=false 由 onSaveClick 决策） */
+const saveBtn = ref<InstanceType<typeof ConfirmButton> | null>(null)
 // ---- AI 建议状态（M5.5：applied 后暂存权重，保存时随方案入档）----
 const suggesting = ref(false)
 const aiFeedback = ref('')
@@ -129,10 +132,8 @@ function validateForm(): string {
 }
 
 // ---- 上传（M3.11：图片经 services/ 素材仓库存 IndexedDB，方案只存引用） ----
-async function onUpload(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+async function onUploadFiles(files: File[]): Promise<void> {
+  const file = files[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
     uploadError.value = t('schemes.notImage')
@@ -141,12 +142,7 @@ async function onUpload(event: Event): Promise<void> {
   uploading.value = true
   uploadError.value = ''
   try {
-    const assetRef = await getEnvAdapter().assetRepo.saveImage(file, {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      addedAt: Date.now(),
-    })
+    const assetRef = await persistImageFile(file)
     customAssetId.value = assetRef.id
     customName.value = file.name
     sourceKind.value = 'custom'
@@ -276,11 +272,12 @@ function sameSourceScheme(): JigsawSchemeData | undefined {
   })
 }
 
-function saveScheme(): void {
+// F-18 保存（ConfirmButton autoArm=false：每次点击都回调，wasConfirmed=是否确认态二击）
+function onSaveClick(wasConfirmed: boolean): void {
   const err = validateForm()
   if (err) {
     formError.value = err
-    saveConfirm.value = false
+    saveBtn.value?.reset()
     return
   }
   formError.value = ''
@@ -290,16 +287,9 @@ function saveScheme(): void {
   const inPlay =
     existing !== undefined &&
     getLevelRecord(progressSlotKey('jigsaw', topicOfSource(existing.source)), existing.id) !== undefined
-  if (isNew && inPlay && !saveConfirm.value) {
-    saveConfirm.value = true
-    if (saveConfirmTimer) clearTimeout(saveConfirmTimer)
-    saveConfirmTimer = setTimeout(() => (saveConfirm.value = false), 3000)
+  if (isNew && inPlay && !wasConfirmed) {
+    saveBtn.value?.arm()
     return
-  }
-  saveConfirm.value = false
-  if (saveConfirmTimer) {
-    clearTimeout(saveConfirmTimer)
-    saveConfirmTimer = null
   }
   // AI 建议权重随方案入档（长度与表单一致才带，防手动改网格后失效）
   const suggestion =
@@ -332,15 +322,6 @@ function saveScheme(): void {
 }
 
 // ---- 图源取图（AI 建议与自动最优共用同一口径） ----
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader 失败'))
-    reader.readAsDataURL(blob)
-  })
-}
-
 async function currentDataUrl(): Promise<string> {
   if (sourceKind.value === 'builtin') {
     const dataUrl = THUMBS[imageId.value] ?? ''
@@ -405,7 +386,7 @@ async function runAutoSpec(): Promise<void> {
     rows.value = best.spec.rows
     cols.value = best.spec.cols
     tabDepth.value = Math.round((0.1 + Math.random() * 0.1) * 100) / 100 // 0.10-0.20 推荐带（与滑杆步长对齐）
-    saveConfirm.value = false
+    saveBtn.value?.reset() // 规格已变，挂起的 F-18 确认态作废（下次保存重新判定）
     autoDerived.value = true
     autoFeedback.value = t('schemes.autoBestDone', { rows: best.spec.rows, cols: best.spec.cols })
   } catch {
@@ -422,7 +403,6 @@ async function runAutoSpec(): Promise<void> {
 
 onBeforeUnmount(() => {
   if (customPreviewUrl.value) URL.revokeObjectURL(customPreviewUrl.value)
-  if (saveConfirmTimer) clearTimeout(saveConfirmTimer)
 })
 </script>
 
@@ -500,10 +480,15 @@ onBeforeUnmount(() => {
 
     <div v-else class="sm-field">
       <span>{{ t('schemes.upload') }}</span>
-      <label class="primary-btn sm-file-label">
+      <FilePickButton
+        variant="primary"
+        class="sm-upload-btn"
+        accept="image/*"
+        data-field="upload"
+        @files="onUploadFiles"
+      >
         {{ uploading ? t('schemes.uploading') : t('schemes.upload') }}
-        <input type="file" accept="image/*" data-field="upload" @change="onUpload" />
-      </label>
+      </FilePickButton>
       <span v-if="customName" class="sm-upload-ok" data-role="upload-ok">
         {{ t('schemes.uploadOk') }}：{{ customName }}
       </span>
@@ -553,7 +538,7 @@ onBeforeUnmount(() => {
           {{ t('schemes.difficultyHard') }}
         </button>
       </div>
-      <span v-if="autoFeedback" class="sm-ai-feedback" data-role="auto-feedback">{{ autoFeedback }}</span>
+      <FeedbackLine v-if="autoFeedback" data-role="auto-feedback">{{ autoFeedback }}</FeedbackLine>
     </div>
 
     <div v-else class="sm-suggest-row">
@@ -566,7 +551,7 @@ onBeforeUnmount(() => {
       >
         {{ suggesting ? t('schemes.aiThinking') : t('schemes.modeAi') }}
       </button>
-      <span v-if="aiFeedback" class="sm-ai-feedback" data-role="ai-feedback">{{ aiFeedback }}</span>
+      <FeedbackLine v-if="aiFeedback" data-role="ai-feedback">{{ aiFeedback }}</FeedbackLine>
     </div>
 
     <div class="sm-preview">
@@ -583,14 +568,16 @@ onBeforeUnmount(() => {
     <p v-if="formError" class="sm-error" data-role="scheme-error">{{ formError }}</p>
 
     <div class="sm-editor-actions">
-      <button
-        class="primary-btn"
-        :data-role="saveConfirm ? 'save-confirm' : 'save-scheme'"
-        :data-confirm="saveConfirm ? 'yes' : 'no'"
-        @click="saveScheme"
-      >
-        {{ saveConfirm ? t('schemes.recutConfirm') : t('schemes.save') }}
-      </button>
+      <ConfirmButton
+        ref="saveBtn"
+        :auto-arm="false"
+        variant="primary"
+        role="save-scheme"
+        confirm-role="save-confirm"
+        :label="t('schemes.save')"
+        :confirm-label="t('schemes.recutConfirm')"
+        @confirm="onSaveClick"
+      />
       <button class="secondary-btn" data-role="cancel-scheme" @click="emit('cancel')">
         {{ t('common.cancel') }}
       </button>
@@ -670,17 +657,8 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 120px;
 }
-.sm-file-label {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
+.sm-upload-btn {
   align-self: flex-start;
-}
-.sm-file-label input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 .sm-upload-ok {
   font-size: 13px;
@@ -703,10 +681,6 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-}
-.sm-ai-feedback {
-  font-size: 13px;
-  color: var(--color-text-secondary);
 }
 .sm-canvas {
   border: 1px solid var(--color-border);
